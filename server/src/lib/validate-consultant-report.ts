@@ -1,0 +1,5 @@
+import { consultantReportSchema } from "../schemas/consultant-report.schema.js"
+
+export function validateConsultantReport(parsed: unknown) {
+  return consultantReportSchema.parse(parsed)
+}

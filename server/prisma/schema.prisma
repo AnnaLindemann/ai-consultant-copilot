@@ -1,0 +1,118 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum CompanySize {
+  solo
+  micro
+  small
+  medium
+  large
+  enterprise
+}
+
+enum Level {
+  low
+  medium
+  high
+}
+
+enum ProcessFrequency {
+  rarely
+  monthly
+  weekly
+  daily
+  many_times_per_day
+}
+
+enum DataAvailability {
+  none
+  unknown
+  restricted
+  available
+}
+
+enum DataQuality {
+  poor
+  mixed
+  good
+  unknown
+}
+
+enum Timeline {
+  asap
+  this_quarter
+  this_year
+  unknown
+}
+
+enum Currency {
+  EUR
+  USD
+  GBP
+  OTHER
+}
+
+model ClientCase {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Company
+  companyName String
+  industry    String
+  companySize CompanySize?
+  geography   String?
+  department  String?
+
+  // Problem
+  statedProblem  String
+  painPoints     Json?
+  affectedUsers  Json?
+  businessImpact String?
+  urgency        Level?
+
+  // Current process
+  currentProcess   String
+  processSteps     Json?
+  processFrequency ProcessFrequency?
+  manualWorkLevel  Level?
+  bottlenecks      Json?
+
+  // Tools
+  currentTools          Json?
+  communicationChannels Json?
+  integrationNeeds      Json?
+
+  // Data
+  dataTypes          Json?
+  dataLocation       Json?
+  dataAvailability   DataAvailability?
+  dataQuality        DataQuality?
+  sensitiveData      Boolean
+  sensitiveDataTypes Json?
+
+  // Constraints
+  gdprConcerns          Boolean
+  budgetAmount          Decimal?  @db.Decimal(12, 2)
+  budgetCurrency        Currency?
+  budgetNotes           String?
+  timeline              Timeline?
+  humanApprovalRequired Boolean?
+  technicalConstraints  Json?
+
+  // Goals
+  desiredOutcome String
+  successMetrics Json?
+  mvpScope       String?
+  notes          String?
+
+  @@index([industry])
+  @@index([createdAt])
+  @@index([sensitiveData])
+  @@index([gdprConcerns])
+}
