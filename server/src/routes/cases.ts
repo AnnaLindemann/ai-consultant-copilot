@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js"
 import { createClientCaseSchema } from "../schemas/client-case.schema.js";
 import { analyzeClientCase } from "../services/analysis.service.js";
+import { getAnalysisRunsByCaseId } from "../repositories/analysis-run.repository.js"
 
 const router = Router()
 
@@ -73,7 +74,35 @@ const input = parseResult.data
 
 })
 
+router.get("/:id/analysis-runs", async (req, res) => {
+  try {
+    const clientCase = await prisma.clientCase.findUnique({
+      where: { id: req.params.id },
+      select: { id: true },
+    })
 
+    if (!clientCase) {
+      return res.status(404).json({
+        status: false,
+        message: "Case not found",
+      })
+    }
+
+    const analysisRuns = await getAnalysisRunsByCaseId(req.params.id)
+
+    return res.json({
+      status: true,
+      data: analysisRuns,
+    })
+  } catch (error) {
+    console.error("GET ANALYSIS RUNS ERROR:", error)
+
+    return res.status(500).json({
+      status: false,
+      message: "Failed to load analysis runs",
+    })
+  }
+})
 
 router.post("/:id/analyze", async (req, res) => {
   try{

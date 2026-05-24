@@ -62,6 +62,8 @@ model ClientCase {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  analysisRuns AnalysisRun[]
+
   // Company
   companyName String
   industry    String
@@ -115,4 +117,35 @@ model ClientCase {
   @@index([createdAt])
   @@index([sensitiveData])
   @@index([gdprConcerns])
+}
+
+model AnalysisRun {
+  id String @id @default(cuid())
+
+  caseId String
+  case   ClientCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  provider String
+  model    String
+
+  promptVersion String?
+
+  latencyMs Int?
+
+  promptTokens     Int?
+  completionTokens Int?
+  totalTokens      Int?
+
+  costEstimateUsd Decimal? @db.Decimal(10, 6)
+
+  jsonParseSuccess Boolean
+  schemaValid      Boolean
+
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+
+  @@index([caseId])
+  @@index([provider, model])
+  @@index([createdAt])
 }

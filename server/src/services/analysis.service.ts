@@ -8,6 +8,7 @@ import { buildAnalysisPrompt } from "../prompts/build-analysis-prompt.js"
 import type { ConsultantReport } from "../schemas/consultant-report.schema.js"
 import type { EvaluationResult } from "../evaluation/evaluation.types.js"
 import { calculateLlmCost } from "../evaluation/calculate-llm-cost.js"
+import { createAnalysisRun } from "../repositories/analysis-run.repository.js"
 
 export type AnalyzeClientCaseResult =
   | {
@@ -44,6 +45,20 @@ const evaluation = evaluateAnalysisOutput({
   completionTokens: llmResponse.completionTokens,
   totalTokens: llmResponse.totalTokens,
   costEstimateUsd,
+})
+
+await createAnalysisRun({
+  caseId: input.id,
+  provider: llmResponse.provider,
+  model: llmResponse.model,
+  latencyMs: llmResponse.latencyMs,
+  promptTokens: llmResponse.promptTokens,
+  completionTokens: llmResponse.completionTokens,
+  totalTokens: llmResponse.totalTokens,
+  costEstimateUsd,
+  jsonParseSuccess: parsedResult.jsonParseSuccess,
+  schemaValid: parsedResult.schemaValid,
+  errorMessage: parsedResult.success ? undefined : parsedResult.error,
 })
 
 if (!parsedResult.success) {
