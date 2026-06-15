@@ -9,6 +9,7 @@ import type { ConsultantReport } from "../schemas/consultant-report.schema.js"
 import type { EvaluationResult } from "../evaluation/evaluation.types.js"
 import { calculateLlmCost } from "../evaluation/calculate-llm-cost.js"
 import { createAnalysisRun } from "../repositories/analysis-run.repository.js"
+import { ANALYSIS_PROMPT } from "../prompts/analysis-prompt.js"
 
 export type AnalyzeClientCaseResult =
   | {
@@ -47,20 +48,29 @@ const evaluation = evaluateAnalysisOutput({
   costEstimateUsd,
 })
 
-await createAnalysisRun({
-  caseId: input.id,
-  provider: llmResponse.provider,
-  model: llmResponse.model,
-  latencyMs: llmResponse.latencyMs,
-  promptTokens: llmResponse.promptTokens,
-  completionTokens: llmResponse.completionTokens,
-  totalTokens: llmResponse.totalTokens,
-  costEstimateUsd,
-  jsonParseSuccess: parsedResult.jsonParseSuccess,
-  schemaValid: parsedResult.schemaValid,
-  errorMessage: parsedResult.success ? undefined : parsedResult.error,
-})
-
+try {
+  await createAnalysisRun({
+    caseId: input.id,
+    provider: llmResponse.provider,
+    model: llmResponse.model,
+    promptVersion: ANALYSIS_PROMPT.version,
+    promptFingerprint: ANALYSIS_PROMPT.fingerprint,
+    latencyMs: llmResponse.latencyMs,
+    promptTokens: llmResponse.promptTokens,
+    completionTokens: llmResponse.completionTokens,
+    totalTokens: llmResponse.totalTokens,
+    costEstimateUsd,
+    jsonParseSuccess: parsedResult.jsonParseSuccess,
+    schemaValid: parsedResult.schemaValid,
+    relevance: evaluation.relevance,
+    hallucinationRisk: evaluation.hallucinationRisk,
+    businessValue: evaluation.businessValue,
+    actionability: evaluation.actionability,
+    errorMessage: parsedResult.success ? undefined : parsedResult.error,
+  })
+} catch (error) {
+  console.error("CREATE ANALYSIS RUN ERROR:", error)
+}
 if (!parsedResult.success) {
   return {
     success: false,

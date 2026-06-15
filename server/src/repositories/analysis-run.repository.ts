@@ -7,7 +7,8 @@ export type CreateAnalysisRunInput = {
   caseId: string
   provider: string
   model: string
-  promptVersion?: string
+  promptFingerprint: string
+  promptVersion: string
   latencyMs?: number
   promptTokens?: number
   completionTokens?: number
@@ -16,6 +17,10 @@ export type CreateAnalysisRunInput = {
   jsonParseSuccess: boolean
   schemaValid: boolean
   errorMessage?: string
+  relevance?: string
+  hallucinationRisk?: string
+  businessValue?: string
+  actionability?: string
 }
 
 export const createAnalysisRun = async (input: CreateAnalysisRunInput) => {
@@ -24,6 +29,7 @@ export const createAnalysisRun = async (input: CreateAnalysisRunInput) => {
       caseId: input.caseId,
       provider: input.provider,
       model: input.model,
+      promptFingerprint: input.promptFingerprint,
       promptVersion: input.promptVersion,
       latencyMs: input.latencyMs,
       promptTokens: input.promptTokens,
@@ -33,6 +39,10 @@ export const createAnalysisRun = async (input: CreateAnalysisRunInput) => {
       jsonParseSuccess: input.jsonParseSuccess,
       schemaValid: input.schemaValid,
       errorMessage: input.errorMessage,
+      relevance: input.relevance,
+      hallucinationRisk: input.hallucinationRisk,
+      businessValue: input.businessValue,
+      actionability: input.actionability,      
     },
   })
 }
@@ -49,6 +59,7 @@ export const getAnalysisRunsByCaseId = async (caseId: string) => {
       id: true,
       provider: true,
       model: true,
+      promptFingerprint: true,
       promptVersion: true,
       latencyMs: true,
       promptTokens: true,
@@ -59,6 +70,10 @@ export const getAnalysisRunsByCaseId = async (caseId: string) => {
       schemaValid: true,
       errorMessage: true,
       createdAt: true,
+      relevance: true,
+      hallucinationRisk: true,
+      businessValue: true,
+      actionability: true,
     },
   })
 }

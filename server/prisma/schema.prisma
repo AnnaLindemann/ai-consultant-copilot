@@ -129,7 +129,7 @@ model AnalysisRun {
   model    String
 
   promptVersion String?
-
+  promptFingerprint String?
   latencyMs Int?
 
   promptTokens     Int?
@@ -138,8 +138,12 @@ model AnalysisRun {
 
   costEstimateUsd Decimal? @db.Decimal(10, 6)
 
-  jsonParseSuccess Boolean
-  schemaValid      Boolean
+  jsonParseSuccess  Boolean
+  schemaValid       Boolean
+  relevance         String?
+  hallucinationRisk String?
+  businessValue     String?
+  actionability     String?
 
   errorMessage String?
 
