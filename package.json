@@ -1,0 +1,9 @@
+{
+  "name": "ai-consultant-copilot",
+  "private": true,
+  "type": "module",
+  "description": "Root-level dependencies shared by the server and client via the shared/ folder.",
+  "dependencies": {
+    "zod": "^4.4.2"
+  }
+}

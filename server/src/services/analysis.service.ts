@@ -5,7 +5,7 @@ import { callLlm } from "../lib/llm-client.js"
 import { parseConsultantReport } from "../lib/parse-consultant-report.js"
 import { buildAnalysisPrompt } from "../prompts/build-analysis-prompt.js"
 
-import type { ConsultantReport } from "../schemas/consultant-report.schema.js"
+import type { ConsultantReport } from "../../../shared/consultant-report.schema.js"
 import type { EvaluationResult } from "../evaluation/evaluation.types.js"
 import { calculateLlmCost } from "../evaluation/calculate-llm-cost.js"
 import { createAnalysisRun } from "../repositories/analysis-run.repository.js"

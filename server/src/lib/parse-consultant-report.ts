@@ -1,4 +1,4 @@
-import type { ConsultantReport } from "../schemas/consultant-report.schema.js"
+import type { ConsultantReport } from "../../../shared/consultant-report.schema.js"
 import { parseLlmJson } from "./parse-llm-json.js"
 import { validateConsultantReport } from "./validate-consultant-report.js"
 
