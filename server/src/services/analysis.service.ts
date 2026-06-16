@@ -34,7 +34,6 @@ export const analyzeClientCase = async (
     promptFingerprint: ANALYSIS_PROMPT.fingerprint,
   },
 })
-console.log("ANALYZE START", input.id)
 
 const prompt = buildAnalysisPrompt(input)
 
