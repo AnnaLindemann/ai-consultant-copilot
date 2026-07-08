@@ -6,6 +6,63 @@ import { getAnalysisRunsByCaseId } from "../repositories/analysis-run.repository
 
 const router = Router()
 
+router.get("/", async (_req, res) => {
+  try {
+    const cases = await prisma.clientCase.findMany({
+      orderBy: {
+        createdAt: "desc",
+      },
+      select: {
+        id: true,
+        companyName: true,
+        industry: true,
+        createdAt: true,
+      },
+    })
+
+    return res.json({
+      status: true,
+      message: "Cases loaded",
+      data: cases,
+    })
+  } catch (error) {
+    console.error("LOAD CASES ERROR:", error)
+
+    return res.status(500).json({
+      status: false,
+      message: "Internal server error",
+    })
+  }
+})
+
+router.get("/:id", async (req, res) => {
+  try {
+    const clientCase = await prisma.clientCase.findUnique({
+      where: { id: req.params.id },
+    })
+
+    if (!clientCase) {
+      return res.status(404).json({
+        status: false,
+        message: "Case not found",
+      })
+    }
+
+    return res.json({
+      status: true,
+      message: "Case loaded",
+      data: clientCase,
+    })
+  } catch (error) {
+    console.error("LOAD CASE DETAILS ERROR:", error)
+
+    return res.status(500).json({
+      status: false,
+      message: "Internal server error",
+    })
+  }
+})
+
 router.post("/", async (req,res) => {
   const parseResult = createClientCaseSchema.safeParse(req.body)
   if(!parseResult.success){
