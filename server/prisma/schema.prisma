@@ -57,29 +57,78 @@ enum Currency {
   OTHER
 }
 
-model ClientCase {
+// Where an engagement currently stands in the consulting methodology
+// (domain-model.md §3). Phase 1 only tracks the stage marker; later phases
+// add the content each stage produces. `discovery` is the first stage, so a
+// freshly-created (still empty) engagement starts there.
+enum EngagementStage {
+  discovery
+  assessment
+  prioritization
+  solution_matching
+  roadmap
+  report
+}
+
+// The grouping of a client's engagements — identity and company-level context
+// only, deliberately NOT a customer-relationship record (domain-model.md §2,
+// §6; architecture.md §4.2). One Organization owns many Engagements and holds
+// no methodology state itself.
+model Organization {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  analysisRuns AnalysisRun[]
-
-  // Company
-  companyName String
-  industry    String
+  name        String
+  industry    String?
   companySize CompanySize?
   geography   String?
-  department  String?
+  notes       String?
 
-  // Problem
-  statedProblem  String
+  engagements Engagement[]
+
+  @@index([name])
+  @@index([createdAt])
+}
+
+// The primary engagement-side aggregate and single source of truth for all
+// client-specific state (domain-model.md §2 "Engagement"; architecture.md
+// §4.2). Phase 1 establishes the foundation: it belongs to an Organization,
+// tracks its methodology `stage`, and can be created empty, saved, and
+// resumed. Later phases attach discovery/assessment/opportunities/etc. content
+// to this same record rather than a parallel store (roadmap Phase 1).
+//
+// Company-level identity/context (name, industry, size, geography) lives on the
+// Organization, not here. The physical table was renamed from the legacy
+// `ClientCase` in this phase (architecture.md §6), so no `@@map` remains.
+model Engagement {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // A short label distinguishing engagements within one organization.
+  title String?
+
+  // Where the engagement currently stands (roadmap Phase 1).
+  stage EngagementStage @default(discovery)
+
+  analysisRuns AnalysisRun[]
+
+  department String?
+
+  // Problem. Discovery content is optional: an empty engagement is a valid,
+  // working Phase 1 state (roadmap Phase 1 DoD). Phase 2 formalizes Discovery.
+  statedProblem  String?
   painPoints     Json?
   affectedUsers  Json?
   businessImpact String?
   urgency        Level?
 
   // Current process
-  currentProcess   String
+  currentProcess   String?
   processSteps     Json?
   processFrequency ProcessFrequency?
   manualWorkLevel  Level?
@@ -95,11 +144,11 @@ model ClientCase {
   dataLocation       Json?
   dataAvailability   DataAvailability?
   dataQuality        DataQuality?
-  sensitiveData      Boolean
+  sensitiveData      Boolean?
   sensitiveDataTypes Json?
 
   // Constraints
-  gdprConcerns          Boolean
+  gdprConcerns          Boolean?
   budgetAmount          Decimal?  @db.Decimal(12, 2)
   budgetCurrency        Currency?
   budgetNotes           String?
@@ -108,12 +157,13 @@ model ClientCase {
   technicalConstraints  Json?
 
   // Goals
-  desiredOutcome String
+  desiredOutcome String?
   successMetrics Json?
   mvpScope       String?
   notes          String?
 
-  @@index([industry])
+  @@index([organizationId])
+  @@index([stage])
   @@index([createdAt])
   @@index([sensitiveData])
   @@index([gdprConcerns])
@@ -122,8 +172,8 @@ model ClientCase {
 model AnalysisRun {
   id String @id @default(cuid())
 
-  caseId String
-  case   ClientCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
 
   provider String
   model    String
@@ -138,8 +188,14 @@ model AnalysisRun {
 
   costEstimateUsd Decimal? @db.Decimal(10, 6)
 
+  // Objective quality signals recorded on every run.
   jsonParseSuccess  Boolean
   schemaValid       Boolean
+
+  // Subjective quality signals are reserved for a genuine evaluator and are
+  // left unpopulated until one exists — no placeholder scores are written
+  // (roadmap Phase 0; architecture.md §5; coding-standards.md §8 "No fake
+  // quality signals").
   relevance         String?
   hallucinationRisk String?
   businessValue     String?
@@ -149,7 +205,7 @@ model AnalysisRun {
 
   createdAt DateTime @default(now())
 
-  @@index([caseId])
+  @@index([engagementId])
   @@index([provider, model])
   @@index([createdAt])
 }

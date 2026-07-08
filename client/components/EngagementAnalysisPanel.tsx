@@ -16,10 +16,6 @@ type AnalysisRun = {
   costEstimateUsd: string | null
   jsonParseSuccess: boolean
   schemaValid: boolean
-  relevance: string | null
-  hallucinationRisk: string | null
-  businessValue: string | null
-  actionability: string | null
   createdAt: string
 }
 
@@ -32,14 +28,16 @@ type AnalyzeResponse = {
   }
 }
 
-type CaseAnalysisPanelProps = {
-  caseId: string
+type EngagementAnalysisPanelProps = {
+  engagementId: string
 }
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8787"
 
-export default function CaseAnalysisPanel({ caseId }: CaseAnalysisPanelProps) {
+export default function EngagementAnalysisPanel({
+  engagementId,
+}: EngagementAnalysisPanelProps) {
   const [analysisResult, setAnalysisResult] = useState<AnalyzeResponse | null>(
     null,
   )
@@ -52,9 +50,12 @@ export default function CaseAnalysisPanel({ caseId }: CaseAnalysisPanelProps) {
     setError("")
 
     try {
-      const response = await fetch(`${API_BASE_URL}/cases/${caseId}/analyze`, {
-        method: "POST",
-      })
+      const response = await fetch(
+        `${API_BASE_URL}/engagements/${engagementId}/analyze`,
+        {
+          method: "POST",
+        },
+      )
 
       const result = (await response.json()) as AnalyzeResponse
 
@@ -72,7 +73,9 @@ export default function CaseAnalysisPanel({ caseId }: CaseAnalysisPanelProps) {
   }
 
   async function loadRunHistory() {
-    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/analysis-runs`)
+    const response = await fetch(
+      `${API_BASE_URL}/engagements/${engagementId}/analysis-runs`,
+    )
 
     const result = await response.json()
 

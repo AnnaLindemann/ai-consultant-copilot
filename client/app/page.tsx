@@ -1,9 +1,11 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 
 import type { ConsultantReport } from "../../shared/consultant-report.schema"
 import AnalysisReportView from "../components/AnalysisReportView"
+import { STAGE_LABELS, type EngagementStage } from "../lib/engagement-stage"
 
 type AnalysisRun = {
   id: string
@@ -16,10 +18,6 @@ type AnalysisRun = {
   costEstimateUsd: string | null
   jsonParseSuccess: boolean
   schemaValid: boolean
-  relevance: string | null
-  hallucinationRisk: string | null
-  businessValue: string | null
-  actionability: string | null
   createdAt: string
 }
 
@@ -32,9 +30,14 @@ type AnalyzeResponse = {
   }
 }
 
-type CaseFormState = {
-  companyName: string
+type OrganizationFormState = {
+  name: string
   industry: string
+  companySize: string
+}
+
+type EngagementFormState = {
+  title: string
   statedProblem: string
   currentProcess: string
   desiredOutcome: string
@@ -42,9 +45,14 @@ type CaseFormState = {
   gdprConcerns: boolean
 }
 
-const initialCaseForm: CaseFormState = {
-  companyName: "",
+const initialOrganizationForm: OrganizationFormState = {
+  name: "",
   industry: "",
+  companySize: "",
+}
+
+const initialEngagementForm: EngagementFormState = {
+  title: "",
   statedProblem: "",
   currentProcess: "",
   desiredOutcome: "",
@@ -52,12 +60,30 @@ const initialCaseForm: CaseFormState = {
   gdprConcerns: true,
 }
 
+const companySizeOptions = [
+  "solo",
+  "micro",
+  "small",
+  "medium",
+  "large",
+  "enterprise",
+]
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8787"
 
 export default function Home() {
-  const [caseForm, setCaseForm] = useState<CaseFormState>(initialCaseForm)
-  const [caseId, setCaseId] = useState("")
+  const [organizationForm, setOrganizationForm] = useState<OrganizationFormState>(
+    initialOrganizationForm,
+  )
+  const [organizationId, setOrganizationId] = useState("")
+  const [organizationName, setOrganizationName] = useState("")
+
+  const [engagementForm, setEngagementForm] =
+    useState<EngagementFormState>(initialEngagementForm)
+  const [engagementId, setEngagementId] = useState("")
+  const [engagementStage, setEngagementStage] = useState<EngagementStage | "">("")
+
   const [analysisResult, setAnalysisResult] = useState<AnalyzeResponse | null>(
     null,
   )
@@ -65,36 +91,86 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
 
-  function updateCaseForm<K extends keyof CaseFormState>(
+  function updateOrganizationForm<K extends keyof OrganizationFormState>(
     key: K,
-    value: CaseFormState[K],
+    value: OrganizationFormState[K],
   ) {
-    setCaseForm((current) => ({
-      ...current,
-      [key]: value,
-    }))
+    setOrganizationForm((current) => ({ ...current, [key]: value }))
   }
 
-  async function createCase() {
+  function updateEngagementForm<K extends keyof EngagementFormState>(
+    key: K,
+    value: EngagementFormState[K],
+  ) {
+    setEngagementForm((current) => ({ ...current, [key]: value }))
+  }
+
+  async function createOrganization() {
+    setIsLoading(true)
+    setError("")
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/organizations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: organizationForm.name,
+          industry: organizationForm.industry || undefined,
+          companySize: organizationForm.companySize || undefined,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.message ?? "Failed to create organization")
+      }
+
+      setOrganizationId(result.data.id)
+      setOrganizationName(result.data.name)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function createEngagement() {
+    if (!organizationId) {
+      setError("Create an organization first")
+      return
+    }
+
     setIsLoading(true)
     setError("")
     setAnalysisResult(null)
     setRuns([])
 
     try {
-      const response = await fetch(`${API_BASE_URL}/cases`, {
+      // Discovery content is optional — an engagement can be created empty and
+      // filled in later. Only non-empty fields are sent.
+      const response = await fetch(`${API_BASE_URL}/engagements`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(caseForm),
+        body: JSON.stringify({
+          organizationId,
+          title: engagementForm.title || undefined,
+          statedProblem: engagementForm.statedProblem || undefined,
+          currentProcess: engagementForm.currentProcess || undefined,
+          desiredOutcome: engagementForm.desiredOutcome || undefined,
+          sensitiveData: engagementForm.sensitiveData,
+          gdprConcerns: engagementForm.gdprConcerns,
+        }),
       })
 
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.message ?? "Failed to create case")
+        throw new Error(result.message ?? "Failed to create engagement")
       }
 
-      setCaseId(result.data.id)
+      setEngagementId(result.data.id)
+      setEngagementStage(result.data.stage as EngagementStage)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error")
     } finally {
@@ -103,8 +179,8 @@ export default function Home() {
   }
 
   async function runAnalysis() {
-    if (!caseId) {
-      setError("Create a case first")
+    if (!engagementId) {
+      setError("Create an engagement first")
       return
     }
 
@@ -112,9 +188,10 @@ export default function Home() {
     setError("")
 
     try {
-      const response = await fetch(`${API_BASE_URL}/cases/${caseId}/analyze`, {
-        method: "POST",
-      })
+      const response = await fetch(
+        `${API_BASE_URL}/engagements/${engagementId}/analyze`,
+        { method: "POST" },
+      )
 
       const result = await response.json()
 
@@ -123,7 +200,7 @@ export default function Home() {
       }
 
       setAnalysisResult(result)
-      await loadRunHistory(caseId)
+      await loadRunHistory(engagementId)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error")
     } finally {
@@ -131,11 +208,11 @@ export default function Home() {
     }
   }
 
-  async function loadRunHistory(targetCaseId = caseId) {
-    if (!targetCaseId) return
+  async function loadRunHistory(targetEngagementId = engagementId) {
+    if (!targetEngagementId) return
 
     const response = await fetch(
-      `${API_BASE_URL}/cases/${targetCaseId}/analysis-runs`,
+      `${API_BASE_URL}/engagements/${targetEngagementId}/analysis-runs`,
     )
 
     const result = await response.json()
@@ -147,12 +224,7 @@ export default function Home() {
     setRuns(result.data)
   }
 
-  const canCreateCase =
-    caseForm.companyName.trim() &&
-    caseForm.industry.trim() &&
-    caseForm.statedProblem.trim() &&
-    caseForm.currentProcess.trim() &&
-    caseForm.desiredOutcome.trim()
+  const canCreateOrganization = organizationForm.name.trim().length > 0
 
   return (
     <main
@@ -180,12 +252,15 @@ export default function Home() {
             AI Consultant Copilot
           </p>
           <h1 style={{ fontSize: 42, lineHeight: 1.1, margin: "8px 0 12px" }}>
-            Analyze client cases with observable AI runs
+            Start an engagement for a client organization
           </h1>
           <p style={{ color: "#6b7280", fontSize: 18, maxWidth: 760 }}>
-            Create a consulting case, run an AI analysis, and inspect the
-            evaluation history with prompt versioning, token usage, cost, and
-            validation status.
+            Create an organization, open an engagement for it, and resume that
+            work at any time. Discovery details are optional now and can be
+            filled in later.{" "}
+            <Link href="/engagements" style={{ color: "#4f46e5", fontWeight: 700 }}>
+              View all engagements →
+            </Link>
           </p>
         </header>
 
@@ -212,160 +287,215 @@ export default function Home() {
             alignItems: "start",
           }}
         >
-          <section
-            style={{
-              background: "#ffffff",
-              borderRadius: 24,
-              padding: 28,
-              boxShadow: "0 20px 50px rgba(15, 23, 42, 0.08)",
-              border: "1px solid #e5e7eb",
-            }}
-          >
-            <div style={{ marginBottom: 24 }}>
-              <h2 style={{ margin: 0, fontSize: 24 }}>1. Create Case</h2>
-              <p style={{ margin: "8px 0 0", color: "#6b7280" }}>
-                Enter the minimum consulting discovery data required by the
-                backend schema.
-              </p>
-            </div>
-
-            <div style={{ display: "grid", gap: 18 }}>
-              <Field label="Company Name">
-                <input
-                  value={caseForm.companyName}
-                  onChange={(event) =>
-                    updateCaseForm("companyName", event.target.value)
-                  }
-                  placeholder="Example: Demo Hotel GmbH"
-                  style={inputStyle}
-                />
-              </Field>
-
-              <Field label="Industry">
-                <input
-                  value={caseForm.industry}
-                  onChange={(event) =>
-                    updateCaseForm("industry", event.target.value)
-                  }
-                  placeholder="Example: Hospitality"
-                  style={inputStyle}
-                />
-              </Field>
-
-              <Field label="Stated Problem">
-                <textarea
-                  value={caseForm.statedProblem}
-                  onChange={(event) =>
-                    updateCaseForm("statedProblem", event.target.value)
-                  }
-                  placeholder="What problem did the client describe?"
-                  style={textareaStyle}
-                />
-              </Field>
-
-              <Field label="Current Process">
-                <textarea
-                  value={caseForm.currentProcess}
-                  onChange={(event) =>
-                    updateCaseForm("currentProcess", event.target.value)
-                  }
-                  placeholder="How does the process work today?"
-                  style={textareaStyle}
-                />
-              </Field>
-
-              <Field label="Desired Outcome">
-                <textarea
-                  value={caseForm.desiredOutcome}
-                  onChange={(event) =>
-                    updateCaseForm("desiredOutcome", event.target.value)
-                  }
-                  placeholder="What should improve after the AI solution?"
-                  style={textareaStyle}
-                />
-              </Field>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 12,
-                }}
-              >
-                <CheckboxCard
-                  label="Sensitive data involved"
-                  checked={caseForm.sensitiveData}
-                  onChange={(checked) =>
-                    updateCaseForm("sensitiveData", checked)
-                  }
-                />
-
-                <CheckboxCard
-                  label="GDPR concerns"
-                  checked={caseForm.gdprConcerns}
-                  onChange={(checked) =>
-                    updateCaseForm("gdprConcerns", checked)
-                  }
-                />
+          <div style={{ display: "grid", gap: 24 }}>
+            <section style={cardStyle}>
+              <div style={{ marginBottom: 24 }}>
+                <h2 style={{ margin: 0, fontSize: 24 }}>1. Create Organization</h2>
+                <p style={{ margin: "8px 0 0", color: "#6b7280" }}>
+                  The client company that groups its engagements.
+                </p>
               </div>
 
-              <button
-                onClick={createCase}
-                disabled={isLoading || !canCreateCase}
-                style={{
-                  ...buttonStyle,
-                  opacity: isLoading || !canCreateCase ? 0.55 : 1,
-                  cursor: isLoading || !canCreateCase ? "not-allowed" : "pointer",
-                }}
-              >
-                {isLoading ? "Working..." : "Create Case"}
-              </button>
+              <div style={{ display: "grid", gap: 18 }}>
+                <Field label="Organization Name">
+                  <input
+                    value={organizationForm.name}
+                    onChange={(event) =>
+                      updateOrganizationForm("name", event.target.value)
+                    }
+                    placeholder="Example: Demo Hotel GmbH"
+                    style={inputStyle}
+                  />
+                </Field>
 
-              {caseId && (
-                <div
+                <Field label="Industry (optional)">
+                  <input
+                    value={organizationForm.industry}
+                    onChange={(event) =>
+                      updateOrganizationForm("industry", event.target.value)
+                    }
+                    placeholder="Example: Hospitality"
+                    style={inputStyle}
+                  />
+                </Field>
+
+                <Field label="Company Size (optional)">
+                  <select
+                    value={organizationForm.companySize}
+                    onChange={(event) =>
+                      updateOrganizationForm("companySize", event.target.value)
+                    }
+                    style={inputStyle}
+                  >
+                    <option value="">—</option>
+                    {companySizeOptions.map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <button
+                  onClick={createOrganization}
+                  disabled={isLoading || !canCreateOrganization}
                   style={{
-                    padding: 14,
-                    borderRadius: 14,
-                    background: "#ecfdf5",
-                    border: "1px solid #bbf7d0",
-                    color: "#065f46",
-                    fontSize: 14,
+                    ...buttonStyle,
+                    opacity: isLoading || !canCreateOrganization ? 0.55 : 1,
+                    cursor:
+                      isLoading || !canCreateOrganization
+                        ? "not-allowed"
+                        : "pointer",
                   }}
                 >
-                  <strong>Case created:</strong>
-                  <div style={{ marginTop: 4, wordBreak: "break-all" }}>
-                    {caseId}
+                  {isLoading ? "Working..." : "Create Organization"}
+                </button>
+
+                {organizationId && (
+                  <div style={successStyle}>
+                    <strong>Organization ready:</strong> {organizationName}
                   </div>
+                )}
+              </div>
+            </section>
+
+            <section style={{ ...cardStyle, opacity: organizationId ? 1 : 0.6 }}>
+              <div style={{ marginBottom: 24 }}>
+                <h2 style={{ margin: 0, fontSize: 24 }}>2. Open Engagement</h2>
+                <p style={{ margin: "8px 0 0", color: "#6b7280" }}>
+                  A complete piece of consulting work for{" "}
+                  {organizationName || "the organization"}. All fields are
+                  optional — an empty engagement is a valid starting point.
+                </p>
+              </div>
+
+              <div style={{ display: "grid", gap: 18 }}>
+                <Field label="Engagement Title (optional)">
+                  <input
+                    value={engagementForm.title}
+                    onChange={(event) =>
+                      updateEngagementForm("title", event.target.value)
+                    }
+                    placeholder="Example: Support automation review"
+                    style={inputStyle}
+                  />
+                </Field>
+
+                <Field label="Stated Problem (optional)">
+                  <textarea
+                    value={engagementForm.statedProblem}
+                    onChange={(event) =>
+                      updateEngagementForm("statedProblem", event.target.value)
+                    }
+                    placeholder="What problem did the client describe?"
+                    style={textareaStyle}
+                  />
+                </Field>
+
+                <Field label="Current Process (optional)">
+                  <textarea
+                    value={engagementForm.currentProcess}
+                    onChange={(event) =>
+                      updateEngagementForm("currentProcess", event.target.value)
+                    }
+                    placeholder="How does the process work today?"
+                    style={textareaStyle}
+                  />
+                </Field>
+
+                <Field label="Desired Outcome (optional)">
+                  <textarea
+                    value={engagementForm.desiredOutcome}
+                    onChange={(event) =>
+                      updateEngagementForm("desiredOutcome", event.target.value)
+                    }
+                    placeholder="What should improve after the AI solution?"
+                    style={textareaStyle}
+                  />
+                </Field>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 12,
+                  }}
+                >
+                  <CheckboxCard
+                    label="Sensitive data involved"
+                    checked={engagementForm.sensitiveData}
+                    onChange={(checked) =>
+                      updateEngagementForm("sensitiveData", checked)
+                    }
+                  />
+
+                  <CheckboxCard
+                    label="GDPR concerns"
+                    checked={engagementForm.gdprConcerns}
+                    onChange={(checked) =>
+                      updateEngagementForm("gdprConcerns", checked)
+                    }
+                  />
                 </div>
-              )}
-            </div>
-          </section>
+
+                <button
+                  onClick={createEngagement}
+                  disabled={isLoading || !organizationId}
+                  style={{
+                    ...buttonStyle,
+                    opacity: isLoading || !organizationId ? 0.55 : 1,
+                    cursor:
+                      isLoading || !organizationId ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {isLoading ? "Working..." : "Open Engagement"}
+                </button>
+
+                {engagementId && (
+                  <div style={successStyle}>
+                    <strong>Engagement opened</strong>
+                    {engagementStage && (
+                      <> · stage: {STAGE_LABELS[engagementStage]}</>
+                    )}
+                    <div style={{ marginTop: 8 }}>
+                      <Link
+                        href={`/engagements/${engagementId}`}
+                        style={{ color: "#065f46", fontWeight: 800 }}
+                      >
+                        Open engagement workspace →
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
 
           <aside style={{ display: "grid", gap: 24 }}>
             <section style={cardStyle}>
-              <h2 style={{ marginTop: 0 }}>2. Run Analysis</h2>
+              <h2 style={{ marginTop: 0 }}>3. Run Analysis</h2>
               <p style={{ color: "#6b7280" }}>
-                Send this case to the backend analysis engine and persist the AI
-                run.
+                Send this engagement to the backend analysis engine and persist
+                the AI run.
               </p>
 
               <button
                 onClick={runAnalysis}
-                disabled={isLoading || !caseId}
+                disabled={isLoading || !engagementId}
                 style={{
                   ...buttonStyle,
                   width: "100%",
                   background: "#111827",
-                  opacity: isLoading || !caseId ? 0.55 : 1,
-                  cursor: isLoading || !caseId ? "not-allowed" : "pointer",
+                  opacity: isLoading || !engagementId ? 0.55 : 1,
+                  cursor: isLoading || !engagementId ? "not-allowed" : "pointer",
                 }}
               >
                 Run Analysis
               </button>
 
-              {!caseId && (
+              {!engagementId && (
                 <p style={{ color: "#9ca3af", fontSize: 14 }}>
-                  Create a case before running analysis.
+                  Open an engagement before running analysis.
                 </p>
               )}
             </section>
@@ -505,6 +635,15 @@ const cardStyle: React.CSSProperties = {
   padding: 24,
   boxShadow: "0 20px 50px rgba(15, 23, 42, 0.08)",
   border: "1px solid #e5e7eb",
+}
+
+const successStyle: React.CSSProperties = {
+  padding: 14,
+  borderRadius: 14,
+  background: "#ecfdf5",
+  border: "1px solid #bbf7d0",
+  color: "#065f46",
+  fontSize: 14,
 }
 
 const inputStyle: React.CSSProperties = {

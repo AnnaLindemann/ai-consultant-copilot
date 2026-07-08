@@ -1,18 +1,16 @@
-export type EvaluationLevel = "low" | "medium" | "high"
-
+// Only objective, machine-derived signals are represented here. Subjective
+// quality scores (relevance, hallucination risk, business value, actionability)
+// are intentionally absent: no genuine evaluator exists yet, and presenting a
+// placeholder score as a real evaluation is forbidden (roadmap Phase 0;
+// architecture.md §5; coding-standards.md §8).
 export type EvaluationResult = {
   model: string
+  provider: string
   schemaValid: boolean
   jsonParseSuccess: boolean
-  relevance: EvaluationLevel
-  hallucinationRisk: EvaluationLevel
-  businessValue: EvaluationLevel
-  actionability: EvaluationLevel
   latencyMs?: number
-  costEstimate?: number
-  provider: string
   promptTokens?: number
-completionTokens?: number
-totalTokens?: number
-costEstimateUsd?: number
+  completionTokens?: number
+  totalTokens?: number
+  costEstimateUsd?: number
 }

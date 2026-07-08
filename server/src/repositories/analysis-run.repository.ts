@@ -4,7 +4,7 @@ import { prisma } from "../lib/prisma.js"
 
 
 export type CreateAnalysisRunInput = {
-  caseId: string
+  engagementId: string
   provider: string
   model: string
   promptFingerprint: string
@@ -17,16 +17,12 @@ export type CreateAnalysisRunInput = {
   jsonParseSuccess: boolean
   schemaValid: boolean
   errorMessage?: string
-  relevance?: string
-  hallucinationRisk?: string
-  businessValue?: string
-  actionability?: string
 }
 
 export const createAnalysisRun = async (input: CreateAnalysisRunInput) => {
   return prisma.analysisRun.create({
     data: {
-      caseId: input.caseId,
+      engagementId: input.engagementId,
       provider: input.provider,
       model: input.model,
       promptFingerprint: input.promptFingerprint,
@@ -39,18 +35,14 @@ export const createAnalysisRun = async (input: CreateAnalysisRunInput) => {
       jsonParseSuccess: input.jsonParseSuccess,
       schemaValid: input.schemaValid,
       errorMessage: input.errorMessage,
-      relevance: input.relevance,
-      hallucinationRisk: input.hallucinationRisk,
-      businessValue: input.businessValue,
-      actionability: input.actionability,      
     },
   })
 }
 
-export const getAnalysisRunsByCaseId = async (caseId: string) => {
+export const getAnalysisRunsByEngagementId = async (engagementId: string) => {
   return prisma.analysisRun.findMany({
     where: {
-      caseId,
+      engagementId,
     },
     orderBy: {
       createdAt: "desc",
@@ -70,10 +62,6 @@ export const getAnalysisRunsByCaseId = async (caseId: string) => {
       schemaValid: true,
       errorMessage: true,
       createdAt: true,
-      relevance: true,
-      hallucinationRisk: true,
-      businessValue: true,
-      actionability: true,
     },
   })
 }

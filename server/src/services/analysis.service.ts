@@ -1,5 +1,3 @@
-import type { ClientCase } from "@prisma/client"
-
 import { evaluateAnalysisOutput } from "../evaluation/evaluate-analysis-output.js"
 import { callLlm } from "../lib/llm-client.js"
 import { parseConsultantReport } from "../lib/parse-consultant-report.js"
@@ -9,10 +7,11 @@ import type { ConsultantReport } from "../../../shared/consultant-report.schema.
 import type { EvaluationResult } from "../evaluation/evaluation.types.js"
 import { calculateLlmCost } from "../evaluation/calculate-llm-cost.js"
 import { createAnalysisRun } from "../repositories/analysis-run.repository.js"
+import type { EngagementWithOrganization } from "../repositories/engagement.repository.js"
 import { ANALYSIS_PROMPT } from "../prompts/analysis-prompt.js"
 import { langfuse } from "../observability/langfuse.js"
 
-export type AnalyzeClientCaseResult =
+export type AnalyzeEngagementResult =
   | {
       success: true
       report: ConsultantReport
@@ -23,117 +22,107 @@ export type AnalyzeClientCaseResult =
       evaluation: EvaluationResult
       error: string
     }
-export const analyzeClientCase = async (
-  input: ClientCase,
-): Promise<AnalyzeClientCaseResult> => {
+
+export const analyzeEngagement = async (
+  input: EngagementWithOrganization,
+): Promise<AnalyzeEngagementResult> => {
   const trace = langfuse?.trace({
-  name: "analyze-client-case",
-  metadata: {
-    caseId: input.id,
-    promptVersion: ANALYSIS_PROMPT.version,
-    promptFingerprint: ANALYSIS_PROMPT.fingerprint,
-  },
-})
-
-const prompt = buildAnalysisPrompt(input)
-
-const llmResponse = await callLlm(prompt)
-
-
- const parsedResult = parseConsultantReport(llmResponse.content)
-
- const costEstimateUsd = calculateLlmCost({
-  promptTokens: llmResponse.promptTokens,
-  completionTokens: llmResponse.completionTokens,
-})
-
-const evaluation = evaluateAnalysisOutput({
-  provider: llmResponse.provider,
-  model: llmResponse.model,
-  jsonParseSuccess: parsedResult.jsonParseSuccess,
-  schemaValid: parsedResult.schemaValid,
-  latencyMs: llmResponse.latencyMs,
-  promptTokens: llmResponse.promptTokens,
-  completionTokens: llmResponse.completionTokens,
-  totalTokens: llmResponse.totalTokens,
-  costEstimateUsd,
-})
-
-trace?.generation({
-  name: "groq-llm-call",
-  model: llmResponse.model,
-  metadata: {
-    provider: llmResponse.provider,
-    promptVersion: ANALYSIS_PROMPT.version,
-    promptFingerprint: ANALYSIS_PROMPT.fingerprint,
-    latencyMs: llmResponse.latencyMs,
-    promptTokens: llmResponse.promptTokens,
-    completionTokens: llmResponse.completionTokens,
-    totalTokens: llmResponse.totalTokens,
-    costEstimateUsd,
-    jsonParseSuccess: parsedResult.jsonParseSuccess,
-    schemaValid: parsedResult.schemaValid,
-    relevance: evaluation.relevance,
-    hallucinationRisk: evaluation.hallucinationRisk,
-    businessValue: evaluation.businessValue,
-    actionability: evaluation.actionability,
-    
-  },
-  
-})
-try {
-  const analysisRun = await createAnalysisRun({
-    caseId: input.id,
-    provider: llmResponse.provider,
-    model: llmResponse.model,
-    promptVersion: ANALYSIS_PROMPT.version,
-    promptFingerprint: ANALYSIS_PROMPT.fingerprint,
-    latencyMs: llmResponse.latencyMs,
-    promptTokens: llmResponse.promptTokens,
-    completionTokens: llmResponse.completionTokens,
-    totalTokens: llmResponse.totalTokens,
-    costEstimateUsd,
-    jsonParseSuccess: parsedResult.jsonParseSuccess,
-    schemaValid: parsedResult.schemaValid,
-    relevance: evaluation.relevance,
-    hallucinationRisk: evaluation.hallucinationRisk,
-    businessValue: evaluation.businessValue,
-    actionability: evaluation.actionability,
-    errorMessage: parsedResult.success ? undefined : parsedResult.error,
-  })
-
-  trace?.update({
+    name: "analyze-engagement",
     metadata: {
-      caseId: input.id,
-      analysisRunId: analysisRun.id,
+      engagementId: input.id,
       promptVersion: ANALYSIS_PROMPT.version,
       promptFingerprint: ANALYSIS_PROMPT.fingerprint,
-      success: parsedResult.success,
-      jsonParseSuccess: parsedResult.jsonParseSuccess,
-      schemaValid: parsedResult.schemaValid,
-      relevance: evaluation.relevance,
-      hallucinationRisk: evaluation.hallucinationRisk,
-      businessValue: evaluation.businessValue,
-      actionability: evaluation.actionability,
     },
   })
-} catch (error) {
-  console.error("CREATE ANALYSIS RUN ERROR:", error)
-} finally {
-  await langfuse?.flushAsync()
-}
 
-if (!parsedResult.success) {
-  return {
-    success: false,
-    evaluation,
-    error: parsedResult.error,
+  const prompt = buildAnalysisPrompt(input)
+
+  const llmResponse = await callLlm(prompt)
+
+  const parsedResult = parseConsultantReport(llmResponse.content)
+
+  const costEstimateUsd = calculateLlmCost({
+    promptTokens: llmResponse.promptTokens,
+    completionTokens: llmResponse.completionTokens,
+  })
+
+  const evaluation = evaluateAnalysisOutput({
+    provider: llmResponse.provider,
+    model: llmResponse.model,
+    jsonParseSuccess: parsedResult.jsonParseSuccess,
+    schemaValid: parsedResult.schemaValid,
+    latencyMs: llmResponse.latencyMs,
+    promptTokens: llmResponse.promptTokens,
+    completionTokens: llmResponse.completionTokens,
+    totalTokens: llmResponse.totalTokens,
+    costEstimateUsd,
+  })
+
+  trace?.generation({
+    name: "groq-llm-call",
+    model: llmResponse.model,
+    metadata: {
+      provider: llmResponse.provider,
+      promptVersion: ANALYSIS_PROMPT.version,
+      promptFingerprint: ANALYSIS_PROMPT.fingerprint,
+      latencyMs: llmResponse.latencyMs,
+      promptTokens: llmResponse.promptTokens,
+      completionTokens: llmResponse.completionTokens,
+      totalTokens: llmResponse.totalTokens,
+      costEstimateUsd,
+      jsonParseSuccess: parsedResult.jsonParseSuccess,
+      schemaValid: parsedResult.schemaValid,
+    },
+  })
+
+  // The audit trail must survive even when the AI output is unusable: the run
+  // is recorded (with its error) and Langfuse is flushed regardless of outcome
+  // (architecture.md §5, §13; coding-standards.md §7).
+  try {
+    const analysisRun = await createAnalysisRun({
+      engagementId: input.id,
+      provider: llmResponse.provider,
+      model: llmResponse.model,
+      promptVersion: ANALYSIS_PROMPT.version,
+      promptFingerprint: ANALYSIS_PROMPT.fingerprint,
+      latencyMs: llmResponse.latencyMs,
+      promptTokens: llmResponse.promptTokens,
+      completionTokens: llmResponse.completionTokens,
+      totalTokens: llmResponse.totalTokens,
+      costEstimateUsd,
+      jsonParseSuccess: parsedResult.jsonParseSuccess,
+      schemaValid: parsedResult.schemaValid,
+      errorMessage: parsedResult.success ? undefined : parsedResult.error,
+    })
+
+    trace?.update({
+      metadata: {
+        engagementId: input.id,
+        analysisRunId: analysisRun.id,
+        promptVersion: ANALYSIS_PROMPT.version,
+        promptFingerprint: ANALYSIS_PROMPT.fingerprint,
+        success: parsedResult.success,
+        jsonParseSuccess: parsedResult.jsonParseSuccess,
+        schemaValid: parsedResult.schemaValid,
+      },
+    })
+  } catch (error) {
+    console.error("CREATE ANALYSIS RUN ERROR:", error)
+  } finally {
+    await langfuse?.flushAsync()
   }
-}
 
-return {
-  success: true,
-  report: parsedResult.report,
-  evaluation,
-}
+  if (!parsedResult.success) {
+    return {
+      success: false,
+      evaluation,
+      error: parsedResult.error,
+    }
+  }
+
+  return {
+    success: true,
+    report: parsedResult.report,
+    evaluation,
+  }
 }

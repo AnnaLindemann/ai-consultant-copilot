@@ -1,14 +1,5 @@
 import { z } from "zod"
 
-const companySizeSchema = z.enum([
-  "solo",
-  "micro",
-  "small",
-  "medium",
-  "large",
-  "enterprise",
-])
-
 const levelSchema = z.enum(["low", "medium", "high"])
 
 const processFrequencySchema = z.enum([
@@ -37,24 +28,33 @@ const timelineSchema = z.enum([
 
 const currencySchema = z.enum(["EUR", "USD", "GBP", "OTHER"])
 
+const engagementStageSchema = z.enum([
+  "discovery",
+  "assessment",
+  "prioritization",
+  "solution_matching",
+  "roadmap",
+  "report",
+])
+
 const nonEmptyString = z.string().trim().min(1)
 
 const optionalStringArray = z.array(nonEmptyString).optional()
 
-export const createClientCaseSchema = z.object({
-  companyName: nonEmptyString,
-  industry: nonEmptyString,
-  companySize: companySizeSchema.optional(),
-  geography: z.string().trim().optional(),
+// The discovery/problem/process content an engagement can carry. In Phase 1 all
+// of it is optional: an empty engagement is a valid, working state (roadmap
+// Phase 1 DoD). Company identity/context lives on the Organization, not here.
+const engagementContentShape = {
+  title: z.string().trim().optional(),
   department: z.string().trim().optional(),
 
-  statedProblem: nonEmptyString,
+  statedProblem: z.string().trim().optional(),
   painPoints: optionalStringArray,
   affectedUsers: optionalStringArray,
   businessImpact: z.string().trim().optional(),
   urgency: levelSchema.optional(),
 
-  currentProcess: nonEmptyString,
+  currentProcess: z.string().trim().optional(),
   processSteps: optionalStringArray,
   processFrequency: processFrequencySchema.optional(),
   manualWorkLevel: levelSchema.optional(),
@@ -68,10 +68,10 @@ export const createClientCaseSchema = z.object({
   dataLocation: optionalStringArray,
   dataAvailability: dataAvailabilitySchema.optional(),
   dataQuality: dataQualitySchema.optional(),
-  sensitiveData: z.boolean(),
+  sensitiveData: z.boolean().optional(),
   sensitiveDataTypes: optionalStringArray,
 
-  gdprConcerns: z.boolean(),
+  gdprConcerns: z.boolean().optional(),
   budgetAmount: z.number().positive().optional(),
   budgetCurrency: currencySchema.optional(),
   budgetNotes: z.string().trim().optional(),
@@ -79,10 +79,29 @@ export const createClientCaseSchema = z.object({
   humanApprovalRequired: z.boolean().optional(),
   technicalConstraints: optionalStringArray,
 
-  desiredOutcome: nonEmptyString,
+  desiredOutcome: z.string().trim().optional(),
   successMetrics: optionalStringArray,
   mvpScope: z.string().trim().optional(),
   notes: z.string().trim().optional(),
+} as const
+
+// Create an engagement under an existing Organization. Only the owning
+// organization is required; the engagement may otherwise be empty.
+export const createEngagementSchema = z.object({
+  organizationId: nonEmptyString,
+  ...engagementContentShape,
 })
 
-export type CreateClientCaseInput = z.infer<typeof createClientCaseSchema>
+// Save (update) an engagement: any subset of its content plus the methodology
+// `stage` marker. At least one field must be provided so a save is meaningful.
+export const updateEngagementSchema = z
+  .object({
+    stage: engagementStageSchema.optional(),
+    ...engagementContentShape,
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "At least one field must be provided",
+  })
+
+export type CreateEngagementInput = z.infer<typeof createEngagementSchema>
+export type UpdateEngagementInput = z.infer<typeof updateEngagementSchema>
