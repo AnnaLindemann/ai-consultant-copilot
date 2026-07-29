@@ -57,6 +57,35 @@ enum Currency {
   OTHER
 }
 
+// Where the Discovery Profile stands in its review workflow (Phase 2
+// Extension; domain-model.md §3A.3). Submission is a review checkpoint, not a
+// lock: discovery stays revisable in every state, and acceptance never ends the
+// ability to revise it later.
+enum DiscoveryStatus {
+  draft
+  submitted
+  returned
+  accepted
+}
+
+// Who acted on discovery. Until Phase 3A delivers authentication this is a
+// declared role rather than an authenticated identity — it decides which
+// workflow transitions the domain permits; it is not access control.
+enum DiscoveryActor {
+  consultant
+  client
+}
+
+// Where the Assessment stands in the human-in-the-loop cycle (roadmap Phase 3).
+// AI output is persisted as an unreviewed draft; once the consultant edits or
+// accepts it, regenerating requires their explicit intent so their work is never
+// silently overwritten (architecture.md §5; agent-rules.md §10).
+enum AssessmentReviewState {
+  ai_draft
+  consultant_edited
+  accepted
+}
+
 // Where an engagement currently stands in the consulting methodology
 // (domain-model.md §3). Phase 1 only tracks the stage marker; later phases
 // add the content each stage produces. `discovery` is the first stage, so a
@@ -164,8 +193,33 @@ model Engagement {
   notes              String?
   missingInformation Json?
 
+  // Value & measurement baseline (Phase 2 Extension). The metric structures are
+  // still stabilizing, so the validated payload is stored as Json owned by the
+  // Engagement aggregate, while the workflow's stable parts — status,
+  // provenance, timestamps — are typed columns (architecture.md §6).
+  valueMeasurementBaseline Json?
+
+  // The Discovery review workflow: where the profile stands, who submitted it
+  // and when, when the consultant reviewed it, the notes they returned it with,
+  // and which section of the content came from whom. Provenance is a map of
+  // section → consultant_captured | client_provided.
+  discoveryStatus            DiscoveryStatus @default(draft)
+  discoverySubmittedAt       DateTime?
+  discoverySubmittedBy       DiscoveryActor?
+  discoveryReviewedAt        DateTime?
+  discoveryReturnNotes       String?
+  discoveryContentProvenance Json?
+
+  // Assessment (roadmap Phase 3). The findings of all dimensions are still
+  // stabilizing, so the validated payload is stored as Json owned by the
+  // Engagement aggregate rather than in a parallel store (architecture.md §6);
+  // its review state is a stable, typed marker.
+  assessment            Json?
+  assessmentReviewState AssessmentReviewState?
+
   @@index([organizationId])
   @@index([stage])
+  @@index([discoveryStatus])
   @@index([createdAt])
   @@index([sensitiveData])
   @@index([gdprConcerns])
@@ -176,6 +230,11 @@ model AnalysisRun {
 
   engagementId String
   engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  // Which methodology stage the run supported, so runs can be filtered by stage
+  // while still rolling up to the engagement (architecture.md §8). Runs recorded
+  // before the assessment stage existed carry the legacy `analysis` value.
+  stage String
 
   provider String
   model    String

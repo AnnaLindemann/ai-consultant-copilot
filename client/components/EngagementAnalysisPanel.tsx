@@ -7,6 +7,7 @@ import AnalysisReportView from "./AnalysisReportView"
 
 type AnalysisRun = {
   id: string
+  stage: string
   provider: string
   model: string
   promptVersion: string
@@ -30,6 +31,9 @@ type AnalyzeResponse = {
 
 type EngagementAnalysisPanelProps = {
   engagementId: string
+  // The engagement's audit trail across every AI-assisted stage, loaded with
+  // the page so runs recorded by other stages are visible straight away.
+  initialRuns: AnalysisRun[]
 }
 
 const API_BASE_URL =
@@ -37,13 +41,28 @@ const API_BASE_URL =
 
 export default function EngagementAnalysisPanel({
   engagementId,
+  initialRuns,
 }: EngagementAnalysisPanelProps) {
   const [analysisResult, setAnalysisResult] = useState<AnalyzeResponse | null>(
     null,
   )
-  const [runs, setRuns] = useState<AnalysisRun[]>([])
+  const [runs, setRuns] = useState<AnalysisRun[]>(initialRuns)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+
+  async function loadRunHistory() {
+    const response = await fetch(
+      `${API_BASE_URL}/engagements/${engagementId}/analysis-runs`,
+    )
+
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.message ?? "Failed to load run history")
+    }
+
+    setRuns(result.data as AnalysisRun[])
+  }
 
   async function runAnalysis() {
     setIsLoading(true)
@@ -72,20 +91,6 @@ export default function EngagementAnalysisPanel({
     }
   }
 
-  async function loadRunHistory() {
-    const response = await fetch(
-      `${API_BASE_URL}/engagements/${engagementId}/analysis-runs`,
-    )
-
-    const result = await response.json()
-
-    if (!response.ok) {
-      throw new Error(result.message ?? "Failed to load run history")
-    }
-
-    setRuns(result.data as AnalysisRun[])
-  }
-
   return (
     <section style={panelStyle}>
       <h2 style={{ marginTop: 0 }}>Analysis Workflow</h2>
@@ -112,7 +117,9 @@ export default function EngagementAnalysisPanel({
         <h3>Run History</h3>
 
         {runs.length === 0 ? (
-          <p style={mutedStyle}>No runs loaded yet.</p>
+          <p style={mutedStyle}>
+            No AI-assisted step has been run for this engagement yet.
+          </p>
         ) : (
           <div style={{ display: "grid", gap: 12 }}>
             {runs.map((run) => (
@@ -122,6 +129,7 @@ export default function EngagementAnalysisPanel({
                   {new Date(run.createdAt).toLocaleString()}
                 </p>
                 <div style={badgeRowStyle}>
+                  <Badge label={`stage: ${run.stage}`} />
                   <Badge label={run.promptVersion} />
                   <Badge label={`${run.totalTokens ?? 0} tokens`} />
                   <Badge label={`$${run.costEstimateUsd ?? "0"}`} />

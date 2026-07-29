@@ -3,9 +3,14 @@
 An AI-assisted workbench for a consultant who identifies and recommends AI
 opportunities in a client's operations. Work is grouped by **Organization** (the
 client company) and carried out one **Engagement** at a time: the consultant
-opens an engagement for an organization, records where it stands, runs an
-AI-assisted analysis, and reviews a structured consultant report — leaving and
-resuming the engagement without losing state. Every AI-assisted step is recorded
+opens an engagement for an organization, records where it stands, captures a
+Discovery Profile — including the **value & measurement baseline** of what the
+problem costs today and what success would measurably look like — moves that
+discovery through a **draft / submitted / returned / accepted** review workflow,
+generates an AI-assisted **Assessment** of the client across the six assessment
+dimensions, and reviews a structured consultant report — leaving and resuming
+the engagement without losing state. Every AI-assisted step
+is recorded
 as an **Analysis Run** — with provider, model, prompt version, prompt
 fingerprint, token usage, latency, and cost — and traced in Langfuse.
 
@@ -89,10 +94,43 @@ npm run dev --prefix client
 ```
 
 Open <http://localhost:3000> to create an organization, open an engagement for
-it, complete and revise its Customer Operations Discovery Profile, and run an
-analysis, or <http://localhost:3000/engagements> to list and resume existing
-engagements. Discovery records both known facts and explicit missing
-information so a later session resumes with the same profile and gaps.
+it, complete and revise its Customer Operations Discovery Profile, generate and
+review the Assessment, and run an analysis, or
+<http://localhost:3000/engagements> to list and resume existing engagements.
+Discovery records both known facts and explicit missing information so a later
+session resumes with the same profile and gaps.
+
+**Discovery** additionally captures the engagement's **value & measurement
+baseline**: business impact, error frequency/severity/cost, existing KPIs,
+baseline metrics, and target success metrics. Every figure carries how it was
+obtained — an estimate is never recorded as a measurement, and a measured figure
+must state how it is measured and where it came from. What the client cannot
+answer is recorded as a **measurement gap with its reason** rather than left
+blank, and discovery cannot be submitted while a baseline subject is neither
+answered nor explained.
+
+Discovery is worked on as a **draft**, **submitted** when the contributor
+considers it complete, and then **accepted**, **returned with notes**, or
+**reopened** by the consultant. Every save records **who provided which
+section** (consultant-captured vs. client-provided); client-provided content
+keeps that attribution through later consultant edits and returns discovery to
+draft, because it becomes accepted fact only by the consultant's review. No
+transition touches discovery content. Discovery is consultant- or
+client-authored, never AI-assisted, so it records no Analysis Run.
+
+> The "entered by" contributor is a **declared** role, not an authenticated
+> identity: authentication, workspaces, the client invitation flow, and the
+> Client Discovery Portal arrive with roadmap Phase 3A. Today it decides
+> attribution and which workflow transitions the domain permits — it is not
+> access control.
+
+The **Assessment** is generated from the persisted Discovery Profile and covers
+Business Process, Data, Technology, AI Readiness, Risks, and Opportunities. Each
+finding states whether it is supported by discovery or rests on an assumption,
+carries a confidence, and the Assessment lists what it could not determine. AI
+output lands as an unreviewed draft the consultant edits, overrides, or accepts;
+regenerating over an Assessment that already carries consultant edits requires
+explicit confirmation.
 
 ## Backend API
 
@@ -109,7 +147,13 @@ Base URL: `http://localhost:8787`
 | POST   | `/engagements`                    | Open an engagement under an organization.      |
 | GET    | `/engagements/:id`                | Get one engagement (resume its state).         |
 | PATCH  | `/engagements/:id`                | Save an engagement (edit content and/or stage).|
-| PATCH  | `/engagements/:id/discovery`      | Save the complete, revisable Discovery Profile.|
+| PATCH  | `/engagements/:id/discovery`      | Save the complete, revisable Discovery Profile (`{ contributor, profile }`).|
+| POST   | `/engagements/:id/discovery/submit`| Submit discovery for the consultant's review.  |
+| POST   | `/engagements/:id/discovery/accept`| Accept the reviewed discovery (consultant).   |
+| POST   | `/engagements/:id/discovery/return`| Return discovery with notes (consultant).     |
+| POST   | `/engagements/:id/discovery/reopen`| Reopen discovery for revision (consultant).   |
+| POST   | `/engagements/:id/assessment`     | Generate the AI Assessment draft from discovery.|
+| PATCH  | `/engagements/:id/assessment`     | Save the consultant's reviewed Assessment.     |
 | POST   | `/engagements/:id/analyze`        | Run the AI analysis for an engagement.         |
 | GET    | `/engagements/:id/analysis-runs`  | List the engagement's Analysis Runs.           |
 
@@ -129,9 +173,18 @@ From `client/`: `npm run dev`, `npm run build`, `npm run lint`.
 ## Testing
 
 Backend unit tests use Node's built-in test runner (via `tsx`) and cover the
-critical trust paths — parsing/validating the LLM's consultant report, validating
-engagement input, and cost calculation. They are deterministic and need no
-database or live model:
+critical trust paths — parsing/validating the LLM's consultant report and
+Assessment, the Discovery Profile contract (including the value & measurement
+baseline's measured-vs-estimated rules and its explicit gaps), the Discovery
+review workflow and content provenance (a client cannot accept their own
+submission, no transition rewrites content, client-provided content keeps its
+attribution), the Assessment stage's rules and orchestration (a failed AI step
+never mutates engagement state and is still recorded as an Analysis Run;
+consultant edits are not silently regenerated over), validating engagement
+input, and cost calculation. They are deterministic and need no database or live
+model (the Assessment orchestration test replaces the provider and repositories
+at their module seams, which is why the test script enables Node's
+`--experimental-test-module-mocks`):
 
 ```bash
 npm test --prefix server

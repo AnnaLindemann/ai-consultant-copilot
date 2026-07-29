@@ -3,39 +3,124 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 
+import DiscoveryBaselineEditor from "./DiscoveryBaselineEditor"
+import DiscoveryReviewControl from "./DiscoveryReviewControl"
+import {
+  BooleanField,
+  DiscoverySection,
+  ListField,
+  NumberField,
+  SelectField,
+  TextArea,
+  TextField,
+  addButtonStyle,
+  errorStyle,
+  eyebrowStyle,
+  fieldStyle,
+  inputStyle,
+  introStyle,
+  removeButtonStyle,
+  saveButtonStyle,
+  successStyle,
+} from "./DiscoveryFields"
+import { t, translateServerMessage } from "../i18n"
+
 import type {
   DiscoveryGap,
   DiscoveryGapCategory,
   DiscoveryProfile,
+  ValueMeasurementBaseline,
 } from "../../shared/discovery-profile.schema"
+import type {
+  DiscoveryActor,
+  DiscoveryWorkflowState,
+} from "../../shared/discovery-workflow.schema"
 
 type DiscoveryProfileEditorProps = {
   engagementId: string
   initialProfile: DiscoveryProfile
+  workflow: DiscoveryWorkflowState
 }
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8787"
 
 const GAP_CATEGORY_LABELS: Record<DiscoveryGapCategory, string> = {
-  situation: "Client situation",
-  operations: "Operations",
-  problems: "Problems",
-  current_process: "Current process",
-  tools: "Tools & channels",
-  data: "Data",
-  constraints: "Constraints",
-  goals: "Goals & success",
+  situation: t("discovery.gap_category.situation"),
+  operations: t("discovery.gap_category.operations"),
+  problems: t("discovery.gap_category.problems"),
+  current_process: t("discovery.gap_category.current_process"),
+  tools: t("discovery.gap_category.tools"),
+  data: t("discovery.gap_category.data"),
+  constraints: t("discovery.gap_category.constraints"),
+  goals: t("discovery.gap_category.goals"),
 }
 
 const levelOptions = ["low", "medium", "high"] as const
 
+const LEVEL_LABELS = {
+  low: t("discovery.severity.low"),
+  medium: t("discovery.severity.medium"),
+  high: t("discovery.severity.high"),
+} as const
+
+const PROCESS_FREQUENCY_OPTIONS = [
+  "rarely",
+  "monthly",
+  "weekly",
+  "daily",
+  "many_times_per_day",
+] as const
+
+const PROCESS_FREQUENCY_LABELS = {
+  rarely: t("discovery.frequency.rarely"),
+  monthly: t("discovery.frequency.monthly"),
+  weekly: t("discovery.frequency.weekly"),
+  daily: t("discovery.frequency.daily"),
+  many_times_per_day: t("discovery.frequency.many_times_per_day"),
+} as const
+
+const DATA_AVAILABILITY_LABELS = {
+  none: t("discovery.data_availability.none"),
+  unknown: t("discovery.data_availability.unknown"),
+  restricted: t("discovery.data_availability.restricted"),
+  available: t("discovery.data_availability.available"),
+} as const
+
+const DATA_QUALITY_LABELS = {
+  poor: t("discovery.data_quality.poor"),
+  mixed: t("discovery.data_quality.mixed"),
+  good: t("discovery.data_quality.good"),
+  unknown: t("discovery.data_quality.unknown"),
+} as const
+
+const CURRENCY_LABELS = {
+  EUR: t("common.currency.eur"),
+  USD: t("common.currency.usd"),
+  GBP: t("common.currency.gbp"),
+  OTHER: t("common.currency.other"),
+} as const
+
+const TIMELINE_LABELS = {
+  asap: t("discovery.timeline.asap"),
+  this_quarter: t("discovery.timeline.this_quarter"),
+  this_year: t("discovery.timeline.this_year"),
+  unknown: t("discovery.timeline.unknown"),
+} as const
+
+const CONTRIBUTORS: readonly DiscoveryActor[] = ["consultant", "client"]
+
 export default function DiscoveryProfileEditor({
   engagementId,
   initialProfile,
+  workflow,
 }: DiscoveryProfileEditorProps) {
   const router = useRouter()
   const [profile, setProfile] = useState(initialProfile)
+  // Who is entering this content. It is declared, not authenticated:
+  // authenticated identity and the client's own portal arrive with Phase 3A.
+  // What it decides here is attribution — whose statement a fact is.
+  const [contributor, setContributor] = useState<DiscoveryActor>("consultant")
   const [gapCategory, setGapCategory] =
     useState<DiscoveryGapCategory>("situation")
   const [gapDescription, setGapDescription] = useState("")
@@ -80,19 +165,28 @@ export default function DiscoveryProfileEditor({
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(profile),
+          body: JSON.stringify({ contributor, profile }),
         },
       )
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.message ?? "Failed to save Discovery Profile")
+        // The server names the refusal; the wording is the frontend's.
+        throw new Error(
+          translateServerMessage(
+            result.message,
+            result.data?.messageParams,
+            "discovery.editor.save_failed",
+          ),
+        )
       }
 
-      setMessage("Discovery Profile saved")
+      setMessage(translateServerMessage(result.message))
       router.refresh()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unknown error")
+      setError(
+        caught instanceof Error ? caught.message : t("common.error.unexpected"),
+      )
     } finally {
       setIsSaving(false)
     }
@@ -102,88 +196,110 @@ export default function DiscoveryProfileEditor({
     <section style={editorStyle}>
       <div style={headerStyle}>
         <div>
-          <p style={eyebrowStyle}>Phase 2 · Client Discovery</p>
-          <h2 style={headingStyle}>Discovery Profile</h2>
-          <p style={introStyle}>
-            Capture what is known about Customer Operations and list every
-            unresolved gap explicitly. Return and revise this profile whenever
-            the client provides better information.
-          </p>
+          <p style={eyebrowStyle}>{t("discovery.editor.eyebrow")}</p>
+          <h2 style={headingStyle}>{t("discovery.editor.title")}</h2>
+          <p style={introStyle}>{t("discovery.editor.intro")}</p>
         </div>
-        <button
-          type="button"
-          onClick={saveProfile}
-          disabled={isSaving}
-          style={{ ...saveButtonStyle, opacity: isSaving ? 0.6 : 1 }}
-        >
-          {isSaving ? "Saving…" : "Save Discovery Profile"}
-        </button>
+        <div style={{ display: "grid", gap: 10, justifyItems: "end" }}>
+          <SelectField
+            label={t("discovery.editor.contributor.label")}
+            value={contributor}
+            options={CONTRIBUTORS}
+            optionLabels={{
+              consultant: t("discovery.actor.consultant"),
+              client: t("discovery.actor.client"),
+            }}
+            includeUnknown={false}
+            onChange={(value) => setContributor(value as DiscoveryActor)}
+          />
+          <button
+            type="button"
+            onClick={saveProfile}
+            disabled={isSaving}
+            style={{ ...saveButtonStyle, opacity: isSaving ? 0.6 : 1 }}
+          >
+            {isSaving ? t("discovery.editor.saving") : t("discovery.editor.save")}
+          </button>
+        </div>
       </div>
 
       {message && <p style={successStyle}>{message}</p>}
       {error && <p style={errorStyle}>{error}</p>}
 
-      <DiscoverySection title="Client situation & operations">
-        <TextField label="Department / function" value={profile.department} onChange={(value) => setField("department", value)} placeholder="Example: Customer Support" />
-        <ListField label="Affected users or teams" value={profile.affectedUsers} onChange={(value) => setField("affectedUsers", value)} placeholder="Support agents, team leads, customers" />
-        <TextArea label="Additional situation notes" value={profile.notes} onChange={(value) => setField("notes", value)} placeholder="Relevant operating context, stakeholders, or scope" />
+      <DiscoveryReviewControl
+        engagementId={engagementId}
+        actor={contributor}
+        workflow={workflow}
+      />
+
+      <DiscoverySection title={t("discovery.section.situation")}>
+        <TextField label={t("discovery.profile.department")} value={profile.department} onChange={(value) => setField("department", value)} placeholder={t("discovery.profile.department_placeholder")} />
+        <ListField label={t("discovery.profile.affected_users")} value={profile.affectedUsers} onChange={(value) => setField("affectedUsers", value)} placeholder={t("discovery.profile.affected_users_placeholder")} />
+        <TextArea label={t("discovery.profile.notes")} value={profile.notes} onChange={(value) => setField("notes", value)} placeholder={t("discovery.profile.notes_placeholder")} />
       </DiscoverySection>
 
-      <DiscoverySection title="Problems & impact">
-        <TextArea label="Stated problem" value={profile.statedProblem} onChange={(value) => setField("statedProblem", value)} placeholder="What problem did the client describe?" />
-        <ListField label="Pain points" value={profile.painPoints} onChange={(value) => setField("painPoints", value)} placeholder="Slow response times, duplicate work" />
-        <TextArea label="Business impact" value={profile.businessImpact} onChange={(value) => setField("businessImpact", value)} placeholder="Cost, customer, revenue, quality, or risk impact" />
-        <SelectField label="Urgency" value={profile.urgency} options={levelOptions} onChange={(value) => setField("urgency", value as DiscoveryProfile["urgency"])} />
+      <DiscoverySection title={t("discovery.section.problems")}>
+        <TextArea label={t("discovery.profile.stated_problem")} value={profile.statedProblem} onChange={(value) => setField("statedProblem", value)} placeholder={t("discovery.profile.stated_problem_placeholder")} />
+        <ListField label={t("discovery.profile.pain_points")} value={profile.painPoints} onChange={(value) => setField("painPoints", value)} placeholder={t("discovery.profile.pain_points_placeholder")} />
+        <TextArea label={t("discovery.profile.business_impact")} value={profile.businessImpact} onChange={(value) => setField("businessImpact", value)} placeholder={t("discovery.profile.business_impact_placeholder")} />
+        <SelectField label={t("discovery.profile.urgency")} value={profile.urgency} options={levelOptions} optionLabels={LEVEL_LABELS} onChange={(value) => setField("urgency", value as DiscoveryProfile["urgency"])} />
       </DiscoverySection>
 
-      <DiscoverySection title="Current process">
-        <TextArea label="Process overview" value={profile.currentProcess} onChange={(value) => setField("currentProcess", value)} placeholder="How does the work flow today?" />
-        <ListField label="Process steps" value={profile.processSteps} onChange={(value) => setField("processSteps", value)} placeholder="Receive request, triage, respond, close" />
-        <SelectField label="Frequency" value={profile.processFrequency} options={["rarely", "monthly", "weekly", "daily", "many_times_per_day"]} onChange={(value) => setField("processFrequency", value as DiscoveryProfile["processFrequency"])} />
-        <SelectField label="Manual work level" value={profile.manualWorkLevel} options={levelOptions} onChange={(value) => setField("manualWorkLevel", value as DiscoveryProfile["manualWorkLevel"])} />
-        <ListField label="Bottlenecks" value={profile.bottlenecks} onChange={(value) => setField("bottlenecks", value)} placeholder="Manual triage, handoff delays" />
+      <DiscoverySection title={t("discovery.section.current_process")}>
+        <TextArea label={t("discovery.profile.current_process")} value={profile.currentProcess} onChange={(value) => setField("currentProcess", value)} placeholder={t("discovery.profile.current_process_placeholder")} />
+        <ListField label={t("discovery.profile.process_steps")} value={profile.processSteps} onChange={(value) => setField("processSteps", value)} placeholder={t("discovery.profile.process_steps_placeholder")} />
+        <SelectField label={t("discovery.profile.frequency")} value={profile.processFrequency} options={PROCESS_FREQUENCY_OPTIONS} optionLabels={PROCESS_FREQUENCY_LABELS} onChange={(value) => setField("processFrequency", value as DiscoveryProfile["processFrequency"])} />
+        <SelectField label={t("discovery.profile.manual_work_level")} value={profile.manualWorkLevel} options={levelOptions} optionLabels={LEVEL_LABELS} onChange={(value) => setField("manualWorkLevel", value as DiscoveryProfile["manualWorkLevel"])} />
+        <ListField label={t("discovery.profile.bottlenecks")} value={profile.bottlenecks} onChange={(value) => setField("bottlenecks", value)} placeholder={t("discovery.profile.bottlenecks_placeholder")} />
       </DiscoverySection>
 
-      <DiscoverySection title="Tools, channels & integrations">
-        <ListField label="Current tools" value={profile.currentTools} onChange={(value) => setField("currentTools", value)} placeholder="Zendesk, Salesforce, spreadsheets" />
-        <ListField label="Communication channels" value={profile.communicationChannels} onChange={(value) => setField("communicationChannels", value)} placeholder="Email, phone, live chat, help desk" />
-        <ListField label="Integration needs" value={profile.integrationNeeds} onChange={(value) => setField("integrationNeeds", value)} placeholder="CRM, ticketing, booking system" />
+      <DiscoverySection title={t("discovery.section.tools")}>
+        <ListField label={t("discovery.profile.current_tools")} value={profile.currentTools} onChange={(value) => setField("currentTools", value)} placeholder={t("discovery.profile.current_tools_placeholder")} />
+        <ListField label={t("discovery.profile.communication_channels")} value={profile.communicationChannels} onChange={(value) => setField("communicationChannels", value)} placeholder={t("discovery.profile.communication_channels_placeholder")} />
+        <ListField label={t("discovery.profile.integration_needs")} value={profile.integrationNeeds} onChange={(value) => setField("integrationNeeds", value)} placeholder={t("discovery.profile.integration_needs_placeholder")} />
       </DiscoverySection>
 
-      <DiscoverySection title="Data">
-        <ListField label="Data types" value={profile.dataTypes} onChange={(value) => setField("dataTypes", value)} placeholder="Tickets, calls, customer records" />
-        <ListField label="Data locations" value={profile.dataLocation} onChange={(value) => setField("dataLocation", value)} placeholder="CRM, data warehouse, shared drive" />
-        <SelectField label="Availability" value={profile.dataAvailability} options={["none", "unknown", "restricted", "available"]} onChange={(value) => setField("dataAvailability", value as DiscoveryProfile["dataAvailability"])} />
-        <SelectField label="Quality" value={profile.dataQuality} options={["poor", "mixed", "good", "unknown"]} onChange={(value) => setField("dataQuality", value as DiscoveryProfile["dataQuality"])} />
-        <BooleanField label="Sensitive data involved" value={profile.sensitiveData} onChange={(value) => setField("sensitiveData", value)} />
-        <ListField label="Sensitive data types" value={profile.sensitiveDataTypes} onChange={(value) => setField("sensitiveDataTypes", value)} placeholder="Personal data, payment details" />
+      <DiscoverySection title={t("discovery.section.data")}>
+        <ListField label={t("discovery.profile.data_types")} value={profile.dataTypes} onChange={(value) => setField("dataTypes", value)} placeholder={t("discovery.profile.data_types_placeholder")} />
+        <ListField label={t("discovery.profile.data_locations")} value={profile.dataLocation} onChange={(value) => setField("dataLocation", value)} placeholder={t("discovery.profile.data_locations_placeholder")} />
+        <SelectField label={t("discovery.profile.data_availability")} value={profile.dataAvailability} options={["none", "unknown", "restricted", "available"]} optionLabels={DATA_AVAILABILITY_LABELS} onChange={(value) => setField("dataAvailability", value as DiscoveryProfile["dataAvailability"])} />
+        <SelectField label={t("discovery.profile.data_quality")} value={profile.dataQuality} options={["poor", "mixed", "good", "unknown"]} optionLabels={DATA_QUALITY_LABELS} onChange={(value) => setField("dataQuality", value as DiscoveryProfile["dataQuality"])} />
+        <BooleanField label={t("discovery.profile.sensitive_data")} value={profile.sensitiveData} onChange={(value) => setField("sensitiveData", value)} />
+        <ListField label={t("discovery.profile.sensitive_data_types")} value={profile.sensitiveDataTypes} onChange={(value) => setField("sensitiveDataTypes", value)} placeholder={t("discovery.profile.sensitive_data_types_placeholder")} />
       </DiscoverySection>
 
-      <DiscoverySection title="Constraints">
-        <BooleanField label="GDPR concerns" value={profile.gdprConcerns} onChange={(value) => setField("gdprConcerns", value)} />
-        <NumberField label="Budget amount" value={profile.budgetAmount} onChange={(value) => setField("budgetAmount", value)} />
-        <SelectField label="Budget currency" value={profile.budgetCurrency} options={["EUR", "USD", "GBP", "OTHER"]} onChange={(value) => setField("budgetCurrency", value as DiscoveryProfile["budgetCurrency"])} />
-        <TextArea label="Budget notes" value={profile.budgetNotes} onChange={(value) => setField("budgetNotes", value)} placeholder="Budget range, approval status, or limits" />
-        <SelectField label="Timeline" value={profile.timeline} options={["asap", "this_quarter", "this_year", "unknown"]} onChange={(value) => setField("timeline", value as DiscoveryProfile["timeline"])} />
-        <BooleanField label="Human approval required" value={profile.humanApprovalRequired} onChange={(value) => setField("humanApprovalRequired", value)} />
-        <ListField label="Technical constraints" value={profile.technicalConstraints} onChange={(value) => setField("technicalConstraints", value)} placeholder="No cloud access, legacy API, data residency" />
+      <DiscoverySection title={t("discovery.section.constraints")}>
+        <BooleanField label={t("discovery.profile.gdpr_concerns")} value={profile.gdprConcerns} onChange={(value) => setField("gdprConcerns", value)} />
+        <NumberField label={t("discovery.profile.budget_amount")} value={profile.budgetAmount} onChange={(value) => setField("budgetAmount", value)} />
+        <SelectField label={t("discovery.profile.budget_currency")} value={profile.budgetCurrency} options={["EUR", "USD", "GBP", "OTHER"]} optionLabels={CURRENCY_LABELS} onChange={(value) => setField("budgetCurrency", value as DiscoveryProfile["budgetCurrency"])} />
+        <TextArea label={t("discovery.profile.budget_notes")} value={profile.budgetNotes} onChange={(value) => setField("budgetNotes", value)} placeholder={t("discovery.profile.budget_notes_placeholder")} />
+        <SelectField label={t("discovery.profile.timeline")} value={profile.timeline} options={["asap", "this_quarter", "this_year", "unknown"]} optionLabels={TIMELINE_LABELS} onChange={(value) => setField("timeline", value as DiscoveryProfile["timeline"])} />
+        <BooleanField label={t("discovery.profile.human_approval_required")} value={profile.humanApprovalRequired} onChange={(value) => setField("humanApprovalRequired", value)} />
+        <ListField label={t("discovery.profile.technical_constraints")} value={profile.technicalConstraints} onChange={(value) => setField("technicalConstraints", value)} placeholder={t("discovery.profile.technical_constraints_placeholder")} />
       </DiscoverySection>
 
-      <DiscoverySection title="Goals & success">
-        <TextArea label="Desired outcome" value={profile.desiredOutcome} onChange={(value) => setField("desiredOutcome", value)} placeholder="What should improve?" />
-        <ListField label="Success metrics" value={profile.successMetrics} onChange={(value) => setField("successMetrics", value)} placeholder="First response time, resolution rate, CSAT" />
-        <TextArea label="MVP scope" value={profile.mvpScope} onChange={(value) => setField("mvpScope", value)} placeholder="Smallest useful validation scope" />
+      <DiscoverySection title={t("discovery.section.goals")}>
+        <TextArea label={t("discovery.profile.desired_outcome")} value={profile.desiredOutcome} onChange={(value) => setField("desiredOutcome", value)} placeholder={t("discovery.profile.desired_outcome_placeholder")} />
+        <ListField label={t("discovery.profile.success_metrics")} value={profile.successMetrics} onChange={(value) => setField("successMetrics", value)} placeholder={t("discovery.profile.success_metrics_placeholder")} />
+        <TextArea label={t("discovery.profile.mvp_scope")} value={profile.mvpScope} onChange={(value) => setField("mvpScope", value)} placeholder={t("discovery.profile.mvp_scope_placeholder")} />
       </DiscoverySection>
+
+      <DiscoveryBaselineEditor
+        baseline={profile.valueMeasurementBaseline}
+        onChange={(baseline: ValueMeasurementBaseline) =>
+          setField("valueMeasurementBaseline", baseline)
+        }
+      />
 
       <section style={gapsStyle}>
         <div>
-          <p style={eyebrowStyle}>Explicit gaps</p>
-          <h3 style={{ margin: "5px 0 8px", fontSize: 22 }}>Missing information</h3>
-          <p style={introStyle}>Record facts that still need confirmation. Empty fields are not silently treated as known.</p>
+          <p style={eyebrowStyle}>{t("discovery.profile.gaps.eyebrow")}</p>
+          <h3 style={{ margin: "5px 0 8px", fontSize: 22 }}>{t("discovery.profile.gaps.title")}</h3>
+          <p style={introStyle}>{t("discovery.profile.gaps.intro")}</p>
         </div>
 
         {profile.missingInformation.length === 0 ? (
-          <p style={emptyGapStyle}>No gaps recorded. Confirm that discovery is complete before moving on.</p>
+          <p style={emptyGapStyle}>{t("discovery.profile.gaps.empty")}</p>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
             {profile.missingInformation.map((gap: DiscoveryGap, index) => (
@@ -192,80 +308,36 @@ export default function DiscoveryProfileEditor({
                   <strong>{GAP_CATEGORY_LABELS[gap.category]}</strong>
                   <p style={{ margin: "4px 0 0", color: "#374151" }}>{gap.description}</p>
                 </div>
-                <button type="button" onClick={() => removeGap(index)} style={removeButtonStyle}>Remove</button>
+                <button type="button" onClick={() => removeGap(index)} style={removeButtonStyle}>{t("common.action.remove")}</button>
               </div>
             ))}
           </div>
         )}
 
         <div style={gapInputStyle}>
-          <SelectField label="Category" value={gapCategory} options={Object.keys(GAP_CATEGORY_LABELS)} onChange={(value) => setGapCategory(value as DiscoveryGapCategory)} includeUnknown={false} />
+          <SelectField label={t("discovery.profile.gaps.category")} value={gapCategory} options={Object.keys(GAP_CATEGORY_LABELS)} optionLabels={GAP_CATEGORY_LABELS} onChange={(value) => setGapCategory(value as DiscoveryGapCategory)} includeUnknown={false} />
           <label style={fieldStyle}>
-            <span>Description</span>
-            <input value={gapDescription} onChange={(event) => setGapDescription(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addGap() } }} placeholder="What still needs to be learned or confirmed?" style={inputStyle} />
+            <span>{t("discovery.profile.gaps.description")}</span>
+            <input value={gapDescription} onChange={(event) => setGapDescription(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addGap() } }} placeholder={t("discovery.profile.gaps.description_placeholder")} style={inputStyle} />
           </label>
-          <button type="button" onClick={addGap} disabled={!gapDescription.trim()} style={addButtonStyle}>Add gap</button>
+          <button type="button" onClick={addGap} disabled={!gapDescription.trim()} style={addButtonStyle}>{t("discovery.profile.gaps.add")}</button>
         </div>
       </section>
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <button type="button" onClick={saveProfile} disabled={isSaving} style={{ ...saveButtonStyle, opacity: isSaving ? 0.6 : 1 }}>
-          {isSaving ? "Saving…" : "Save Discovery Profile"}
+          {isSaving ? t("discovery.editor.saving") : t("discovery.editor.save")}
         </button>
       </div>
     </section>
   )
 }
-
-function DiscoverySection({ title, children }: { title: string; children: React.ReactNode }) {
-  return <fieldset style={sectionStyle}><legend style={legendStyle}>{title}</legend><div style={fieldsGridStyle}>{children}</div></fieldset>
-}
-
-function TextField({ label, value, onChange, placeholder }: { label: string; value: string | null; onChange: (value: string | null) => void; placeholder: string }) {
-  return <label style={fieldStyle}><span>{label}</span><input value={value ?? ""} onChange={(event) => onChange(toNullableText(event.target.value))} placeholder={placeholder} style={inputStyle} /></label>
-}
-
-function TextArea({ label, value, onChange, placeholder }: { label: string; value: string | null; onChange: (value: string | null) => void; placeholder: string }) {
-  return <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}><span>{label}</span><textarea value={value ?? ""} onChange={(event) => onChange(toNullableText(event.target.value))} placeholder={placeholder} style={textareaStyle} /></label>
-}
-
-function ListField({ label, value, onChange, placeholder }: { label: string; value: string[]; onChange: (value: string[]) => void; placeholder: string }) {
-  return <label style={fieldStyle}><span>{label}</span><input value={value.join(", ")} onChange={(event) => onChange(event.target.value.split(",").map((item) => item.trim()).filter(Boolean))} placeholder={placeholder} style={inputStyle} /><small style={hintStyle}>Separate items with commas.</small></label>
-}
-
-function SelectField({ label, value, options, onChange, includeUnknown = true }: { label: string; value: string | null; options: readonly string[]; onChange: (value: string | null) => void; includeUnknown?: boolean }) {
-  return <label style={fieldStyle}><span>{label}</span><select value={value ?? ""} onChange={(event) => onChange(event.target.value || null)} style={inputStyle}>{includeUnknown && <option value="">Not captured</option>}{options.map((option) => <option key={option} value={option}>{formatOption(option)}</option>)}</select></label>
-}
-
-function BooleanField({ label, value, onChange }: { label: string; value: boolean | null; onChange: (value: boolean | null) => void }) {
-  return <label style={fieldStyle}><span>{label}</span><select value={value === null ? "" : String(value)} onChange={(event) => onChange(event.target.value === "" ? null : event.target.value === "true")} style={inputStyle}><option value="">Not captured</option><option value="true">Yes</option><option value="false">No</option></select></label>
-}
-
-function NumberField({ label, value, onChange }: { label: string; value: number | null; onChange: (value: number | null) => void }) {
-  return <label style={fieldStyle}><span>{label}</span><input type="number" min="0.01" step="0.01" value={value ?? ""} onChange={(event) => onChange(event.target.value ? Number(event.target.value) : null)} style={inputStyle} /></label>
-}
-
-function toNullableText(value: string): string | null { return value.trim() ? value : null }
-function formatOption(value: string): string { return value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase()) }
-
+// Styles specific to this editor; the shared input primitives and their styling
+// live in DiscoveryFields.
 const editorStyle: React.CSSProperties = { maxWidth: 1120, margin: "24px auto 0", display: "grid", gap: 20, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 24, padding: 32, boxShadow: "0 20px 50px rgba(15, 23, 42, 0.08)" }
 const headerStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", gap: 24, alignItems: "start", flexWrap: "wrap" }
-const eyebrowStyle: React.CSSProperties = { margin: 0, color: "#4f46e5", fontWeight: 800, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.8 }
 const headingStyle: React.CSSProperties = { margin: "6px 0 8px", fontSize: 30 }
-const introStyle: React.CSSProperties = { margin: 0, color: "#6b7280", lineHeight: 1.55, maxWidth: 720 }
-const sectionStyle: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 18, padding: 20, margin: 0 }
-const legendStyle: React.CSSProperties = { padding: "0 8px", fontWeight: 800, fontSize: 18 }
-const fieldsGridStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: 16 }
-const fieldStyle: React.CSSProperties = { display: "grid", gap: 7, alignContent: "start", fontWeight: 700, fontSize: 14 }
-const inputStyle: React.CSSProperties = { width: "100%", borderRadius: 12, border: "1px solid #d1d5db", padding: "11px 12px", fontSize: 15, background: "#fff", color: "#111827" }
-const textareaStyle: React.CSSProperties = { ...inputStyle, minHeight: 88, resize: "vertical" }
-const hintStyle: React.CSSProperties = { color: "#6b7280", fontWeight: 400 }
-const saveButtonStyle: React.CSSProperties = { border: 0, borderRadius: 12, padding: "12px 17px", background: "#4f46e5", color: "#fff", fontWeight: 800, cursor: "pointer" }
-const successStyle: React.CSSProperties = { margin: 0, padding: 12, borderRadius: 12, background: "#ecfdf5", color: "#065f46", border: "1px solid #bbf7d0" }
-const errorStyle: React.CSSProperties = { margin: 0, padding: 12, borderRadius: 12, background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" }
 const gapsStyle: React.CSSProperties = { display: "grid", gap: 16, border: "2px solid #c7d2fe", borderRadius: 18, padding: 20, background: "#f5f7ff" }
 const emptyGapStyle: React.CSSProperties = { margin: 0, padding: 14, borderRadius: 12, background: "#fff", border: "1px dashed #a5b4fc", color: "#6b7280" }
 const gapItemStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "start", gap: 16, padding: 14, borderRadius: 12, background: "#fff", border: "1px solid #dbeafe" }
-const removeButtonStyle: React.CSSProperties = { border: 0, background: "transparent", color: "#b91c1c", fontWeight: 700, cursor: "pointer" }
 const gapInputStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "minmax(180px, .4fr) minmax(260px, 1fr) auto", gap: 12, alignItems: "end" }
-const addButtonStyle: React.CSSProperties = { ...saveButtonStyle, background: "#111827" }

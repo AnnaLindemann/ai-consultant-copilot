@@ -3,8 +3,14 @@ import type { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma.js"
 
 
+// Which methodology stage an AI-assisted step supported. Recording it keeps one
+// shared run mechanism while letting runs be filtered by stage (architecture.md
+// §8). `analysis` is the pre-existing whole-engagement analysis endpoint.
+export type AnalysisRunStage = "analysis" | "assessment"
+
 export type CreateAnalysisRunInput = {
   engagementId: string
+  stage: AnalysisRunStage
   provider: string
   model: string
   promptFingerprint: string
@@ -23,6 +29,7 @@ export const createAnalysisRun = async (input: CreateAnalysisRunInput) => {
   return prisma.analysisRun.create({
     data: {
       engagementId: input.engagementId,
+      stage: input.stage,
       provider: input.provider,
       model: input.model,
       promptFingerprint: input.promptFingerprint,
@@ -49,6 +56,7 @@ export const getAnalysisRunsByEngagementId = async (engagementId: string) => {
     },
     select: {
       id: true,
+      stage: true,
       provider: true,
       model: true,
       promptFingerprint: true,

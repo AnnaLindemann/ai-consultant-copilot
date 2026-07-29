@@ -81,6 +81,7 @@ export const analyzeEngagement = async (
   try {
     const analysisRun = await createAnalysisRun({
       engagementId: input.id,
+      stage: "analysis",
       provider: llmResponse.provider,
       model: llmResponse.model,
       promptVersion: ANALYSIS_PROMPT.version,
