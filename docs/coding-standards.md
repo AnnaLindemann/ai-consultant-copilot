@@ -1,7 +1,13 @@
 # Coding Standards — AI Consulting Workbench
 
-Status: **Draft** · Version: 1.1 · Derived from [product-vision.md](./product-vision.md), [domain-model.md](./domain-model.md), [roadmap.md](./roadmap.md), [architecture.md](./architecture.md), and [agent-rules.md](./agent-rules.md).
+Status: **Draft** · Version: 1.2 · Derived from [product-vision.md](./product-vision.md), [domain-model.md](./domain-model.md), [roadmap.md](./roadmap.md), [architecture.md](./architecture.md), and [agent-rules.md](./agent-rules.md).
 
+> **Revision 1.2 (approved).** Adds two rule sets and extends the existing ones, changing no existing standard:
+> - **§6A — Access control and workspace isolation.** Workspace scope is required on every engagement-side query, authorization is server-side through a single decision point, deny-by-default, denials are non-revealing, the Client Discovery Portal is a separate narrow surface, and the **Audit Trail** is append-only and never merged with Analysis Runs or the Technology Update History.
+> - **§12A — Internationalization and localization.** No user-facing literal in a component; internal identifiers (enums, statuses, events, contracts, audit entries) stay English; one locale (German) ships behind a key-based lookup.
+>
+> §6 gains rules for the Discovery Profile's value & measurement baseline, status, and provenance, and §13/§14 are extended accordingly. Delivered by the Phase 2 Extension and Phase 3A; **authentication and authorization are no longer Phase 11 work.** Section numbering is preserved by lettered insertion.
+>
 > **Revision 1.1 (approved).** Adds coding rules for the separate, **category-organized Technology Knowledge Base**, first-class **Technology Sources** (referenced by proposals and preserved in history), the **Technology Curator** (its only, human-approved write path), and the append-only **Technology Update History** of approved revisions. Delivered as the Phase 5A extension — existing roadmap phase numbers are unchanged. No existing standard is changed.
 
 This document defines the **engineering standards** that must be followed throughout implementation of the AI Consulting Workbench. It guides **both human developers and AI coding agents** writing code in this repository.
@@ -82,8 +88,11 @@ The layering and its dependency direction are decided in architecture §3. These
 
 The domain layer is the code expression of [domain-model.md](./domain-model.md) and is the most stable part of the system. Code must protect that.
 
-- **Use the ubiquitous language.** Name types and operations with the domain vocabulary exactly as defined (Engagement, Organization, Discovery Profile, Assessment, Opportunity, Recommendation, Implementation Roadmap, Consultant Report, Consulting Knowledge Base, Technology Knowledge Base, Technology Category, Technology Profile, Technology Source, Technology Curator, Technology Update Proposal, Technology Update History, AI Use Case, Solution Pattern, Analysis Run). Use **Consulting Knowledge Base** and **Technology Knowledge Base** by their specific names rather than an undifferentiated "Knowledge Base." Do not use the legacy `ClientCase` name for new engagement concepts.
-- **Engagement is the aggregate root for client state.** Client-specific state (discovery, assessment and its dimensions, opportunities, recommendations, roadmap, report versions) is owned by the Engagement. Nothing client-specific lives outside an engagement (architecture §4.2).
+- **Use the ubiquitous language.** Name types and operations with the domain vocabulary exactly as defined (Workspace, User, Role — Administrator/Manager/Client, Engagement Ownership, Discovery Access, Client Discovery Portal, Notification, Audit Trail, Engagement, Organization, Discovery Profile, Assessment, Opportunity, Recommendation, Implementation Roadmap, Consultant Report, Consulting Knowledge Base, Technology Knowledge Base, Technology Category, Technology Profile, Technology Source, Technology Curator, Technology Update Proposal, Technology Update History, AI Use Case, Solution Pattern, Analysis Run). Use **Consulting Knowledge Base** and **Technology Knowledge Base** by their specific names rather than an undifferentiated "Knowledge Base." Do not use the legacy `ClientCase` name for new engagement concepts.
+- **Engagement is the aggregate root for client state.** Client-specific state (discovery, assessment and its dimensions, opportunities, recommendations, roadmap, report versions) is owned by the Engagement. Nothing client-specific lives outside an engagement (architecture §4.2). From Phase 3A the Engagement additionally carries its **Workspace** and its **owning Manager**; these are load-bearing for access decisions, not metadata (§6A).
+- **The Discovery Profile's baseline, status, and provenance are domain data.** The value & measurement baseline (business impact; error frequency/severity/cost; existing KPIs; baseline metrics; target success metrics; measurement method; data sources), the workflow status (`draft`/`submitted`/`returned`/`accepted`), and content provenance (consultant-captured vs. client-provided) belong to the Discovery Profile on the Engagement aggregate — not to a parallel store and not to the UI. **Never drop a figure's measurement method or data source**, never let an estimate be stored as a measurement, and never reattribute client-provided content to the consultant. A missing baseline is represented as an explicit gap, not as an empty value (domain-model §2; architecture §4.2, §6).
+- **Authentication state is not domain data.** Passwords, sessions, verification, resets, and invitation-link mechanics belong to the access/auth boundary and its provider adapters, not to consulting-domain entities. Domain code must never store, read, or infer a permanent password.
+- **Discovery workflow transitions are domain logic and content-preserving.** Legal transitions and their permitted actors live in the domain; a transition must never discard content, notes, or provenance. Client-provided content is not accepted fact until the consultant's review — enforce that, do not leave it to the UI (architecture §4.3, §7A.6).
 - **Assessment dimensions are values, not entities.** Business Process, Data, Technology, AI Readiness, Risks, and Opportunities are dimensions *within* the Assessment. Do not model AI Readiness (or any dimension) as a separate top-level entity (domain-model §2; architecture §4.2).
 - **Grounding is a domain invariant.** A Recommendation is valid only if it is traceable backward to Discovery facts and outward to the Consulting Knowledge Base knowledge that justifies its approach; any concrete technologies or models it names must additionally reference Technology Knowledge Base entries (Technology Profiles). Code should enforce "recommendation without grounding is invalid" as a validation rule, not treat it as optional (architecture §4.3, §9; agent-rules §3, §11).
 - **One-directional reference to knowledge — for both knowledge bases.** Engagement code may read from the Consulting Knowledge Base and the Technology Knowledge Base and copy the reasoning it used into engagement content, but must never write to or mutate either. There must be no code path from running an engagement to modifying knowledge (domain-model §4; architecture §9; agent-rules §4).
@@ -93,6 +102,26 @@ The domain layer is the code expression of [domain-model.md](./domain-model.md) 
 - **Reports are append-only versions.** Producing a new Consultant Report version must never destroy or overwrite a prior one (architecture §4.3).
 - **Stages are transformations of persisted state.** A stage takes persisted engagement state to new engagement state, so it can be re-entered and re-run without restarting the engagement. Do not hold engagement state in the backend between requests (architecture §2, §4.3).
 - **Keep the domain pure.** Domain code contains no I/O, no persistence, no prompts, no provider calls. Side effects belong to application/infrastructure.
+
+---
+
+## 6A. Access Control and Workspace Isolation Rules
+
+*(Revision 1.2. Lettered so existing section numbering is preserved. These rules apply from Phase 3A onward; the architecture that decides them is §7A.)*
+
+- **Every engagement-side query is workspace-scoped, in the repository.** The workspace scope is a **required parameter** of engagement-side repository operations, never an optional filter a caller might forget. An unscoped engagement-side read or write is a review-blocking defect, not a performance note.
+- **Authentication data is separate from consulting-domain tables.** Access/auth records, session state, verification state, password-reset state, and invitation-link state live in dedicated access/auth storage and are handled through the authentication provider boundary. The consulting domain never stores permanent passwords.
+- **Aggregates, listings, searches, counts, and exports are scoped identically.** A leak through a cost roll-up, a count, or an export is a leak. Cost reporting (per engagement, lifetime) is read within the acting user's workspace and role.
+- **Authorization is server-side, on every request.** Every action — read, write, generate, submit, return, accept, export — is authorized on the server. UI hiding is a convenience and never a control; a capability protected only by a hidden button is unprotected.
+- **One decision point.** Access questions go through the shared `AccessPolicy` in the fixed order **workspace → role → engagement ownership (Manager) / discovery access (Client)**. Do not re-implement access rules per route or per service; a route that invents its own rule is a defect.
+- **Deny by default.** A new route, capability, field, or query is unreachable until explicitly permitted. Adding a stage must not silently widen anyone's reach.
+- **Denials must not leak existence.** A resource in another workspace is refused exactly as a nonexistent resource is. Do not vary status codes, messages, or timing in a way that lets another workspace's data be enumerated.
+- **Client-facing endpoints are separate and narrow.** The Client Discovery Portal has its own endpoints, authorized as *client + valid invitation + this engagement's discovery*. Do not serve the portal from consultant endpoints with a filter applied, and do not reuse a consultant component that fetches more than a client may see.
+- **Invitation validity is checked on every request**, not only at acceptance. Expiry and revocation take effect immediately; revocation ends access without deleting the content the client already contributed.
+- **The Audit Trail is append-only by construction.** Its repository exposes append and read only — no update or delete path exists in code. Record access- and collaboration-relevant events, **including denied attempts**, with the acting user, target engagement, and timestamp.
+- **Never merge the three governance logs.** The **Analysis Run** (engagement AI assistance), the **Technology Update History** (approved knowledge curation), and the **Audit Trail** (access and collaboration) have separate ports, separate storage, and separate meanings. Do not write one from another's path or reuse one to record the other's events.
+- **Identity is established once, at the boundary, and passed inward.** Inner layers do not re-derive the acting user from transport details, and no layer reads identity from client-supplied data.
+- **Isolation is tested, not assumed.** Critical paths get deterministic tests proving a Manager cannot reach another Manager's engagement (by identifier, listing, search, aggregate, or export), an Administrator cannot reach another workspace, and a Client cannot reach anything but their own discovery (§9).
 
 ---
 
@@ -107,6 +136,8 @@ The error-handling *strategy* is set in architecture §13. These are the coding 
 - **Side effects are best-effort and non-blocking.** Observability, tracing, and cost recording must never fail a consultant's operation; wrap them so their failure is logged and swallowed, not propagated (architecture §11, §13).
 - **Fail with meaning.** Surface errors that tell the consultant what happened ("no draft yet / try again," with a reason), not opaque stack traces. Do not swallow errors that the caller needs to act on.
 - **No silent catches.** Never catch an error and continue as if nothing happened, except for the explicitly best-effort side effects above. Every other caught error is handled or surfaced.
+- **Unauthenticated and forbidden are distinct, structured outcomes.** Refuse an unauthenticated request as unauthenticated and an out-of-reach request as forbidden; keep denial responses uniform and non-revealing (§6A), append an audit entry, and treat a denial as a normal outcome rather than a system fault to alarm on (architecture §13, §7A).
+- **Notification delivery is best-effort.** A failure to raise or deliver a notification never fails the operation that triggered it; log and swallow, as with tracing (architecture §7A.7).
 
 ---
 
@@ -129,7 +160,8 @@ Every AI-assisted capability is built on the shared mechanisms that already exis
 ## 9. Testing Standards
 
 - **Tests should focus on business behavior.** Test what a capability *does* for the consultant and what invariants must hold, not incidental implementation details. A test should survive a refactor that preserves behavior.
-- **Cover the critical trust paths.** Prioritize tests for parsing and validation of external input and AI output, grounding/traceability invariants, "failed AI step does not mutate state," append-only report versioning, and the one-directional knowledge reference. These are where a defect harms client trust.
+- **Cover the critical trust paths.** Prioritize tests for parsing and validation of external input and AI output, grounding/traceability invariants, "failed AI step does not mutate state," append-only report versioning, the one-directional knowledge reference, and — from Phase 3A — **workspace isolation, role reach, discovery access validity, and the append-only Audit Trail**. These are where a defect harms client trust.
+- **Test isolation negatively.** An access test must prove the *denial*, not only the permitted path: a Manager denied a colleague's engagement, an Administrator denied another workspace, a Client denied everything but their own discovery — across direct fetch, listing, search, aggregate, and export. Cover discovery workflow transitions the same way: a client cannot accept their own submission, and no transition loses content or provenance.
 - **Test the domain in isolation.** Because the domain layer is pure, its rules and invariants are testable without a database, web server, or LLM. Do not require infrastructure to test business rules.
 - **Keep infrastructure at the edges of tests.** Exercise business logic against ports/fakes rather than live providers, databases, or observability backends where practical, so tests are deterministic and fast.
 - **Determinism in tests.** Tests must not depend on live LLM output, network, wall-clock timing, or ordering that is not guaranteed. AI-dependent behavior is tested via the port boundary, not by calling a real model.
@@ -167,11 +199,26 @@ Every AI-assisted capability is built on the shared mechanisms that already exis
 
 - **Names come from the ubiquitous language.** Business types and operations use the domain vocabulary (§6). The same concept has the same name everywhere — client, server, shared, tests, and prompts.
 - **One word, one meaning.** Do not use one term for two concepts or two terms for one. Avoid reintroducing retired names (`ClientCase`) for current concepts (Engagement). Name the two knowledge bases specifically — **Consulting Knowledge Base** and **Technology Knowledge Base** — rather than a bare "Knowledge Base" that hides which one is meant, and keep **Technology Source** (curation provenance) distinct in naming from the **AI Providers** Technology Category (curated content).
+- **Role identifiers are stable and explicit.** Use `ADMIN`, `MANAGER`, and `CLIENT` for role identifiers in code, schemas, and contracts; keep the human-readable prose form where it improves readability.
 - **Names reveal intent.** Prefer descriptive, unabbreviated names that state purpose over short or clever ones. A reader should not need to open a function to know roughly what it does.
 - **Match existing casing and style conventions.** Follow the casing, file-naming, and identifier conventions already used in the surrounding code and directory; do not introduce a competing style.
 - **Distinguish the layers in naming.** Ports/interfaces, application services, domain types, and infrastructure adapters should be named so their role and layer are recognizable, consistent with the existing patterns.
 - **Prompt and schema naming stays paired and versioned.** A stage's prompt module and its output schema are named so their pairing and the active version are obvious (architecture §10).
 - **No misleading names.** A name must not imply behavior the code does not have (e.g., a "get" that writes, an "evaluate" that returns a hard-coded value).
+
+---
+
+## 12A. Internationalization and Localization Rules
+
+*(Revision 1.2. Lettered so existing section numbering is preserved. The architecture that decides this is §7.1; the MVP ships German only, on an i18n-ready foundation.)*
+
+- **No user-facing literal in a component.** Every string a user reads — labels, help text, placeholders, validation and error messages, empty states, notification text, exported document headings — is looked up by key. A hard-coded German (or English) literal in a component is a defect, however small.
+- **Internal identifiers stay English, always.** Domain type and field names, enum and status values (`draft`, `submitted`, `returned`, `accepted`), role names, stage names, event names, API contracts, log lines, and audit entries are English and are never translated, localized, or duplicated per language. Translating an identifier breaks queries, contracts, and traceability.
+- **Never key off displayed text.** Business logic, comparisons, routing, and storage use identifiers — never the localized string a user happens to see. A translation must never be able to change behavior.
+- **The server returns identifiers and parameters, not prose.** Where the backend must convey user-facing text, it returns a message identifier plus structured parameters and lets the frontend localize it. Do not return language-specific prose the frontend cannot re-render in another locale.
+- **Entered and generated content is not localized.** Consultant- and client-entered discovery content, and AI-drafted engagement content, are stored and displayed as written. Localization applies to the product's own chrome, never to the client's facts.
+- **One locale, no locale machinery.** German is the only active locale; the key lookup and locale-driven formatting (dates, numbers, currency) exist, but no locale switcher, negotiation, or translation-management tooling is built before a second language exists (§3, architecture §1.6).
+- **Keys are stable and meaningful.** Name keys after what the string *is* (its screen and role), not after its current German wording, so re-wording a string does not force a key change.
 
 ---
 
@@ -182,6 +229,10 @@ Every change — whether written by a human or an AI coding agent — should be 
 - **Conforms to the frozen docs.** The change respects product-vision, domain-model, roadmap, architecture, and agent-rules; it does not redesign the product or architecture.
 - **Right layer.** Business logic is in the domain; orchestration in the application layer; no infrastructure types leak into the domain; dependencies point inward.
 - **Grounding and traceability intact.** Recommendations remain grounded and traceable (to the Consulting Knowledge Base, and to Technology Profiles for any technologies or models named); no code path lets an engagement mutate either knowledge base; the Technology Knowledge Base is written only via an approved Technology Update Proposal, with each applied change appended to the append-only Technology Update History; report versions remain append-only.
+- **Authentication state stays separate.** Passwords, sessions, verification, reset, and invitation-link handling are isolated behind the auth boundary; consulting-domain code never reads or stores permanent passwords.
+- **Access control intact** *(from Phase 3A)*. Every engagement-side query is workspace-scoped in the repository (including listings, aggregates, and exports); authorization goes through the shared decision point, server-side, deny-by-default; denials are non-revealing; client-facing endpoints stay narrow and discovery-access-scoped; the Audit Trail is append-only and not conflated with Analysis Runs or the Technology Update History.
+- **Discovery integrity intact.** Measurement method, data source, measured-vs-estimated, and content provenance survive every write and workflow transition; a missing baseline is an explicit gap; client-provided content is not treated as accepted fact before consultant review.
+- **Localization rules respected.** No user-facing literal in a component; internal identifiers, enums, events, and audit entries remain English; no behavior keys off displayed text.
 - **Reuses shared mechanisms.** Any AI-assisted step goes through the shared orchestration and records an Analysis Run with cost, tokens, latency, prompt version, and fingerprint, and is traced; no parallel mechanism was introduced.
 - **No invented data / no fake signals.** No fabricated knowledge or facts; no placeholder quality score presented as real evaluation.
 - **Error handling correct.** Input validated at the boundary; AI-output failure returns a structured result; failed generation does not mutate state; side effects are best-effort and non-blocking.
@@ -200,14 +251,15 @@ A piece of implementation work is **done** only when all of the following hold. 
 - **The frozen documentation is respected.** The implementation conforms to the vision, domain model, roadmap intent, architecture, and agent-rules.
 - **The application is fully working.** The capability works end-to-end and leaves the whole application in a working state, not a partial slice awaiting a later phase.
 - **Business logic is in the domain; infrastructure stays at the edges.** No infrastructure leaked into the domain; dependencies point inward.
-- **Invariants hold.** Grounding/traceability, one-directional knowledge reference (to both knowledge bases), the Technology Knowledge Base's human-approved-only write path, the append-only Technology Update History, append-only report versions, and "failed generation does not mutate state" are enforced and, where critical, tested.
+- **Invariants hold.** Grounding/traceability, one-directional knowledge reference (to both knowledge bases), the Technology Knowledge Base's human-approved-only write path, the append-only Technology Update History, append-only report versions, "failed generation does not mutate state," and — from Phase 3A — **workspace isolation on every engagement-side query, server-side authorization, invitation scoping, content-preserving discovery transitions, and the append-only Audit Trail** are enforced and, where critical, tested.
+- **Authentication stays separate from the domain.** Access/auth state, including passwords, sessions, verification, reset, and invitation-link mechanics, remains behind the provider boundary and out of consulting-domain storage.
 - **AI steps are observed and costed.** Every new AI-assisted step records an Analysis Run (provider, model, prompt version, fingerprint, tokens, latency, cost, objective signals, trace reference where available) via the shared mechanism.
 - **Critical behavior is tested.** Parse/validation and the relevant invariants have deterministic tests focused on business behavior.
 - **No fake or misleading output.** No placeholder quality scores presented as real; no invented knowledge or facts.
 - **Simplicity respected.** No premature abstraction or overengineering; the code is understandable and matches the surrounding style.
 - **Reuse respected.** Existing infrastructure was extended, not rebuilt or duplicated.
 - **Documentation is current.** Any documentation affected by the change was updated alongside it.
-- **Naming is correct.** The ubiquitous language is used; no retired terminology; names reveal intent.
+- **Naming is correct.** The ubiquitous language is used; no retired terminology; names reveal intent. Internal identifiers are English and user-facing strings are externalized (§12A).
 
 ---
 
@@ -220,6 +272,8 @@ These standards are written to stay valid as the roadmap advances, in the same s
 - **The Technology Knowledge Base follows the same standards.** It is added as a separate module (the Phase 5A extension) behind its own retrieval port, consumed read-only by engagement stages like the Consulting Knowledge Base, and written only through the Technology Curator's human-approved path with an append-only Technology Update History. These standards — layering, one-directional reference, no autonomous writes, append-only audit history, no invented data — apply unchanged (architecture §9.2, §9.3; agent-rules §4.1).
 - **Enhanced retrieval keeps the rules.** If semantic retrieval (RAG) is introduced later over the Consulting Knowledge Base, it enters behind the existing retrieval port and only changes *which* knowledge is supplied; grounding, traceability, and every standard here remain in force (roadmap Phase 10; architecture §15).
 - **New providers stay behind the abstraction.** Additional models or providers are adapters behind the existing LLM abstraction; the standards for orchestration, cost, and observability are unchanged.
+- **New capability inherits the access boundary; it does not extend it.** From Phase 3A, a new stage, surface, or report queries through the existing workspace-scoped repositories and asks the existing access decision point. It does not add roles, per-field permissions, or its own access checks; widening anyone's reach is a documentation decision, not an implementation choice (§6A; architecture §7A.3).
+- **New languages are translation data.** Because internal identifiers are English and user-facing strings are key-based, adding a locale adds a catalogue — it touches no domain type, contract, or stored value (§12A).
 - **Abstractions arrive with the second case.** New shared abstractions are introduced only when a second concrete case actually exists, never speculatively — the same rule these standards apply to today (architecture §1.6).
 - **Standards evolve deliberately.** If a standard needs to change, it changes deliberately and in alignment with the frozen documentation, never by silent drift in how code is written.
 
@@ -237,6 +291,7 @@ These standards are written to stay valid as the roadmap advances, in the same s
 
 - **Created:** `docs/coding-standards.md` (this document).
 - **Revised (1.1):** added coding rules for the Technology Knowledge Base (separate, independent, **category-organized** module; read-only from engagements), first-class **Technology Sources**, the Technology Curator (only human-approved write path), and the append-only Technology Update History, and extended the ubiquitous-language, naming, review-checklist, and Definition-of-Done entries accordingly. Delivered as the Phase 5A extension; existing roadmap phase numbers are unchanged. No source code was written or changed as part of this documentation revision.
+- **Revised (1.2):** added **§6A** (workspace scope required in repositories; server-side, deny-by-default authorization through one decision point; non-revealing denials; narrow discovery-access-scoped client endpoints; append-only Audit Trail kept distinct from the other two governance logs; isolation tested negatively) and **§12A** (no user-facing literals in components; English internal identifiers; no behavior keyed off displayed text; one locale, no locale machinery). Extended §6 with the Discovery Profile's value & measurement baseline, workflow status, and provenance rules; §7 with authentication/authorization outcomes and best-effort notifications; §9 with isolation and workflow testing; §13/§14 with the corresponding checks; and §15 with access- and locale-extensibility. Delivered by the Phase 2 Extension and Phase 3A; existing roadmap phase numbers are unchanged, and authentication/authorization are no longer Phase 11 work. No source code was written or changed as part of this documentation revision.
 
 ## Possible Conflicts with the Frozen Documentation
 

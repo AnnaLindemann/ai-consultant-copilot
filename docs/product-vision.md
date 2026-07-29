@@ -1,7 +1,12 @@
 # Product Vision — AI Consulting Workbench
 
-Status: **Frozen** · Version: 1.1 · This document defines the product vision only. It does not define software architecture, roadmap, or implementation details.
+Status: **Frozen** · Version: 1.2 · This document defines the product vision only. It does not define software architecture, roadmap, or implementation details.
 
+> **Revision 1.2 (approved).** Extends the vision in three ways, changing no existing principle:
+> - **The workbench becomes multi-user and workspace-bounded.** A **Workspace** is the ownership boundary; users hold one of three roles — **Administrator**, **Manager**, **Client** — and a **Client** takes part in exactly one thing: completing the Discovery form associated with their own self-registration, through a bounded **Client Discovery Portal** (§4A).
+> - **Discovery is quantified and reviewable.** Discovery captures what the client's problem costs today and what success would measurably look like, and moves through a **draft / submit / return** review workflow whether the consultant or the client filled it in (§5).
+> - **The MVP ships in German, on an internationalization-ready foundation** (§8A).
+>
 > **Revision 1.1 (approved).** Introduces a separate **Technology Knowledge Base** alongside the existing **Consulting Knowledge Base**, and the **Technology Curator** workflow that updates it under explicit human approval, keeping an audit history of approved updates. The Technology Knowledge Base is **hierarchical and category-based**, and updates are attributed to explicit **Technology Sources** (official vendor origins). No other part of the vision, and no existing principle, is changed.
 
 ---
@@ -19,6 +24,8 @@ The workbench assists the consultant through a structured consulting methodology
 ## 2. Who it is for
 
 The primary user is an **AI Consultant** engaged by a client to identify and recommend AI opportunities in the client's operations. The consultant remains the expert and the decision-maker at all times; the tool accelerates and structures their work, it does not replace their judgment.
+
+Consultants rarely work entirely alone, and clients hold information the consultant needs. The product therefore supports **a consulting team working side by side inside a Workspace**, and **a bounded form of client participation**: a self-registered client may complete the Discovery form for their own engagement and nothing else. The consultant remains the only person who decides what the engagement concludes (§4A).
 
 ---
 
@@ -53,6 +60,34 @@ The primary business entity is the **Engagement**. It replaces the previous `Cli
 
 An engagement holds all the client-specific state produced during the methodology: discovery answers, assessment findings, prioritized problems, recommendations, roadmap, and report versions.
 
+Every engagement belongs to exactly one **Workspace** and has exactly one **owning Manager** (§4A).
+
+---
+
+## 4A. Workspace, roles, and client participation
+
+*(Revision 1.2. Lettered so existing section numbers are unchanged.)*
+
+The workbench holds real client information, and more than one person touches it. Three commitments follow.
+
+**The Workspace is the ownership boundary.** A Workspace is one consulting practice's own space: its users, its client organizations, its engagements, and everything those engagements contain. **Nothing crosses a workspace boundary** — not a record, not a listing, not a search result, not a cost total.
+
+**Three roles, deliberately few.**
+
+- **Administrator** — sees **all engagements in their own workspace** and manages that workspace's people, roles, engagement ownership, and client access associations.
+- **Manager** — the consultant role. Runs engagements and sees **only the engagements they own**. A colleague's engagement is not theirs to open.
+- **Client** — an external participant with **no access to the workbench**. A client reaches exactly one thing: the **Discovery form of the engagement they are associated with after self-registration**.
+
+The role identifiers are `ADMIN`, `MANAGER`, and `CLIENT`; this document uses the human-readable role names above when reading more naturally.
+
+**Client participation is bounded and self-registered.** A client contributes through self-registration to one engagement's Discovery, in a dedicated **Client Discovery Portal** that shows them their own discovery form and nothing else — no assessment, no opportunities, no recommendations, no roadmap, no report, no other engagement, no other client. The client contributes facts; the consultant decides what the engagement makes of them.
+
+**Authentication is separate from consulting domain state.** The product keeps authentication data, sessions, verification, password reset, and invitation handling behind a dedicated infrastructure boundary. Clients self-register, confirm their email, and create their own password. Managers and additional administrators are created by an administrator and receive an invitation link to set their own password. The first administrator is created through a secure bootstrap process. Administrators never create, know, store, or view users' permanent passwords.
+
+**Access is decided by the system, not by the screen.** What a person may see and do is enforced by the product itself, on every action. Hiding a button is not a safeguard. And because client work is at stake, the product keeps a permanent record of the events that matter — who was invited, who submitted, who returned, who accepted, who was denied.
+
+This is an ownership and confidentiality model, not an administration product: the roles are few by design, and the workbench does not become an identity or permission-management system (see §10).
+
 ---
 
 ## 5. Consulting methodology (the workflow)
@@ -72,6 +107,10 @@ The consultant works through the following methodology:
 **This is the consulting methodology, not the software architecture.** These nine steps describe how a consultant thinks and works. They do not require nine modules, nine services, or nine separate AI calls, and they must not be implemented as a rigid one-directional pipeline.
 
 **The workflow is repeatable and iterative.** Consultants may return to earlier stages multiple times within a single engagement — revising discovery after assessment, re-prioritizing after knowledge-base retrieval, or re-running solution matching with corrected assumptions. Each stage operates on persisted engagement state that can be re-entered and re-run without restarting the engagement.
+
+**Discovery quantifies the problem, and can be completed by the client.** *(Revision 1.2.)* Client Discovery captures not only what is wrong but **what it costs and what success would measurably look like**: business impact; how often errors occur, how severe they are, and what they cost; the KPIs the client already tracks; today's baseline figures; the target figures that would count as success; how each figure is measured; and where it came from. Where the client cannot answer, **that absence is itself recorded as a finding** — an unmeasured process is something the consultant must know, not an empty field to pass over. An estimate is never presented as a measurement.
+
+Discovery may be filled in by the consultant or **by the client themselves**, and it moves through a simple review workflow: worked on as a **draft**, **submitted** when the contributor is finished, **returned** with the consultant's notes if it needs more, and **accepted** once the consultant has reviewed it. **Nothing a client submits becomes the engagement's accepted fact until the consultant has reviewed it** — the same human-in-the-loop rule that governs AI output (§7).
 
 ---
 
@@ -159,6 +198,20 @@ The output of an engagement is a **professional, client-ready consultant report*
 
 ---
 
+## 8A. Language and internationalization
+
+*(Revision 1.2. Lettered so existing section numbers are unchanged.)*
+
+The MVP ships a **German-only** user interface — for consultants and for self-registered clients alike — because that is the language of the first real engagements.
+
+It is built to be **internationalization-ready from the start**: everything a user reads is prepared for translation, so adding a language later is a translation effort rather than a rebuild. **Internal identifiers stay English** — the product's own vocabulary, the terms in the domain model, and everything the system records about itself remain in English regardless of what language a user sees.
+
+What people write stays as they wrote it: client- and consultant-entered content is never machine-translated.
+
+**Additional languages are deliberately deferred, not designed away** (§10). German-only is the scope; readiness is the requirement.
+
+---
+
 ## 9. Principles (stable commitments)
 
 These commitments are frozen and serve as the foundation for all future documentation:
@@ -169,8 +222,13 @@ These commitments are frozen and serve as the foundation for all future document
 4. **Grounded recommendations.** Recommendations are grounded in the curated Consulting Knowledge Base, and any concrete technologies or AI models they name are grounded in the Technology Knowledge Base; RAG comes later.
 5. **Two knowledge bases as core assets.** A Consulting Knowledge Base and a separate, more frequently-updated Technology Knowledge Base — both kept strictly separate from engagement data and from each other, and reusable across engagements.
 6. **Human-curated technology knowledge.** The Technology Knowledge Base is updated only through the Technology Curator workflow — detect, propose, human-approve, then update — never autonomously by AI.
-7. **Human-in-the-loop.** Editable recommendations, versioned reports, and always-visible assumptions, confidence, and gaps.
+7. **Human-in-the-loop.** Editable recommendations, versioned reports, and always-visible assumptions, confidence, and gaps. Client-provided discovery is held to the same rule: reviewed by the consultant before it counts.
 8. **Domain-first, extensible.** Customer Operations is implemented concretely first; additional domains can be added without redesign.
+9. **Workspace-bounded, least-privilege access.** The Workspace is the ownership boundary; an Administrator sees their own workspace, a Manager only the engagements they own, a Client only the Discovery form they are associated with through self-registration. Access is enforced by the product on every action, and access events are recorded.
+10. **Bounded client participation.** A client contributes at exactly one point — Discovery — by invitation, through a portal that shows them nothing else. Participation never becomes visibility into the consultant's analysis or deliverable.
+11. **Measured value.** Discovery records what the problem costs today and what success would measurably look like — and records the absence of a baseline as a finding rather than passing over it.
+12. **German-first, localization-ready.** The MVP interface is German; the product is built so that further languages are translation, not redesign, and its internal vocabulary stays English.
+13. **Authentication is separate from consulting data.** Passwords, sessions, verification, resets, and invitation handling live behind a dedicated infrastructure boundary. Administrators never create, know, store, or view users' permanent passwords.
 
 ---
 
@@ -183,5 +241,10 @@ To keep the vision stable and focused, the following are deliberately deferred (
 - A general multi-domain plugin framework built ahead of the second domain.
 - **Autonomous updates to the Technology Knowledge Base.** Every change requires explicit human approval through the Technology Curator; there is no self-updating knowledge.
 - **Any PromptOps or AI-engineering platform capability.** The workbench curates *knowledge about* technologies to inform recommendations; it does not build, benchmark, deploy, evaluate, or operate them.
+- **Additional interface languages.** The MVP is German-only; the architecture is prepared for more, but no second language is delivered.
+- **Client access beyond their own Discovery form.** No client-facing dashboard, deliverable sharing, messaging, or project portal. A client sees their own discovery form and nothing else.
+- **Enterprise identity federation.** The product's initial authentication boundary is separate from the consulting domain and handles sign-up, passwords, sessions, verification, reset, and invitation links; SSO and external identity-provider integration are deferred.
+- **A general permission or administration framework.** Three roles, deliberately few — no custom roles, permission matrices, groups, delegation, or per-field access rules.
+- **Cross-workspace sharing.** Engagements, clients, and their data do not move or become visible between workspaces.
 
 These may be revisited once the core workbench and Customer Operations domain are established.

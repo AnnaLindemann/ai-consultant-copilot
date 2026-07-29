@@ -1,7 +1,14 @@
 # Roadmap — AI Consulting Workbench
 
-Status: **Stable** · Version: 1.1 · Derived from [product-vision.md](./product-vision.md) and [domain-model.md](./domain-model.md).
+Status: **Stable** · Version: 1.2 · Derived from [product-vision.md](./product-vision.md) and [domain-model.md](./domain-model.md).
 
+> **Revision 1.2 (approved).** Three changes, **none of which renumbers an existing phase** and none of which moves the MVP boundary (still after Phase 9):
+> 1. **Phase 2 (Client Discovery) is extended** with the engagement's **value & measurement baseline** (Business Impact; Error Frequency / Severity / Cost; Existing KPIs; Baseline Metrics; Target Success Metrics; Measurement Method; Data Sources) and with a **discovery draft / submitted workflow** plus **client-completed Discovery reviewed by the consultant**. The extension is delivered as a **re-entry into Phase 2** ("Phase 2 Extension"), sequenced **after the in-flight Phase 3 is accepted and before Phase 3A** — it does not disturb Phase 3.
+> 2. **A new Phase 3A — Multi-user & Client Collaboration Foundation** is added immediately after Phase 3, introducing the **Workspace** as the ownership and isolation boundary, the **Administrator / Manager / Client** roles, authentication, server-side authorization, engagement ownership, client self-registration, the **Client Discovery Portal**, the **Draft / Submit / Return** workflow, notifications, and an append-only **Audit Trail**. Authentication and email delivery are kept behind dedicated infrastructure boundaries so the consulting domain does not depend directly on either provider. Like Phase 5A, it is a lettered insertion, not a renumbering.
+> 3. **Phase 11 (Production Readiness) is refocused** on deployment, monitoring, operational security, backup, recovery, and performance. **Authentication and authorization move out of Phase 11 into Phase 3A.**
+>
+> Revision 1.2 also records the **internationalization-ready, German-only MVP** commitment as a cross-cutting UI obligation: user-facing strings are localizable from the start, internal identifiers stay English.
+>
 > **Revision 1.1 (approved).** Phase 5 is renamed to the **Curated Consulting Knowledge Base**, and a **Phase 5A — Technology Knowledge Base & Technology Curator** extension is added alongside it (both are the curated-knowledge foundation that grounds recommendations). **No existing phase is renumbered and the MVP boundary is unchanged** (still after Phase 9): Phase 5A rides under the Phase 5 umbrella and precedes Phase 6 Solution Matching. The extension also introduces a **Technology Update History** audit log of approved Technology Knowledge Base revisions, separate from Analysis Runs.
 
 This roadmap is **implementation-independent**. It defines *what business capability* each phase delivers and *when*, in an order that respects the agreed product direction. It does not prescribe software architecture, frameworks, storage, APIs, or technology choices — those belong to `architecture.md`.
@@ -14,6 +21,9 @@ This roadmap is **implementation-independent**. It defines *what business capabi
 - **The methodology is iterative, not a one-directional pipeline.** Later phases add re-entry and revision capability to stages delivered earlier; they do not replace them.
 - **Existing infrastructure is reused wherever possible.** Engagement persistence, analysis-run recording, prompt versioning/fingerprinting, and Langfuse tracing already exist and are extended by each phase rather than rebuilt. These are described in [Cross-cutting Capabilities](#cross-cutting-capabilities).
 - **Grounding order is fixed.** Recommendations are grounded in the curated Consulting Knowledge Base, and the technologies and models they name are grounded in the Technology Knowledge Base — so the curated-knowledge foundation (Phase 5 and its Phase 5A extension) precedes solution matching (Phase 6). **RAG remains after the curated Consulting Knowledge Base phase**, as an enhancement over meaningful curated content — never as the initial retrieval mechanism.
+- **Lettered phases are extensions, not renumberings.** Phase 3A and Phase 5A are inserted at the point in the sequence where the capability is needed, without shifting any existing phase number or the MVP boundary. They are full phases in every other respect: each delivers one complete business capability, leaves the application working, and passes the same acceptance gates.
+- **Access control begins at Phase 3A and applies to every phase after it.** From Phase 3A onward, the **Workspace** is the ownership and isolation boundary for all engagement-side data, and every capability a later phase adds is reachable only through server-side authentication and authorization. This obligation is stated once in [Cross-cutting Capabilities](#cross-cutting-capabilities) rather than repeated per phase.
+- **The user interface is German-only at MVP but internationalization-ready from the start.** This is a cross-cutting UI obligation on every phase that ships user-facing surface, also stated once in [Cross-cutting Capabilities](#cross-cutting-capabilities).
 - **Cost tracking and observability are cross-cutting.** Wherever a phase introduces new AI-assisted functionality, that functionality is recorded as an **Analysis Run** with cost, token usage, latency, prompt version, and prompt fingerprint, and traced in Langfuse. This obligation applies to every phase that adds AI functionality and is stated once in [Cross-cutting Capabilities](#cross-cutting-capabilities).
 
 ## Roadmap Principle
@@ -83,25 +93,43 @@ Technical improvements are introduced only when they directly support business v
 
 ## Phase 2 — Client Discovery
 
-**Goal.** Let the consultant capture structured information about the client's situation and make explicit what is still unknown.
+**Goal.** Let the consultant capture structured information about the client's situation, quantify what the problem actually costs and what success would look like, and make explicit what is still unknown.
 
-**Business capability.** Build and revise the **Discovery Profile** for an engagement.
+**Business capability.** Build and revise the **Discovery Profile** for an engagement — including its **value & measurement baseline** — and move it through a **draft / submitted** review workflow, whether the consultant captured it or the client completed it.
 
 **Scope.**
 - Capture the client's situation, operations, problems, current process, tools, data, constraints, and goals as structured discovery content.
-- Record not only what is known but **what is still missing**, so gaps are visible to the consultant.
+- Capture the engagement's **value & measurement baseline** alongside the qualitative picture (Revision 1.2):
+  - **Business Impact** — what the problem costs the business in operational terms (lost time, lost revenue, rework, customer dissatisfaction, staff load).
+  - **Error Frequency / Severity / Cost** — how often things go wrong, how bad each occurrence is, and what an occurrence costs.
+  - **Existing KPIs** — the indicators the client already tracks for the affected operations.
+  - **Baseline Metrics** — the current measured values of those indicators, as they stand today.
+  - **Target Success Metrics** — what the client would consider success, expressed in the same terms as the baseline.
+  - **Measurement Method** — how each metric is (or would be) measured, so a number can be trusted and re-measured later.
+  - **Data Sources** — where each figure came from (system, report, estimate, interview), so its reliability is visible.
+- Record not only what is known but **what is still missing**, so gaps are visible to the consultant. **An absent baseline, KPI, or measurement method is itself a first-class gap**, not an empty field: "the client does not measure this today" is a finding that must survive into assessment and follow-up questions.
+- Distinguish **measured** figures from **estimated** ones, and never present an estimate as a measurement.
+- Support a **draft / submitted** workflow for the Discovery Profile: discovery is worked on as a **draft**, **submitted** when the contributor considers it complete, and then **reviewed by the consultant**, who accepts it or reopens it for more work. Discovery remains re-entrant throughout — submission is a review checkpoint, not a lock.
+- Support **client-completed Discovery with consultant review**: discovery content may originate from the client rather than the consultant, and the Discovery Profile records **who provided each part** (consultant-captured vs. client-provided). Client-provided content is a **reviewed draft** exactly as AI-assisted content is — the consultant accepts, edits, or returns it, and it never enters later stages as accepted fact without that review.
 - Allow the Discovery Profile to be revised as understanding improves; it is re-entrant.
 - Shape discovery around the Customer Operations domain (its discovery questions and taxonomy are supplied by the Consulting Knowledge Base once curated in Phase 5; until then, discovery uses the agreed Customer Operations structure).
+
+> **Sequencing of the Revision 1.2 extension.** The value & measurement baseline and the draft/submitted + client-completed workflow are delivered as a **re-entry into Phase 2** (the "Phase 2 Extension"), sequenced **after Phase 3 is accepted and before Phase 3A begins**. Phase 2's original scope is already accepted and in place; the extension is a follow-on increment on that accepted capability, not a reopening of the phase order. It is placed before Phase 3A because Phase 3A's Client Discovery Portal and Draft / Submit / Return workflow build directly on the discovery workflow and provenance this extension introduces. It is placed after Phase 3 so the in-flight assessment work is not disturbed. Phase 3 itself is unchanged by this revision; whether the assessment later reads the value & measurement baseline is a separate, future decision, not a change to Phase 3's accepted scope.
 
 **Definition of Done.**
 - A consultant can enter, save, and revise a Discovery Profile on an engagement.
 - Known information and missing information are both represented and visible.
+- The value & measurement baseline (business impact, error frequency/severity/cost, existing KPIs, baseline metrics, target success metrics, measurement method, data sources) can be captured, revised, and left explicitly empty-with-a-reason, and each figure carries its source and whether it is measured or estimated.
+- A Discovery Profile can be moved from draft to submitted, reviewed by the consultant, and accepted or reopened, without losing content on any transition.
+- Discovery content records whether it was consultant-captured or client-provided, and client-provided content is visibly unreviewed until the consultant reviews it.
 - The Discovery Profile persists as engagement state and is available as factual input to later stages.
 
 **Success Criteria**
 - Discovery can be completed end-to-end.
 - Missing information is clearly identified.
 - Discovery can be resumed later.
+- The consultant can state what the client's problem costs today and what success would measurably look like — or can see plainly that the client cannot yet answer that.
+- Discovery completed by the client arrives in a reviewable state, and nothing the client wrote is treated as accepted fact until the consultant has reviewed it.
 
 ---
 
@@ -127,6 +155,53 @@ Technical improvements are introduced only when they directly support business v
 - Assessment is understandable by a consultant.
 - Assumptions and confidence are visible.
 - Assessment can be regenerated after Discovery changes.
+
+---
+
+## Phase 3A — Multi-user & Client Collaboration Foundation
+
+> **Extension inserted after Phase 3, not a renumbering.** Phase 3A follows the same convention as Phase 5A: it is placed where the capability is needed — once there is real engagement content worth protecting and worth sharing with a client — without shifting any existing phase number or the MVP boundary. It is sequenced **after the Phase 2 Extension** (Revision 1.2), because the Client Discovery Portal builds on the discovery draft/submitted workflow and provenance that extension delivers. **Authentication and authorization are delivered here, not in Phase 11.**
+
+**Goal.** Turn the workbench from a single-consultant tool into a safe, multi-user working environment in which a consulting team runs engagements side by side and a client can contribute to Discovery without ever seeing anything else.
+
+**Business capability.** Operate engagements inside a **Workspace** with real users and roles — **Administrator**, **Manager**, **Client** — where a Manager owns their engagements, an Administrator oversees the whole workspace, and a self-registered Client completes only the Discovery form associated with their own account, through the **Client Discovery Portal**, under a **Draft / Submit / Return** workflow with notifications and an audit trail. Authentication, access association, and email-based verification/password flows are handled through dedicated infrastructure boundaries, not through consulting-domain state.
+
+**Scope.**
+- **Workspace.** Introduce the **Workspace** as the ownership and isolation boundary for all engagement-side data. Every user, organization, engagement, and all engagement state belongs to exactly one workspace. Nothing crosses a workspace boundary.
+- **Roles.** Introduce three roles with distinct authority:
+  - **Administrator** — accesses **all engagements in their workspace**; manages the workspace's users, roles, and invitations.
+  - **Manager** — the consultant role; creates and runs engagements and accesses **only the engagements they own**.
+  - **Client** — an external participant with **no workbench access**; reaches only the Discovery form(s) associated with their own self-registration, for their own engagement.
+- **Authentication.** Users have real identities and sign in; every request is attributable to a known user. Clients self-register, confirm their email, and create their own password. Managers and additional administrators are created by an administrator and receive an invitation link to set their own password. The first administrator is created through a secure bootstrap process. Authentication data stays separate from consulting domain state, and the auth boundary handles password management, sessions, email verification, password reset, and invitation-link flows. The initial implementation uses Better Auth behind the authentication boundary, and Resend behind the email-delivery boundary.
+- **Authorization.** Every action is checked against the acting user's role and their relationship to the data. Authorization decisions cover reading, writing, generating, submitting, returning, accepting, and exporting.
+- **Server-side permission enforcement.** Permissions are enforced **on the server, on every request**, as the single source of truth. The user interface may hide what a user cannot do, but hiding is never the control — a hidden action denied only in the UI is a defect, not a safeguard.
+- **Workspace isolation.** Every read and write of engagement-side data is scoped to the acting user's workspace, so data from one workspace can never be read, listed, counted, aggregated, referenced, or exported from another.
+- **Engagement ownership.** Every engagement has exactly one owning Manager and belongs to exactly one workspace. Ownership can be transferred by an Administrator. Ownership is what a Manager's access is measured against.
+- **Client access association.** A Manager (or Administrator) associates a self-registered client contact with the Discovery form of **one specific engagement**. The association is explicit, scoped to that engagement's discovery, time-bounded, and revocable; revoking it ends the client's access immediately.
+- **Client Discovery Portal.** A restricted, client-facing surface where a self-registered client sees **only their own engagement's Discovery form** — no assessment, no opportunities, no recommendations, no report, no other engagement, no other client, and no workbench navigation.
+- **Draft / Submit / Return workflow.** The client works in **draft**, **submits** when finished, and the consultant **reviews** the submission and either **accepts** it or **returns** it with notes for completion or correction. Returned discovery goes back to draft for the client; the cycle can repeat. Every transition preserves prior content — a return never discards what the client wrote, and an acceptance never discards what the consultant edited.
+- **Notifications.** Users are notified of the events that need their attention: an invitation issued, a discovery submitted, a discovery returned, an invitation revoked or expired. Notifications inform; they never act on a user's behalf.
+- **Audit trail.** Record an **append-only Audit Trail** of access- and collaboration-relevant events: sign-in, invitation issued/accepted/revoked/expired, submission, return, acceptance, ownership transfer, role change, and denied-permission attempts — who did what, to which engagement, and when. It is distinct from the engagement's **Analysis Runs** (AI assistance) and from the **Technology Update History** (knowledge curation); the three logs are never conflated.
+- **Migration of existing work.** Existing organizations and engagements are brought into a workspace with an owning Manager as part of this phase, so the application is fully working — with access control on — at the end of it, and no engagement is left unowned or unreachable.
+- **Authentication data separation.** Auth state, password handling, sessions, verification, and invitation delivery are stored and processed outside consulting-domain tables and services.
+- **Out of scope here.** Enterprise identity federation (SSO/SAML/OIDC providers), cross-workspace sharing, per-user access to individual engagement sections beyond the roles above, and client access to any stage other than Discovery. Production deployment, monitoring, backup, and operational hardening remain Phase 11.
+
+**Definition of Done.**
+- A user signs in and sees only what their role and workspace permit; there is no unauthenticated path to engagement data.
+- A Manager can reach their own engagements and **cannot** reach another Manager's engagements, including by direct identifier, listing, search, aggregate, or export.
+- An Administrator can reach every engagement in their own workspace and **no** engagement in any other workspace.
+- A self-registered Client can open **only** the Discovery form of the engagement they are associated with, and can reach no other engagement, stage, or client's data; revoking the discovery access ends that access immediately.
+- Every permission decision is made and enforced server-side; the same request rejected in the UI is also rejected by the server.
+- A client can complete a Discovery form as a draft, submit it, receive it back with the consultant's notes when returned, and resubmit — with no content lost on any transition.
+- The consultant is notified of a submission and the client of a return, and both events, plus invitations, ownership changes, role changes, and denied attempts, appear in the append-only audit trail.
+- Existing engagements from earlier phases are owned, workspace-scoped, and reachable by their owner after the phase.
+
+**Success Criteria**
+- A consulting team can work in the same workbench without seeing each other's engagements.
+- An administrator can oversee the workspace's engagements without engagements leaking between workspaces.
+- A client can fill in discovery themselves, in their own time, and see nothing else about the engagement.
+- The consultant keeps full review authority: nothing a client submits enters the engagement as accepted fact without the consultant's review.
+- Every access decision is enforced by the server, and who did what to an engagement can be reconstructed afterwards.
 
 ---
 
@@ -337,40 +412,46 @@ Technical improvements are introduced only when they directly support business v
 
 ## Phase 11 — Production Readiness
 
-**Goal.** Prepare the workbench for real-world use beyond local development.
+> **Revision 1.2 — refocused.** Authentication, authorization, roles, workspace isolation, and server-side permission enforcement are **no longer part of this phase**; they are delivered in **Phase 3A**, where they are needed to make multi-user and client collaboration safe. Phase 11 is now about **operating** the product: deployment, monitoring, operational security, backup, recovery, and performance. It hardens and operates the access control built in Phase 3A; it does not introduce it.
 
-**Business capability.** A deployable, secure, monitorable, production-ready consulting platform.
+**Goal.** Prepare the workbench to be deployed, operated, and relied on beyond a developer's machine.
+
+**Business capability.** A deployable, observable, recoverable, and performant consulting platform that can be operated safely in production.
 
 **Scope.**
-- Authentication / access control.
-- Production deployment.
-- Environment configuration.
-- Security hardening.
-- Monitoring.
-- Error handling.
-- Export improvements.
-- Performance review.
-- Backup / recovery considerations.
-- Operational documentation.
+- **Production deployment.** A repeatable path to running the application in a production environment, including environment configuration and secrets handling.
+- **Monitoring and operational observability.** Health, availability, error rates, and operational alerting, so operational problems are seen before they harm client work. (Distinct from the AI-run observability that already exists per [Cross-cutting Capabilities](#cross-cutting-capabilities) — that is about AI runs; this is about the running system.)
+- **Operational security.** Transport security, secrets and credential management, dependency and patch hygiene, secure configuration defaults, data-protection and retention handling for client data, and hardening of the deployed surface. **The application's authentication and authorization model comes from Phase 3A**; this phase secures the environment it runs in, keeps it correctly configured in production, and verifies it holds there.
+- **Backup.** Regular, verified backups of engagement data, report versions, the knowledge bases, and the audit trail.
+- **Recovery.** A tested restore path with a known recovery point and recovery time, so client deliverables and engagement history survive an incident.
+- **Performance.** Review and address the performance of the operations a consultant actually waits on, under realistic engagement and workspace volumes.
+- **Operational error handling.** Production-grade error reporting, degradation behavior, and runbook-level handling of failures.
+- **Export reliability.** Report and engagement data export made dependable for real client delivery.
+- **Operational documentation.** How to deploy, configure, monitor, back up, restore, and troubleshoot the system.
 
 **Definition of Done.**
-- The application can be deployed and operated safely.
-- Access is controlled.
-- Environment setup is documented.
-- Errors and operational issues are observable.
-- Reports and engagement data can be handled reliably.
+- The application can be deployed to, and operated in, a production environment from documented steps.
+- The running system is monitored: failures and operational degradation are visible to an operator.
+- Operational security controls are in place for the deployed environment, and the Phase 3A access-control model is verified to hold in production configuration.
+- Backups run and a restore has actually been performed and verified — not merely configured.
+- Performance under realistic volumes is measured and acceptable for the operations a consultant waits on.
+- Deployment, configuration, monitoring, backup, restore, and troubleshooting are documented.
 
 **Success Criteria**
 - A consultant can use the workbench on real engagements outside a developer's machine.
-- Only authorized people can reach engagement and client data.
 - When something goes wrong, it can be seen and addressed before it harms client work.
-- Client deliverables and engagement data can be trusted to survive normal operation.
+- Client deliverables, engagement data, and the audit trail can be trusted to survive both normal operation and an incident.
+- The access control established in Phase 3A remains intact and verified in the production environment.
 
 ---
 
 ## Cross-cutting Capabilities
 
-These capabilities are **not phases**. They apply across multiple phases and are delivered wherever a phase introduces new AI-assisted functionality within an engagement. They are built on **existing infrastructure that is reused and extended**, never rebuilt per phase. Any phase that adds engagement AI functionality (Phases 3, 6, 8, 9, 10, and any later AI-assisted engagement step) must satisfy every item below for that functionality; this obligation is stated here once rather than repeated in each phase.
+These capabilities are **not phases**. They apply across multiple phases. The first group below applies wherever a phase introduces new AI-assisted functionality within an engagement; two further groups added in Revision 1.2 — **access control and workspace isolation** (from Phase 3A onward) and **language and localization readiness** (every phase with user-facing surface) — apply regardless of whether a phase is AI-assisted.
+
+### AI cost tracking and observability
+
+Delivered wherever a phase introduces new AI-assisted functionality within an engagement. They are built on **existing infrastructure that is reused and extended**, never rebuilt per phase. Any phase that adds engagement AI functionality (Phases 3, 6, 8, 9, 10, and any later AI-assisted engagement step) must satisfy every item below for that functionality; this obligation is stated here once rather than repeated in each phase.
 
 **Cost tracking and observability are mandatory for every new AI-assisted engagement capability.** No phase may introduce engagement AI functionality without capturing the signals below; this is a non-negotiable acceptance criterion for Phases 3, 6, 8, 9, 10, and any later AI-assisted engagement step.
 
@@ -396,15 +477,38 @@ Every AI-assisted step in the product is represented as an **Analysis Run** — 
 
 Because these capabilities already exist in the current foundation (engagement-scoped Analysis Run persistence, prompt version and fingerprint recording, and Langfuse tracing), each new AI-assisted phase **extends** them to its new functionality rather than introducing a separate mechanism. This keeps observability, cost accounting, and the audit trail consistent across every stage of the methodology.
 
+**Phase 3A adds no AI functionality** and therefore records no Analysis Runs of its own. What it does add is a constraint on every AI-assisted capability that follows it: an Analysis Run belongs to an engagement, an engagement belongs to a workspace, and therefore **all AI assistance, its cost, and its history are workspace-scoped too**. Cost reporting at every level (per request, per engagement, lifetime) is read within the acting user's workspace and role, never across workspaces.
+
+### Access control and workspace isolation (from Phase 3A onward)
+
+From Phase 3A onward, the following applies to **every** phase that adds any capability, AI-assisted or not. It is stated here once rather than repeated per phase:
+
+- **The Workspace is the ownership and isolation boundary.** Every engagement-side read, write, listing, aggregation, and export is scoped to the acting user's workspace.
+- **Access is decided by role and ownership.** Administrators reach all engagements in their own workspace; Managers reach only the engagements they own; Clients reach only the Discovery form associated with their own self-registration.
+- **Permissions are enforced server-side, on every request.** UI affordances may reflect permissions, but they never constitute them.
+- **Access- and collaboration-relevant events are audited.** New capabilities that grant access, change ownership or roles, or move a client submission through the workflow append to the audit trail.
+- **The three governance logs stay distinct.** The engagement-scoped **Analysis Run** (AI assistance), the **Technology Update History** (approved knowledge curation), and the **Audit Trail** (access and collaboration events) are separate records with separate purposes; no phase may merge them.
+
+### Language and localization readiness (all phases with user-facing surface)
+
+The MVP ships a **German-only** user interface, built on an **internationalization-ready** foundation from the start. This applies to every phase that adds user-facing surface, including the Phase 3A Client Discovery Portal:
+
+- **User-facing strings are localizable, not hard-coded.** Every string a user reads — labels, help text, validation messages, notifications, emails, exported document headings — is authored so that adding a second language later is a translation task, not a rewrite.
+- **Internal identifiers remain English.** Domain terms, entity and field names, enum and status values, stage and role names, event names, API contracts, and log/audit entries stay in English. The ubiquitous language of `domain-model.md` is English and is never translated in code or data.
+- **Locale is presentation, not domain.** Nothing about the domain model, storage, or business rules changes with the display language. Client- and consultant-entered content is stored as entered and is never machine-translated.
+- **Additional languages are deliberately deferred.** German-only is the MVP scope; readiness is required, a second language is not.
+
 ---
 
 ## MVP Boundary
 
-The product is considered **functionally complete as an MVP after Phase 9**. By that point, the full consulting methodology is supported end to end — from discovery through assessment, prioritization, grounded recommendations (with technologies and models grounded in the Technology Knowledge Base), roadmap, and a versioned client-ready report, including the iterative feedback loop that lets an engagement evolve after delivery. The two curated knowledge bases (Consulting and Technology) that ground that methodology are in place by Phase 5 and its Phase 5A extension.
+The product is considered **functionally complete as an MVP after Phase 9**. By that point, the full consulting methodology is supported end to end — from discovery (including its value & measurement baseline) through assessment, prioritization, grounded recommendations (with technologies and models grounded in the Technology Knowledge Base), roadmap, and a versioned client-ready report, including the iterative feedback loop that lets an engagement evolve after delivery. The two curated knowledge bases (Consulting and Technology) that ground that methodology are in place by Phase 5 and its Phase 5A extension, and the multi-user, workspace-isolated foundation with client collaboration is in place from Phase 3A.
+
+**Phase 3A is inside the MVP, deliberately.** Multi-user access, workspace isolation, and client-completed discovery are not deployment concerns — they change *what the consultant can do* (run engagements alongside colleagues, and have the client fill in discovery directly), and validating the methodology with real engagements means validating it with real users and real clients. Its inclusion does not move the MVP boundary, which remains after Phase 9.
 
 The phases beyond the MVP are deliberately separated from that core:
 
 - **Phase 10 (RAG Enhancement)** improves the *quality* of Consulting Knowledge Base retrieval, but adds no new business capability the consultant did not already have.
-- **Phase 11 (Production Readiness)** prepares the product for real-world deployment and operation, rather than extending the methodology.
+- **Phase 11 (Production Readiness)** prepares the product for real-world **deployment and operation** — deployment, monitoring, operational security, backup, recovery, and performance — rather than extending the methodology. Note that authentication and authorization are *not* deferred to this phase; they are delivered in Phase 3A, and Phase 11 operates and hardens them.
 
 Drawing the MVP boundary here allows the consulting methodology to be **validated with real engagements before investing in advanced retrieval and production infrastructure**. If the methodology proves its value, RAG and production hardening are the natural next investments; if it needs adjustment, that is learned before those investments are made.
