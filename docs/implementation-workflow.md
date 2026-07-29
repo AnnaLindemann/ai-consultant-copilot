@@ -1,6 +1,8 @@
 # Implementation Workflow — AI Consulting Workbench
 
-Status: **Draft** · Version: 1.0 · Derived from [product-vision.md](./product-vision.md), [domain-model.md](./domain-model.md), [roadmap.md](./roadmap.md), [architecture.md](./architecture.md), [agent-rules.md](./agent-rules.md), and [coding-standards.md](./coding-standards.md).
+Status: **Draft** · Version: 1.1 · Derived from [product-vision.md](./product-vision.md), [domain-model.md](./domain-model.md), [roadmap.md](./roadmap.md), [architecture.md](./architecture.md), [agent-rules.md](./agent-rules.md), and [coding-standards.md](./coding-standards.md).
+
+> **Revision 1.1 (approved).** Aligned with the introduction of the Technology Knowledge Base, Technology Curator, and Technology Update History, delivered as the **Phase 5A** extension of Phase 5. Existing roadmap phase numbers (Phase 0 through Phase 11) and the MVP boundary are unchanged. The workflow itself is unchanged — every phase, new and existing, passes through the same gates.
 
 This document defines the **standard implementation process** for the AI Consulting Workbench: how roadmap phases are implemented, reviewed, and accepted. It is a **development workflow document**, not a product or architecture document.
 
@@ -231,7 +233,7 @@ The stable principles that govern how implementation is carried out under this w
 This workflow is written to remain valid as the roadmap advances, in the same spirit as the frozen documents' extensibility commitments.
 
 - **The workflow applies unchanged to every phase.** From Phase 0 through Phase 11 and any later work, the same process (read the docs → confirm previous phase accepted → scope → implement incrementally → keep the app working → satisfy Definition of Done → validate → report → review and accept) applies. New phases inherit it without exception.
-- **New kinds of work inherit the same gates.** New methodology stages, new domains added as curated knowledge, enhanced retrieval (RAG), new providers, and production-readiness work all pass through the same quality gates (§13) and the same reporting and acceptance process (§6, §7).
+- **New kinds of work inherit the same gates.** New methodology stages, new domains added as curated consulting knowledge, the Technology Knowledge Base and its Technology Curator (the Phase 5A extension), enhanced retrieval (RAG), new providers, and production-readiness work all pass through the same quality gates (§13) and the same reporting and acceptance process (§6, §7). (Note: the Technology Curator's *product* approval gate — a human approving a Technology Update Proposal before the Technology Knowledge Base changes, with each approved change appended to the Technology Update History — is a runtime product behavior, distinct from this document's phase-acceptance review.)
 - **The workflow itself evolves deliberately.** If this workflow needs to change, it changes deliberately and by explicit decision — not by silent drift in how phases are executed. Because this document is not one of the frozen source-of-truth documents, it may be revised as the team learns, but revisions are made openly and in alignment with the frozen documentation, never in conflict with it.
 - **Alignment with the frozen docs is preserved.** Any future revision of this workflow keeps it consistent with the product vision, domain model, roadmap, architecture, agent-rules, and coding standards. If a change here would require changing a frozen document, that frozen-document change follows the explicit-approval policy (§9) first.
 
@@ -249,7 +251,7 @@ This workflow is written to remain valid as the roadmap advances, in the same sp
 ## Files Created or Modified
 
 - **Created:** `docs/implementation-workflow.md` (this document).
-- **Modified:** none. No source code was written or changed. No existing documentation was modified; the frozen documents (`product-vision.md`, `domain-model.md`, `roadmap.md`, `architecture.md`, `agent-rules.md`, `coding-standards.md`) were read only.
+- **Revised (1.1):** noted that the Technology Knowledge Base, Technology Curator, and Technology Update History (delivered as the Phase 5A extension) inherit the same quality gates. Existing roadmap phase numbers (Phase 0 through Phase 11) and the MVP boundary are unchanged. No source code was written or changed as part of this documentation revision.
 
 ## Possible Conflicts with the Frozen Documentation
 

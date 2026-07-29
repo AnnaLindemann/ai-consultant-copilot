@@ -1,6 +1,8 @@
 # Architecture — AI Consulting Workbench
 
-Status: **Draft** · Version: 1.0 · Derived from [product-vision.md](./product-vision.md), [domain-model.md](./domain-model.md), and [roadmap.md](./roadmap.md).
+Status: **Draft** · Version: 1.1 · Derived from [product-vision.md](./product-vision.md), [domain-model.md](./domain-model.md), and [roadmap.md](./roadmap.md).
+
+> **Revision 1.1 (approved).** Reflects the split of the Knowledge Base into a **Consulting Knowledge Base** and a separate **Technology Knowledge Base** — the latter organized **hierarchically by Technology Category** (not a flat list) — and adds the **Technology Curator** subsystem (detect → propose → human-approve → update) as the only write path, plus a **Technology Update History** append-only audit log of approved revisions. Updates are attributed to first-class **Technology Sources** (official vendor origins) that proposals reference and the history preserves. Delivered as the **Phase 5A** extension of Phase 5 — **existing phase numbers and the MVP boundary are unchanged** (RAG stays Phase 10, Production Readiness Phase 11). No architectural principle is changed.
 
 This is the first **implementation** document. It defines *how* the product is built — its layers, boundaries, and infrastructure — while remaining fully aligned with the frozen product vision, the stable domain model, and the roadmap. It does **not** define product requirements, redesign the product, or change the roadmap.
 
@@ -12,9 +14,9 @@ Where this document names concrete technologies, it describes the current, alrea
 
 These principles govern every decision below. They are the implementation-side reflection of the vision's frozen commitments.
 
-1. **Domain-centric, infrastructure-peripheral.** Business logic (Engagement, Assessment, Recommendation, Knowledge Base) is expressed in a domain layer that has no knowledge of Express, Prisma, Groq, or Langfuse. Frameworks are details wired in at the edges.
+1. **Domain-centric, infrastructure-peripheral.** Business logic (Engagement, Assessment, Recommendation, the two Knowledge Bases) is expressed in a domain layer that has no knowledge of Express, Prisma, Groq, or Langfuse. Frameworks are details wired in at the edges.
 2. **Engagement is the primary business entity.** The Engagement is the aggregate root for all client-specific state. Every methodology stage reads and writes engagement state; nothing client-specific lives outside an engagement.
-3. **Knowledge Base is the core reusable asset.** It is a first-class, engagement-independent subsystem. The reference direction is strictly one-way: engagement → knowledge. Knowledge is never mutated by running an engagement.
+3. **Two knowledge bases are the core reusable assets.** The **Consulting Knowledge Base** and the separate, more frequently-updated **Technology Knowledge Base** are each first-class, engagement-independent subsystems, independent of each other. The reference direction is strictly one-way: engagement → knowledge; neither is ever mutated by running an engagement. The Technology Knowledge Base is updated **only** through the human-approved **Technology Curator** (detect → propose → human-approve → update) — its sole write path — never by engagement code or an autonomous AI path.
 4. **Methodology ≠ architecture.** The nine methodology steps are not nine services or a rigid pipeline. Stages are re-entrant operations over persisted engagement state.
 5. **Reuse existing infrastructure; do not rebuild it.** Engagement persistence, Analysis Run recording, prompt versioning/fingerprinting, cost calculation, and Langfuse tracing already exist. Each phase *extends* them.
 6. **Avoid overengineering / build for the phase in front of you.** No multi-domain plugin framework, no RAG infrastructure, and no generic knowledge-item engine are built ahead of the phase that needs them. Abstractions are introduced when a second concrete case exists — never speculatively.
@@ -48,16 +50,17 @@ The system is a single-tenant web application with three deployable parts, all a
 │                       Langfuse, config                          │
 └──────┬──────────────────────────┬──────────────────┬─────────┘
        │                          │                  │
-┌──────▼──────┐          ┌────────▼────────┐   ┌─────▼─────────┐
-│ PostgreSQL  │          │ LLM provider(s) │   │  Langfuse      │
-│ (Prisma)    │          │ (Groq → others) │   │ observability  │
-│ Engagement  │          └─────────────────┘   └────────────────┘
-│ + Knowledge │
-│ + AnalysisRun│
-└─────────────┘
+┌──────▼─────────────┐  ┌────────▼────────┐   ┌─────▼─────────┐
+│ PostgreSQL (Prisma)│  │ LLM provider(s) │   │  Langfuse      │
+│  Engagement        │  │ (Groq → others) │   │ observability  │
+│  + Consulting KB   │  └─────────────────┘   └────────────────┘
+│  + Technology KB   │
+│    (+ curator)     │
+│  + AnalysisRun     │
+└────────────────────┘
 ```
 
-- **One backend, one PostgreSQL database (current deployment).** The current implementation uses one backend and one PostgreSQL database; the architecture does not depend on this deployment topology. The Knowledge Base and engagement data live in the same PostgreSQL instance but in **separate schemas/table groups** with a one-directional reference boundary enforced in the domain layer (§9).
+- **One backend, one PostgreSQL database (current deployment).** The current implementation uses one backend and one PostgreSQL database; the architecture does not depend on this deployment topology. Both the Consulting Knowledge Base and the Technology Knowledge Base live in the same PostgreSQL instance as engagement data but in **separate schemas/table groups** (each knowledge base distinct from engagement data and from the other), with a one-directional reference boundary enforced in the domain layer (§9). The Technology Knowledge Base's only write path is the human-approved Technology Curator (§9).
 - **Stateless backend.** All state is in PostgreSQL; the backend holds no session-bound engagement state, which keeps stages re-runnable and the service horizontally deployable later (Phase 11).
 - **External services are optional and swappable.** Langfuse is toggled by config and degrades gracefully when disabled; the LLM provider is chosen behind an abstraction.
 
@@ -77,9 +80,12 @@ The backend is organized in four layers with a strict dependency rule: **depende
 The already-present split (`routes/` → `services/` → `repositories/` + `lib/`) is exactly this shape and is preserved and extended rather than replaced. The main change over time is making the **domain** an explicit layer rather than logic scattered inside services.
 
 **Ports (interfaces) the application depends on:**
-- `EngagementRepository`, `KnowledgeRepository`, `AnalysisRunRepository` — persistence.
+- `EngagementRepository`, `KnowledgeRepository`, `TechnologyKnowledgeRepository`, `AnalysisRunRepository` — persistence. `TechnologyKnowledgeRepository` exposes read access for engagement stages and a write path reachable **only** from the approved-proposal curator flow.
 - `LlmClient` — text generation with usage/latency metadata (already exists as `callLlm`).
-- `KnowledgeRetrieval` — deterministic retrieval/matching over the Knowledge Base (Phase 5); a later RAG adapter (Phase 10) implements the *same* port.
+- `KnowledgeRetrieval` — deterministic retrieval/matching over the Consulting Knowledge Base (Phase 5); a later RAG adapter (Phase 10) implements the *same* port.
+- `TechnologyRetrieval` — deterministic retrieval/matching over the Technology Knowledge Base (Phase 5A), scoped by **Technology Category**, following the same pattern as `KnowledgeRetrieval` over a separate store.
+- `TechnologySourceRepository` — persistence for the registry of **Technology Sources** (trusted official origins: OpenAI, Anthropic, Google, Meta, Groq, Mistral, …), referenced by proposals and preserved on history entries (Phase 5A).
+- `TechnologySourceWatcher` / `TechnologyCuratorRepository` — the Technology Curator's ports (Phase 5A): detect candidate updates *from* a Technology Source, and persist Technology Update Proposals (with their Technology Source references), their approval decisions, and the append-only Technology Update History of applied changes (which preserves those source references). Not reachable from an engagement stage.
 - `Tracer` / `CostCalculator` — observability and cost (already exist as `langfuse` and `calculateLlmCost`).
 
 ---
@@ -89,12 +95,12 @@ The already-present split (`routes/` → `services/` → `repositories/` + `lib/
 The domain layer is the direct code expression of `domain-model.md`. It is where the product's business meaning lives and it is intentionally the most stable part of the system.
 
 ### 4.1 The two sides
-The domain is split into two packages that mirror the model's two sides:
+The domain is split to mirror the model's two sides:
 
 - **Engagement side** — client-specific, mutable state.
-- **Knowledge side** — reusable, curated, engagement-independent knowledge.
+- **Knowledge side** — reusable, curated, engagement-independent knowledge, comprising two independent bodies: the **Consulting Knowledge Base** and the **Technology Knowledge Base**.
 
-The only permitted dependency is engagement-side → knowledge-side, expressed as **references (identifiers) plus copied reasoning**, never as a live mutation of knowledge (see §9 grounding).
+The only permitted dependency is engagement-side → knowledge-side, expressed as **references (identifiers) plus copied reasoning**, never as a live mutation of knowledge (see §9 grounding). This applies to both knowledge bases; a Recommendation may carry grounding references into the Consulting Knowledge Base (use case / solution pattern) and into the Technology Knowledge Base (technology profiles) at once.
 
 ### 4.2 Engagement aggregate
 **Engagement** is the aggregate root. It owns:
@@ -111,7 +117,7 @@ The only permitted dependency is engagement-side → knowledge-side, expressed a
 
 ### 4.3 Invariants owned by the domain
 - Engagement-specific content may reference knowledge but must copy the reasoning it relied on, so the record stays faithful to knowledge *as it stood* when the work was done.
-- A Recommendation is only valid if it is traceable **backward** to Discovery facts and **outward** to the Knowledge Base entries that justify it (grounding invariant).
+- A Recommendation is only valid if it is traceable **backward** to Discovery facts and **outward** to the Consulting Knowledge Base entries that justify its approach; any concrete technologies or models it names must additionally reference the Technology Knowledge Base entries behind them (grounding invariant).
 - Reports are **append-only versions**; producing a new version never destroys a prior one.
 - Every stage is a pure transformation of persisted engagement state → new engagement state, enabling re-entry and re-run without restarting the engagement.
 
@@ -141,11 +147,13 @@ build stage input (engagement state + retrieved knowledge)
 Key properties:
 
 - **Stage-agnostic mechanism.** Each stage supplies three things — the prompt module, the output schema, and how the parsed result maps into engagement state. The surrounding orchestration (call → parse → evaluate → record → trace) is shared, satisfying the cross-cutting obligation once.
-- **Deterministic grounding first.** Knowledge is retrieved deterministically (Phase 5) and passed *into* the prompt. The LLM reasons over supplied knowledge rather than inventing it; grounding references are captured alongside the generated content. This makes traceability structural, not best-effort.
+- **Deterministic grounding first.** Knowledge is retrieved deterministically — from the Consulting Knowledge Base (Phase 5) and, for technology and model suggestions, the Technology Knowledge Base (Phase 5A) — and passed *into* the prompt. The LLM reasons over supplied knowledge rather than inventing it; grounding references (into both knowledge bases) are captured alongside the generated content. This makes traceability structural, not best-effort.
 - **AI output is a draft.** The parsed, validated result is persisted as engagement state marked as an unreviewed draft. Consultant edits are first-class and are never overwritten by a re-run without explicit intent.
 - **Failure is a first-class outcome.** Parse/validation failure still produces an Analysis Run (with the error recorded) and returns a structured failure to the caller — it does not lose the audit trail (§13).
 
 **Real evaluation vs. the current placeholder.** The current `evaluateAnalysisOutput` returns hard-coded `"medium"` quality signals. Per roadmap Phase 0, this fake evaluation is removed/disabled so no placeholder score is ever presented as a real one. The Analysis Run record keeps the *objective* signals (parse success, schema validity, tokens, cost, latency); subjective quality signals are only stored when a genuine evaluator produces them.
+
+**The Technology Curator is not part of this pipeline.** The pipeline above serves engagement stages and records an engagement-scoped Analysis Run. The Technology Curator (Phase 5A, §9) is a separate, cross-engagement flow: detect a candidate update → draft a Technology Update Proposal (AI-assisted at most) → obtain explicit human approval → apply the change → append a Technology Update History entry. It belongs to no engagement and therefore records **no** Analysis Run; its governance records are the Technology Update Proposal and the Technology Update History. Keeping it off the engagement pipeline preserves the invariant that an Analysis Run always belongs to an engagement.
 
 ---
 
@@ -156,7 +164,9 @@ Key properties:
 - **Engagement persistence is the single engagement store.** Later phases attach discovery, assessment, opportunities, recommendations, roadmap, and report versions to the existing engagement record rather than introducing a parallel store (roadmap Phase 1).
 - **Structured-but-flexible columns.** The current schema already uses typed columns for stable fields and `Json` columns for evolving nested structures (pain points, process steps, etc.). Methodology stage outputs that are still stabilizing (assessment findings, opportunities) are stored as validated `Json` payloads owned by the Engagement, with typed columns introduced only once a shape is stable. This avoids a migration per stage in early phases while keeping validation at the Zod boundary.
 - **Terminology migration (Phase 0/1).** The existing `ClientCase` model is the legacy name for engagement state. It is renamed/reshaped toward `Engagement` (+ `Organization` grouping) as Phase 0 aligns terminology and Phase 1 establishes the engagement foundation. Existing Analysis Run persistence is retained; its foreign key follows the rename (`caseId` → `engagementId`) without changing its behavior.
-- **Separation boundary in storage.** Knowledge tables and engagement tables are distinct groups. Engagement rows hold knowledge **identifiers** (and copied reasoning), never foreign-key ownership *into* engagements from knowledge. No knowledge write path is reachable from an engagement stage.
+- **Separation boundary in storage.** Consulting Knowledge Base tables, Technology Knowledge Base tables, and engagement tables are three distinct groups. Engagement rows hold knowledge **identifiers** (and copied reasoning) into either knowledge base, never foreign-key ownership *into* engagements from knowledge. No knowledge write path — to either knowledge base — is reachable from an engagement stage.
+- **Technology Knowledge Base structure.** The Technology Knowledge Base stores **Technology Profiles classified under Technology Categories** (AI Models, AI Providers, Embedding Models, Speech, OCR, Vector Databases, Rerankers, MCP Servers, Browser / Computer Use, Workflow Engines, Evaluation Frameworks, Monitoring, Deployment Patterns). A profile carries a `category` (the hierarchy can nest via a self-referential category, added only if a real second level appears — principle §1.6). Retrieval filters by category. A separate **Technology Source** registry holds the trusted official origins.
+- **Technology Knowledge Base write path.** The only write path to the Technology Knowledge Base is the Technology Curator applying an **approved** Technology Update Proposal. Proposals and their approval decisions are persisted (referenced Technology Source(s), targeted profile/category, proposed change, approver, decision), and every approved, applied change additionally appends a **Technology Update History** row (change, category/profile, **preserved Technology Source reference(s)**, approver, timestamp) — an append-only audit log of approved revisions only, separate from Analysis Runs. Detection may be assisted or manual initially (roadmap Phase 5A); no automated scheduler is required before the phase that needs it.
 
 ---
 
@@ -182,18 +192,39 @@ The Analysis Run is the audit-and-trust record behind every AI-assisted step and
 - **Stage association.** As more AI stages are added, each run records *which stage* it supported (e.g., `assessment`, `solution-matching`, `report`) so runs can be filtered by stage while still rolling up to the engagement. This is a small additive field, not a new mechanism.
 - **History is preserved.** Runs accumulate across re-runs and iterations as the engagement's audit trail; nothing is deleted when a stage is re-run. This directly supports explainability, traceability, and the consultant's confidence in (or correction of) AI output.
 - **One recording path.** All stages record runs through the same repository and orchestration path, guaranteeing consistency and satisfying the roadmap's "stated once, not repeated per phase" obligation.
+- **The Analysis Run is not the curation audit log.** Approved changes to the Technology Knowledge Base are recorded in a separate, append-only **Technology Update History** (§9.3), which belongs to the Technology Knowledge Base subsystem and to no engagement. The two logs are kept distinct: Analysis Runs record engagement AI assistance; the Technology Update History records approved knowledge revisions. Neither is written by the other's path.
 
 ---
 
 ## 9. Knowledge Base Architecture
 
-The Knowledge Base is a core subsystem, not a feature bolted onto engagements. **The Knowledge Base is a separate subsystem, not a separate database:** it is a distinct module with its own tables inside the single PostgreSQL instance, not an independently deployed store.
+The knowledge side is made of **two separate subsystems, not separate databases**: the **Consulting Knowledge Base** and the **Technology Knowledge Base** are each a distinct module with its own tables inside the single PostgreSQL instance, independent of each other and of engagements, and neither is an independently deployed store. They are kept separate because they change at very different rates.
 
-- **Separate subsystem, same database.** Knowledge lives in its own tables/module, curated independently of any engagement (roadmap Phase 5). It is read-only from the engagement's perspective.
-- **Specific kinds first, generic container second.** The domain is defined by the *named* kinds of knowledge (Business Domains, Business Processes, Business Problems, Customer Operations Taxonomy, Discovery Questions, Assessment Frameworks, AI Readiness Criteria, AI Use Cases, Solution Patterns, Implementation Patterns, Technology Profiles, ROI Models, Risk Models, Best Practices, Follow-up Templates). A shared "knowledge item" convenience may exist internally, but the modeled concepts are the specific kinds — matching the domain model's explicit warning against a generic container.
-- **Domain scoping without a plugin framework.** Every knowledge entry is scoped by `BusinessDomain` (Customer Operations first). This scoping *field* is what allows a future domain to be added as new curated knowledge without touching the domain-agnostic engagement entities. The multi-domain **abstraction/plugin framework is not built** until a second domain actually exists (vision §10, roadmap MVP boundary).
+### 9.1 Consulting Knowledge Base
+
+- **Separate subsystem, same database.** Consulting knowledge lives in its own tables/module, curated independently of any engagement (roadmap Phase 5). It is read-only from the engagement's perspective.
+- **Specific kinds first, generic container second.** The domain is defined by the *named* kinds of knowledge (Business Domains, Business Processes, Business Problems, Customer Operations Taxonomy, Discovery Questions, Assessment Frameworks, AI Readiness Criteria, AI Use Cases, Solution Patterns, Implementation Patterns, ROI Models, Risk Models, Best Practices, Follow-up Templates). Technology Profiles are **not** here — they live in the Technology Knowledge Base (§9.2). A shared "knowledge item" convenience may exist internally, but the modeled concepts are the specific kinds — matching the domain model's explicit warning against a generic container.
+- **Domain scoping without a plugin framework.** Every consulting-knowledge entry is scoped by `BusinessDomain` (Customer Operations first). This scoping *field* is what allows a future domain to be added as new curated knowledge without touching the domain-agnostic engagement entities. The multi-domain **abstraction/plugin framework is not built** until a second domain actually exists (vision §10, roadmap MVP boundary).
 - **Retrieval behind a port.** `KnowledgeRetrieval` is deterministic and structured in Phase 5 (filter/match over taxonomy, problems, and use cases — no embeddings). Phase 10 adds a RAG adapter implementing the **same port**, *complementing* curated retrieval; grounding traceability is unchanged because retrieval only selects *which* knowledge is passed to the pipeline. No engagement code changes when the retrieval implementation changes.
-- **One-directional reference (the grounding rule).** Engagement entities store knowledge identifiers and copy the reasoning they used into their own client-specific content. Curation is a separate, deliberate activity with no path from an engagement run. This keeps the Knowledge Base stable, shareable, and compounding in value.
+
+### 9.2 Technology Knowledge Base
+
+- **Separate subsystem, separate cadence.** Technology knowledge lives in its own tables/module (roadmap Phase 5A), independent of the Consulting Knowledge Base precisely because AI technologies and models churn far faster than consulting methodology. It is read-only from the engagement's perspective.
+- **Category-based, not a flat list.** It is organized **hierarchically by `TechnologyCategory`** — AI Models, AI Providers, Embedding Models, Speech, OCR, Vector Databases, Rerankers, MCP Servers, Browser / Computer Use, Workflow Engines, Evaluation Frameworks, Monitoring, Deployment Patterns. Each Technology Profile is classified under exactly one category and describes role, strengths, limitations, and suitability. The category set is extensible (and may nest) without touching engagement entities.
+- **Cross-domain, not per-domain-scoped.** AI technologies are relevant regardless of business domain, so Technology Profiles and their categories are shared rather than duplicated per `BusinessDomain`. Adding a business domain does not touch this subsystem.
+- **Retrieval behind its own port.** `TechnologyRetrieval` is deterministic and structured (filter/match by **category** and by capability/suitability), following the same pattern as `KnowledgeRetrieval` over a separate store. It stays structured; RAG over the Technology Knowledge Base is not part of Phase 10.
+
+### 9.3 The Technology Curator (the only write path)
+
+- **Technology Sources are first-class provenance.** A curated registry of **Technology Sources** models the trusted official origins (OpenAI, Anthropic, Google, Meta, Groq, Mistral, …). A Technology Source is the provenance concept; it is distinct from — though it often corresponds to a vendor also profiled in — the **AI Providers** category, which is curated content used in recommendations.
+- **Human-approved write path.** The **only** way the Technology Knowledge Base changes is the Technology Curator applying an explicitly **human-approved** Technology Update Proposal. The flow is: detect a candidate update from one or more Technology Sources → generate a structured Technology Update Proposal referencing those source(s) (AI-assisted drafting at most) → obtain explicit human approval → apply the change → append a Technology Update History entry. There is no autonomous-AI write and no engagement-reachable write.
+- **Proposals as the governance trail.** Each Technology Update Proposal persists its provenance as **references to one or more Technology Sources**, the targeted Technology Profile/Category, the proposed change, and the approval decision — covering proposals whether approved or rejected. This is the Technology Knowledge Base's curation trail and is deliberately *not* an Analysis Run (which stays engagement-scoped, §8).
+- **Technology Update History as the append-only audit log.** When an approved proposal is applied, an entry is appended to the **Technology Update History** — an append-only log of **approved, applied revisions only** (what changed, the approved proposal behind it, **the Technology Source reference(s) preserved for auditability**, the approver, and the timestamp). It never records rejected proposals, is never rewritten or deleted (append-only, like Consultant Report versions), and is separate from both the proposal record and the engagement's Analysis Runs. It answers "how, and from which official source, did the Technology Knowledge Base come to say what it says today?"
+- **Detection is minimal until needed.** Initial detection may be assisted or manual; an automated vendor-watch scheduler is not built ahead of the phase that needs it (principle §1.6). Detection adapters sit behind `TechnologySourceWatcher` (one per Technology Source), so how updates are detected can change without touching the approval-and-write path.
+
+### 9.4 One-directional reference (the grounding rule)
+
+- **Engagement → knowledge only, for both bases.** Engagement entities store knowledge identifiers and copy the reasoning they used into their own client-specific content — referencing the Consulting Knowledge Base (use case / solution pattern) and, where technologies or models are named, the Technology Knowledge Base (technology profiles). Curation of either base is a separate, deliberate activity with no path from an engagement run. This keeps both knowledge bases stable, shareable, and compounding in value.
 
 ---
 
@@ -269,7 +300,8 @@ server/
     services/                 # application layer — one application service per business capability
     domain/                   # (introduced) pure domain: engagement + knowledge model, invariants
       engagement/             #   engagement-side aggregate and parts
-      knowledge/              #   knowledge-side kinds + retrieval port
+      knowledge/              #   consulting knowledge kinds + retrieval port
+      technology/             #   (Phase 5A) category-organized technology profiles + retrieval port + technology sources + curator model + update history
     prompts/                  # versioned, fingerprinted prompt modules (per stage)
     evaluation/               # cost calculation + (real) output evaluation
     repositories/             # infrastructure — Prisma-backed repos implementing ports
@@ -296,8 +328,9 @@ Notes:
 Extensibility is achieved by **stable seams**, not by speculative frameworks.
 
 - **New methodology stages** attach to the Engagement aggregate and reuse the shared AI orchestration pipeline and Analysis Run recording. Adding a stage means: a prompt module, an output schema, a mapping into engagement state, and a service — no new infrastructure. This is what lets each roadmap phase land without redesign.
-- **New business domains** are added as new curated Knowledge Base content scoped by `BusinessDomain`. The domain-agnostic engagement entities do not change. The multi-domain abstraction is only elaborated when a second domain is actually introduced (vision §10).
-- **RAG (Phase 10)** enters as a second implementation of the existing `KnowledgeRetrieval` port, complementing curated retrieval. Grounding and traceability are unaffected because retrieval only decides *which* knowledge is supplied to the pipeline.
+- **New business domains** are added as new curated Consulting Knowledge Base content scoped by `BusinessDomain`. The domain-agnostic engagement entities do not change, and the cross-domain Technology Knowledge Base is unaffected. The multi-domain abstraction is only elaborated when a second domain is actually introduced (vision §10).
+- **The Technology Knowledge Base (Phase 5A)** enters as a separate, **category-organized** subsystem behind its own `TechnologyRetrieval` port, with the Technology Curator as its sole, human-approved write path, **Technology Sources** as first-class provenance, and the Technology Update History as its append-only audit log. New Technology Categories and Technology Sources are added as curated data, not code changes. Engagement stages consume it exactly like the Consulting Knowledge Base — read-only, one-directional reference — so recommendations gain grounded technology and model suggestions without new engagement infrastructure, and without renumbering any existing phase.
+- **RAG (Phase 10)** enters as a second implementation of the existing `KnowledgeRetrieval` port over the Consulting Knowledge Base, complementing curated retrieval. Grounding and traceability are unaffected because retrieval only decides *which* knowledge is supplied to the pipeline.
 - **New LLM providers** are added as adapters behind the existing `LlmClient` abstraction (the provider union already anticipates `openai` and `anthropic`); orchestration, cost, and observability are unchanged.
 - **Production readiness (Phase 11)** — auth, deployment, hardening — layers around the stateless backend and existing observability without touching the domain.
 
@@ -309,7 +342,9 @@ Each seam corresponds to a roadmap boundary, so the roadmap can be executed phas
 
 - **Terminology migration is expected, not a redesign.** The existing `ClientCase` model is treated as the current, to-be-renamed embodiment of engagement state (roadmap Phase 0/1). This document assumes that rename/reshape rather than proposing a new product concept.
 - **Single-tenant, single-consultant for now.** Authentication, multi-user access, and tenancy are Phase 11 concerns; the architecture assumes one consultant/local operation until then, while keeping the backend stateless so multi-user is addable later.
-- **One PostgreSQL instance hosts both sides.** Knowledge and engagement data share a database but are separated by module/schema boundary and enforced reference direction; a physical split is not required at MVP.
+- **One PostgreSQL instance hosts all three groups.** The Consulting Knowledge Base, the Technology Knowledge Base, and engagement data share a database but are separated by module/schema boundary and enforced reference direction (engagement → each knowledge base, one-way); a physical split is not required at MVP.
+- **Technology Curator detection starts simple.** The Technology Curator's detection of vendor updates may be assisted or manual initially; an automated vendor-watch scheduler is deferred. What is fixed from Phase 5A is the human-approval gate and the provenance model: the only write to the Technology Knowledge Base is an approved Technology Update Proposal that references one or more **Technology Sources**, and each applied change appends a Technology Update History entry that preserves those source references.
+- **Category set is a starting point, not a fixed schema.** The initial Technology Categories (AI Models, AI Providers, Embedding Models, Speech, OCR, Vector Databases, Rerankers, MCP Servers, Browser / Computer Use, Workflow Engines, Evaluation Frameworks, Monitoring, Deployment Patterns) are curated data, not hard-coded types; categories can be added or nested through curation without a code change to engagement entities.
 - **Groq is the initial provider** behind the existing abstraction; `openai`/`anthropic` are already anticipated by the provider union and are added as adapters when needed.
 - **The `Json`-column strategy** for still-stabilizing stage outputs is acceptable in early phases; typed columns are introduced as shapes stabilize.
 
@@ -318,7 +353,8 @@ Each seam corresponds to a roadmap boundary, so the roadmap can be executed phas
 1. **Explicit four-layer architecture with an inward dependency rule**, extending the existing `routes → services → repositories/lib` layout by lifting business logic into a framework-free `domain/` package.
 2. **A single, shared AI orchestration pipeline** (build → call → parse → evaluate → persist draft → record run → trace) reused by every AI-assisted stage, so the cross-cutting cost/observability obligation is implemented once.
 3. **Analysis Run as the single recording mechanism** for all AI stages, with an additive `stage` association rather than per-stage bespoke logging.
-4. **Knowledge Base as a separate, read-only-from-engagement subsystem** with a `KnowledgeRetrieval` port; RAG later implements the same port. Domain scoping via a `BusinessDomain` field, without a plugin framework.
+4. **Two knowledge bases as separate, read-only-from-engagement subsystems.** The Consulting Knowledge Base (`KnowledgeRetrieval` port, `BusinessDomain`-scoped, without a plugin framework; RAG later implements the same port) and the independent, cross-domain, **category-organized** Technology Knowledge Base (`TechnologyRetrieval` port, scoped by `TechnologyCategory`). Kept separate because technology knowledge changes far more frequently than consulting knowledge.
+4a. **Technology Knowledge Base is category-based with source-attributed, human-approved curation.** Technology Profiles are organized under `TechnologyCategory` (not a flat list). The sole write path is the Technology Curator: detect from one or more **Technology Sources** → draft Technology Update Proposal referencing those sources (AI-assisted at most) → explicit human approval → apply → append a Technology Update History entry that preserves the source references. The proposal and the append-only history are the curation audit trail, deliberately not engagement Analysis Runs, preserving the "Analysis Run belongs to an engagement" invariant. Delivered as the Phase 5A extension without renumbering existing phases.
 5. **Grounding enforced structurally** by injecting deterministically retrieved knowledge into the prompt and capturing references on the produced content, making traceability a property of the pipeline rather than a hope.
 6. **Cost reporting derived by aggregation** from per-run recorded cost/tokens (per request → per engagement → lifetime), with no separate ledger.
 7. **Removal of the placeholder evaluation** so no fake quality score is presented as real; only objective signals are stored until a genuine evaluator exists (roadmap Phase 0).
@@ -332,8 +368,10 @@ Each seam corresponds to a roadmap boundary, so the roadmap can be executed phas
 - **Prompt/schema divergence.** A prompt template can drift from its Zod schema, causing avoidable parse failures. Mitigation: co-locate and version prompt + schema per stage; the fingerprint surfaces uncoordinated changes.
 - **Cost fidelity.** A single hard-coded rate in `calculateLlmCost` will misprice as models/providers diversify. Mitigation: move to a per-model/provider rate lookup behind the existing function before multi-model use.
 - **Observability coupling.** Care is needed that Langfuse or tracing failures never fail a consultant's stage; the best-effort/swallow discipline must be preserved as stages multiply.
+- **Technology Knowledge Base staleness vs. autonomy.** Because the only write path is human approval, the Technology Knowledge Base can lag fast-moving vendor releases if curation is neglected. Mitigation: keep detection cheap and proposals well-structured so approval is quick — but never relax the human-approval gate to chase currency; autonomous updates are out of scope by design.
+- **Curator write path leaking into engagements.** The value of the separation collapses if any engagement code can reach a Technology Knowledge Base write. Mitigation: expose only read access on the engagement side, keep the write path behind the curator's approved-proposal flow, and treat any engagement→knowledge write as a review-blocking defect.
 
 ## Files Created or Modified
 
 - **Created:** `docs/architecture.md` (this document).
-- **Modified:** none. No code was written or changed; no roadmap, vision, or domain-model edits were made.
+- **Revised (1.1):** updated to introduce the Technology Knowledge Base (category-organized), the Technology Curator (sole human-approved write path), first-class Technology Sources for provenance, and the append-only Technology Update History alongside the Consulting Knowledge Base, delivered as the Phase 5A extension. Existing roadmap phase numbers and the MVP boundary are unchanged (RAG stays Phase 10, Production Readiness Phase 11). No code was written or changed as part of this documentation revision.

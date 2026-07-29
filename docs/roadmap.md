@@ -1,6 +1,8 @@
 # Roadmap — AI Consulting Workbench
 
-Status: **Stable** · Version: 1.0 · Derived from [product-vision.md](./product-vision.md) and [domain-model.md](./domain-model.md).
+Status: **Stable** · Version: 1.1 · Derived from [product-vision.md](./product-vision.md) and [domain-model.md](./domain-model.md).
+
+> **Revision 1.1 (approved).** Phase 5 is renamed to the **Curated Consulting Knowledge Base**, and a **Phase 5A — Technology Knowledge Base & Technology Curator** extension is added alongside it (both are the curated-knowledge foundation that grounds recommendations). **No existing phase is renumbered and the MVP boundary is unchanged** (still after Phase 9): Phase 5A rides under the Phase 5 umbrella and precedes Phase 6 Solution Matching. The extension also introduces a **Technology Update History** audit log of approved Technology Knowledge Base revisions, separate from Analysis Runs.
 
 This roadmap is **implementation-independent**. It defines *what business capability* each phase delivers and *when*, in an order that respects the agreed product direction. It does not prescribe software architecture, frameworks, storage, APIs, or technology choices — those belong to `architecture.md`.
 
@@ -11,7 +13,7 @@ This roadmap is **implementation-independent**. It defines *what business capabi
 - **Each phase delivers one complete business capability** from the domain model, not a technical layer.
 - **The methodology is iterative, not a one-directional pipeline.** Later phases add re-entry and revision capability to stages delivered earlier; they do not replace them.
 - **Existing infrastructure is reused wherever possible.** Engagement persistence, analysis-run recording, prompt versioning/fingerprinting, and Langfuse tracing already exist and are extended by each phase rather than rebuilt. These are described in [Cross-cutting Capabilities](#cross-cutting-capabilities).
-- **Grounding order is fixed.** Recommendations are grounded in the curated Knowledge Base, so the curated Knowledge Base phase precedes solution matching. **RAG remains after the curated Knowledge Base phase**, as an enhancement over meaningful curated content — never as the initial retrieval mechanism.
+- **Grounding order is fixed.** Recommendations are grounded in the curated Consulting Knowledge Base, and the technologies and models they name are grounded in the Technology Knowledge Base — so the curated-knowledge foundation (Phase 5 and its Phase 5A extension) precedes solution matching (Phase 6). **RAG remains after the curated Consulting Knowledge Base phase**, as an enhancement over meaningful curated content — never as the initial retrieval mechanism.
 - **Cost tracking and observability are cross-cutting.** Wherever a phase introduces new AI-assisted functionality, that functionality is recorded as an **Analysis Run** with cost, token usage, latency, prompt version, and prompt fingerprint, and traced in Langfuse. This obligation applies to every phase that adds AI functionality and is stated once in [Cross-cutting Capabilities](#cross-cutting-capabilities).
 
 ## Roadmap Principle
@@ -89,7 +91,7 @@ Technical improvements are introduced only when they directly support business v
 - Capture the client's situation, operations, problems, current process, tools, data, constraints, and goals as structured discovery content.
 - Record not only what is known but **what is still missing**, so gaps are visible to the consultant.
 - Allow the Discovery Profile to be revised as understanding improves; it is re-entrant.
-- Shape discovery around the Customer Operations domain (its discovery questions and taxonomy are supplied by the Knowledge Base once curated in Phase 5; until then, discovery uses the agreed Customer Operations structure).
+- Shape discovery around the Customer Operations domain (its discovery questions and taxonomy are supplied by the Consulting Knowledge Base once curated in Phase 5; until then, discovery uses the agreed Customer Operations structure).
 
 **Definition of Done.**
 - A consultant can enter, save, and revise a Discovery Profile on an engagement.
@@ -152,23 +154,23 @@ Technical improvements are introduced only when they directly support business v
 
 ---
 
-## Phase 5 — Curated Knowledge Base
+## Phase 5 — Curated Consulting Knowledge Base
 
 **Goal.** Establish the reusable, engagement-independent consulting knowledge that grounds recommendations, with deterministic retrieval.
 
-**Business capability.** Curate and retrieve the **Knowledge Base**, scoped to the Customer Operations business domain.
+**Business capability.** Curate and retrieve the **Consulting Knowledge Base**, scoped to the Customer Operations business domain.
 
 **Scope.**
-- Hold the agreed kinds of reusable knowledge: **Business Domains**, **Business Processes**, **Business Problems**, **Customer Operations Taxonomy**, **Discovery Questions**, **Assessment Frameworks**, **AI Readiness Criteria**, **AI Use Cases**, **Solution Patterns**, **Implementation Patterns**, **Technology Profiles**, **ROI Models**, **Risk Models**, **Best Practices**, and **Follow-up Templates**.
-- Keep the Knowledge Base **strictly separate** from engagement state: engagements reference knowledge; knowledge never depends on an engagement.
+- Hold the agreed kinds of reusable consulting knowledge: **Business Domains**, **Business Processes**, **Business Problems**, **Customer Operations Taxonomy**, **Discovery Questions**, **Assessment Frameworks**, **AI Readiness Criteria**, **AI Use Cases**, **Solution Patterns**, **Implementation Patterns**, **ROI Models**, **Risk Models**, **Best Practices**, and **Follow-up Templates**. (**Technology Profiles** live in the separate Technology Knowledge Base — Phase 5A.)
+- Keep the Consulting Knowledge Base **strictly separate** from engagement state: engagements reference knowledge; knowledge never depends on an engagement.
 - Provide **curated, structured, deterministic retrieval and matching** — no embeddings, no semantic retrieval at this phase.
 - Curation is a deliberate activity, separate from running an engagement.
 - Feed earlier stages that reference knowledge (discovery questions shape Discovery; frameworks and AI-readiness criteria shape Assessment).
 
 **Definition of Done.**
-- The Knowledge Base exists as a reusable asset with Customer Operations content, independent of any engagement.
+- The Consulting Knowledge Base exists as a reusable asset with Customer Operations content, independent of any engagement.
 - Deterministic retrieval returns relevant knowledge for a given engagement context.
-- Discovery and Assessment can draw on Knowledge Base questions, frameworks, and criteria.
+- Discovery and Assessment can draw on Consulting Knowledge Base questions, frameworks, and criteria.
 - **RAG is explicitly out of scope here and follows in Phase 10.**
 
 **Success Criteria**
@@ -177,27 +179,62 @@ Technical improvements are introduced only when they directly support business v
 
 ---
 
+## Phase 5A — Technology Knowledge Base & Technology Curator
+
+> **Extension of Phase 5, not a renumbering.** Phase 5A rides under the Phase 5 curated-knowledge umbrella: it delivers the second curated-knowledge foundation that grounds recommendations. It is placed here — before Phase 6 Solution Matching — so recommendations can ground their technology and model suggestions, without shifting any existing phase number or the MVP boundary. It may be delivered concurrently with, or immediately after, Phase 5.
+
+**Goal.** Establish the reusable, engagement-independent, frequently-updated knowledge about AI technologies and models that grounds the technology and model choices in recommendations — kept separate from the Consulting Knowledge Base and updated only under explicit human approval.
+
+**Business capability.** Curate and retrieve the **Technology Knowledge Base**, and maintain it through the human-approved **Technology Curator** workflow, recording every approved revision in a **Technology Update History**.
+
+**Scope.**
+- Hold **Technology Profiles** for AI technologies and models — for example LLMs, embedding models, speech models, OCR, rerankers, vector databases, MCP servers, browser/computer-use frameworks, and workflow engines — each describing role, strengths, limitations, and suitability.
+- Keep the Technology Knowledge Base **independent from the Consulting Knowledge Base** (it changes far more frequently) and **strictly separate** from engagement state; engagements reference it, it never depends on an engagement.
+- Provide **curated, structured, deterministic retrieval** so the technologies and models named in recommendations are grounded, not invented.
+- Support **dynamic updates from trusted official sources**, but **never autonomous ones**, through the **Technology Curator** workflow:
+  1. **Detect** a candidate update from a trusted official vendor source.
+  2. **Generate a structured Technology Update Proposal** recording the change and its source (AI may draft the proposal; it does no more).
+  3. **Require explicit human approval** of the proposal.
+  4. **Only then update** the Technology Knowledge Base, and record the applied change in the **Technology Update History**.
+- The Technology Update Proposal is the Technology Knowledge Base's governance trail for a *proposed* change (source, proposed change, approval decision); it is **not** an engagement-scoped Analysis Run.
+- The **Technology Update History** is an **append-only audit log of approved, applied revisions only** — what changed, from which approved proposal and official source, by whom, and when. It records approved KB revisions; it does not record proposals that were rejected, and it is separate from Analysis Runs.
+- Initial detection may be assisted or manual; automated scheduling of detection is not required at this phase (build for the phase in front of you).
+
+**Definition of Done.**
+- The Technology Knowledge Base exists as a reusable asset with Technology Profiles, independent of any engagement and of the Consulting Knowledge Base.
+- Deterministic retrieval returns relevant Technology Profiles for a given context.
+- Every update to the Technology Knowledge Base flows through a Technology Update Proposal that a human explicitly approves; there is no code path by which AI or an engagement writes to it autonomously.
+- Each Technology Update Proposal records the official source it derives from and its approval decision.
+- Every approved, applied update is recorded as an append-only **Technology Update History** entry (change, source, approver, timestamp), separate from Analysis Runs.
+
+**Success Criteria**
+- Relevant technology and model knowledge can be found deterministically and is reusable across engagements.
+- The Technology Knowledge Base can be kept current from official sources without ever being updated autonomously.
+- Every applied change is traceable to a human-approved proposal, its source, and a Technology Update History entry.
+
+---
+
 ## Phase 6 — Solution Matching & Grounded Recommendations
 
 **Goal.** Connect prioritized opportunities to reusable knowledge to produce grounded, explainable, editable recommendations.
 
-**Business capability.** Produce **Recommendations** grounded in the Knowledge Base.
+**Business capability.** Produce **Recommendations** grounded in the Consulting Knowledge Base, with technology and model suggestions grounded in the Technology Knowledge Base.
 
 **Scope.**
-- Match Opportunities against the Knowledge Base (**AI Use Cases**, **Solution Patterns**, **Technology Profiles**) using the curated retrieval from Phase 5.
-- Each Recommendation carries **rationale, assumptions, confidence, and expected value**, and is **traceable** both backward to Discovery Profile facts and to the Knowledge Base entries that justify it.
-- Recommendations copy the reasoning into engagement-specific content but never modify the Knowledge Base (one-directional reference).
+- Match Opportunities against the Consulting Knowledge Base (**AI Use Cases**, **Solution Patterns**) using the curated retrieval from Phase 5, and draw on the Technology Knowledge Base (**Technology Profiles**, Phase 5A) to recommend implementation technologies and suitable AI models with explanations.
+- Each Recommendation carries **rationale, assumptions, confidence, and expected value**, and is **traceable** backward to Discovery Profile facts, to the Consulting Knowledge Base entries that justify its approach, and to the Technology Knowledge Base entries behind any technologies or models it names.
+- Recommendations copy the reasoning into engagement-specific content but never modify either knowledge base (one-directional reference).
 - Recommendations are **editable and overridable** by the consultant.
 - AI-assisted matching runs are recorded and observed per [Cross-cutting Capabilities](#cross-cutting-capabilities).
 
 **Definition of Done.**
 - A consultant can generate, review, edit, and accept Recommendations for prioritized Opportunities.
-- Every Recommendation is traceable to the discovery facts and Knowledge Base knowledge that ground it, and grounding is visible.
+- Every Recommendation is traceable to the discovery facts, Consulting Knowledge Base knowledge, and (where technologies or models are named) Technology Knowledge Base entries that ground it, and grounding is visible.
 - Assumptions and confidence are surfaced; the consultant can override any recommendation.
 - Each matching run is recorded as an Analysis Run and traced in Langfuse.
 
 **Success Criteria**
-- Every recommendation references the Knowledge Base.
+- Every recommendation references the Consulting Knowledge Base, and any technology or model it names references a Technology Profile.
 - Every recommendation contains rationale.
 - Every recommendation contains confidence.
 
@@ -212,7 +249,7 @@ Technical improvements are introduced only when they directly support business v
 **Scope.**
 - Organize accepted **Recommendations** into an ordered set of phases or steps with goals and dependencies.
 - Reflect the engagement's prioritization and the client's readiness.
-- Draw on **Implementation Patterns** from the Knowledge Base to inform realistic sequencing and effort expectations.
+- Draw on **Implementation Patterns** from the Consulting Knowledge Base to inform realistic sequencing and effort expectations.
 - The Roadmap is re-assembled when recommendations change.
 
 **Definition of Done.**
@@ -235,7 +272,7 @@ Technical improvements are introduced only when they directly support business v
 **Scope.**
 - Assemble discovery, assessment, prioritized problems, grounded recommendations, roadmap, and follow-up questions into one coherent, client-ready document.
 - The report is **editable** by the consultant and **versioned**, preserving exactly what was reviewed and delivered at each iteration.
-- Turn outstanding gaps and missing information into **Follow-up Questions** for the client, using the Knowledge Base's follow-up templates.
+- Turn outstanding gaps and missing information into **Follow-up Questions** for the client, using the Consulting Knowledge Base's follow-up templates.
 - Any AI-assisted assembly or drafting runs are recorded and observed per [Cross-cutting Capabilities](#cross-cutting-capabilities).
 
 **Definition of Done.**
@@ -275,15 +312,15 @@ Technical improvements are introduced only when they directly support business v
 
 ---
 
-## Phase 10 — RAG Enhancement over the Knowledge Base
+## Phase 10 — RAG Enhancement over the Consulting Knowledge Base
 
-**Goal.** Enhance grounding with semantic retrieval once the curated Knowledge Base holds meaningful content.
+**Goal.** Enhance grounding with semantic retrieval once the curated Consulting Knowledge Base holds meaningful content.
 
-**Business capability.** Add **semantic (RAG) retrieval** as an enhancement to Knowledge Base grounding, alongside the existing curated retrieval.
+**Business capability.** Add **semantic (RAG) retrieval** as an enhancement to Consulting Knowledge Base grounding, alongside the existing curated retrieval.
 
 **Scope.**
-- Introduce embeddings and semantic retrieval over the curated Knowledge Base to improve matching in discovery grounding, assessment, and solution matching.
-- **RAG complements the curated Knowledge Base; it does not replace it.** The curated, structured knowledge and the traceability of grounding remain intact.
+- Introduce embeddings and semantic retrieval over the curated Consulting Knowledge Base to improve matching in discovery grounding, assessment, and solution matching.
+- **RAG complements the curated Consulting Knowledge Base; it does not replace it.** The curated, structured knowledge and the traceability of grounding remain intact. The Technology Knowledge Base remains structured and deterministically retrieved; extending RAG to it is not required here.
 - Recommendations remain grounded and **traceable** to the specific knowledge that justifies them, regardless of retrieval mechanism.
 - Retrieval and any AI-assisted steps introduced here are recorded and observed per [Cross-cutting Capabilities](#cross-cutting-capabilities).
 
@@ -333,9 +370,11 @@ Technical improvements are introduced only when they directly support business v
 
 ## Cross-cutting Capabilities
 
-These capabilities are **not phases**. They apply across multiple phases and are delivered wherever a phase introduces new AI-assisted functionality. They are built on **existing infrastructure that is reused and extended**, never rebuilt per phase. Any phase that adds AI functionality (Phases 3, 6, 8, 9, 10, and any later AI-assisted step) must satisfy every item below for that functionality; this obligation is stated here once rather than repeated in each phase.
+These capabilities are **not phases**. They apply across multiple phases and are delivered wherever a phase introduces new AI-assisted functionality within an engagement. They are built on **existing infrastructure that is reused and extended**, never rebuilt per phase. Any phase that adds engagement AI functionality (Phases 3, 6, 8, 9, 10, and any later AI-assisted engagement step) must satisfy every item below for that functionality; this obligation is stated here once rather than repeated in each phase.
 
-**Cost tracking and observability are mandatory for every new AI-assisted capability.** No phase may introduce AI functionality without capturing the signals below; this is a non-negotiable acceptance criterion for Phases 3, 6, 8, 9, 10, and any later AI-assisted step.
+**Cost tracking and observability are mandatory for every new AI-assisted engagement capability.** No phase may introduce engagement AI functionality without capturing the signals below; this is a non-negotiable acceptance criterion for Phases 3, 6, 8, 9, 10, and any later AI-assisted engagement step.
+
+**The Technology Curator (Phase 5A) is a special case.** Its proposal-drafting may be AI-assisted, but it is a cross-engagement curation activity, not an engagement stage — so it does **not** produce an engagement-scoped Analysis Run. Its governance trail is the **Technology Update Proposal** (source, proposed change, human approval decision) and, for approved changes, the **Technology Update History**, rather than an Analysis Run. The Analysis Run below remains strictly engagement-scoped.
 
 Every AI-assisted step in the product is represented as an **Analysis Run** — a record *about* the assistance, belonging to the engagement and associated with the stage or output it supported. The following are captured on that record and surfaced for governance and trust:
 
@@ -361,11 +400,11 @@ Because these capabilities already exist in the current foundation (engagement-s
 
 ## MVP Boundary
 
-The product is considered **functionally complete as an MVP after Phase 9**. By that point, the full consulting methodology is supported end to end — from discovery through assessment, prioritization, grounded recommendations, roadmap, and a versioned client-ready report, including the iterative feedback loop that lets an engagement evolve after delivery.
+The product is considered **functionally complete as an MVP after Phase 9**. By that point, the full consulting methodology is supported end to end — from discovery through assessment, prioritization, grounded recommendations (with technologies and models grounded in the Technology Knowledge Base), roadmap, and a versioned client-ready report, including the iterative feedback loop that lets an engagement evolve after delivery. The two curated knowledge bases (Consulting and Technology) that ground that methodology are in place by Phase 5 and its Phase 5A extension.
 
 The phases beyond the MVP are deliberately separated from that core:
 
-- **Phase 10 (RAG Enhancement)** improves the *quality* of knowledge retrieval, but adds no new business capability the consultant did not already have.
+- **Phase 10 (RAG Enhancement)** improves the *quality* of Consulting Knowledge Base retrieval, but adds no new business capability the consultant did not already have.
 - **Phase 11 (Production Readiness)** prepares the product for real-world deployment and operation, rather than extending the methodology.
 
 Drawing the MVP boundary here allows the consulting methodology to be **validated with real engagements before investing in advanced retrieval and production infrastructure**. If the methodology proves its value, RAG and production hardening are the natural next investments; if it needs adjustment, that is learned before those investments are made.
