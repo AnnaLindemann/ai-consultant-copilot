@@ -1,6 +1,8 @@
 import EngagementAnalysisPanel from "../../../components/EngagementAnalysisPanel"
 import EngagementStageControl from "../../../components/EngagementStageControl"
+import DiscoveryProfileEditor from "../../../components/DiscoveryProfileEditor"
 import { STAGE_LABELS, type EngagementStage } from "../../../lib/engagement-stage"
+import type { DiscoveryProfile } from "../../../../shared/discovery-profile.schema"
 
 type EngagementDetails = {
   id: string
@@ -11,6 +13,33 @@ type EngagementDetails = {
   desiredOutcome: string | null
   sensitiveData: boolean | null
   gdprConcerns: boolean | null
+  department: string | null
+  painPoints: string[] | null
+  affectedUsers: string[] | null
+  businessImpact: string | null
+  urgency: DiscoveryProfile["urgency"]
+  processSteps: string[] | null
+  processFrequency: DiscoveryProfile["processFrequency"]
+  manualWorkLevel: DiscoveryProfile["manualWorkLevel"]
+  bottlenecks: string[] | null
+  currentTools: string[] | null
+  communicationChannels: string[] | null
+  integrationNeeds: string[] | null
+  dataTypes: string[] | null
+  dataLocation: string[] | null
+  dataAvailability: DiscoveryProfile["dataAvailability"]
+  dataQuality: DiscoveryProfile["dataQuality"]
+  sensitiveDataTypes: string[] | null
+  budgetAmount: string | null
+  budgetCurrency: DiscoveryProfile["budgetCurrency"]
+  budgetNotes: string | null
+  timeline: DiscoveryProfile["timeline"]
+  humanApprovalRequired: boolean | null
+  technicalConstraints: string[] | null
+  successMetrics: string[] | null
+  mvpScope: string | null
+  notes: string | null
+  missingInformation: DiscoveryProfile["missingInformation"] | null
   createdAt: string
   updatedAt: string
   organization: {
@@ -60,6 +89,7 @@ export default async function EngagementDetailsPage({
   }
 
   const engagement = result.data
+  const discoveryProfile = toDiscoveryProfile(engagement)
 
   return (
     <main style={pageStyle}>
@@ -96,9 +126,50 @@ export default async function EngagementDetailsPage({
           />
         </div>
       </section>
+      <DiscoveryProfileEditor
+        engagementId={engagement.id}
+        initialProfile={discoveryProfile}
+      />
       <EngagementAnalysisPanel engagementId={engagement.id} />
     </main>
   )
+}
+
+function toDiscoveryProfile(engagement: EngagementDetails): DiscoveryProfile {
+  return {
+    department: engagement.department,
+    statedProblem: engagement.statedProblem,
+    painPoints: engagement.painPoints ?? [],
+    affectedUsers: engagement.affectedUsers ?? [],
+    businessImpact: engagement.businessImpact,
+    urgency: engagement.urgency,
+    currentProcess: engagement.currentProcess,
+    processSteps: engagement.processSteps ?? [],
+    processFrequency: engagement.processFrequency,
+    manualWorkLevel: engagement.manualWorkLevel,
+    bottlenecks: engagement.bottlenecks ?? [],
+    currentTools: engagement.currentTools ?? [],
+    communicationChannels: engagement.communicationChannels ?? [],
+    integrationNeeds: engagement.integrationNeeds ?? [],
+    dataTypes: engagement.dataTypes ?? [],
+    dataLocation: engagement.dataLocation ?? [],
+    dataAvailability: engagement.dataAvailability,
+    dataQuality: engagement.dataQuality,
+    sensitiveData: engagement.sensitiveData,
+    sensitiveDataTypes: engagement.sensitiveDataTypes ?? [],
+    gdprConcerns: engagement.gdprConcerns,
+    budgetAmount: engagement.budgetAmount === null ? null : Number(engagement.budgetAmount),
+    budgetCurrency: engagement.budgetCurrency,
+    budgetNotes: engagement.budgetNotes,
+    timeline: engagement.timeline,
+    humanApprovalRequired: engagement.humanApprovalRequired,
+    technicalConstraints: engagement.technicalConstraints ?? [],
+    desiredOutcome: engagement.desiredOutcome,
+    successMetrics: engagement.successMetrics ?? [],
+    mvpScope: engagement.mvpScope,
+    notes: engagement.notes,
+    missingInformation: engagement.missingInformation ?? [],
+  }
 }
 
 function formatBoolean(value: boolean | null): string {

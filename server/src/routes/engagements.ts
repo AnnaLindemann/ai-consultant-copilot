@@ -1,4 +1,5 @@
 import { Router } from "express"
+import { discoveryProfileSchema } from "../../../shared/discovery-profile.schema.js"
 
 import {
   createEngagementSchema,
@@ -13,6 +14,7 @@ import {
 import { getOrganizationById } from "../repositories/organization.repository.js"
 import { analyzeEngagement } from "../services/analysis.service.js"
 import { getAnalysisRunsByEngagementId } from "../repositories/analysis-run.repository.js"
+import { saveDiscoveryProfile } from "../services/discovery.service.js"
 
 const router = Router()
 
@@ -132,6 +134,48 @@ router.patch("/:id", async (req, res) => {
     })
   } catch (error) {
     console.error("SAVE ENGAGEMENT ERROR:", error)
+
+    return res.status(500).json({
+      status: false,
+      message: "Internal server error",
+    })
+  }
+})
+
+// Save the Engagement-owned Discovery Profile as a complete snapshot. Values
+// may be cleared back to null/empty lists as understanding changes, and gaps
+// are explicit data rather than inferred or invented by the application.
+router.patch("/:id/discovery", async (req, res) => {
+  const parseResult = discoveryProfileSchema.safeParse(req.body)
+  if (!parseResult.success) {
+    return res.status(400).json({
+      status: false,
+      message: "invalid discovery profile",
+      errors: parseResult.error.flatten(),
+    })
+  }
+
+  try {
+    const existing = await getEngagementById(req.params.id)
+    if (!existing) {
+      return res.status(404).json({
+        status: false,
+        message: "Engagement not found",
+      })
+    }
+
+    const engagement = await saveDiscoveryProfile(
+      req.params.id,
+      parseResult.data,
+    )
+
+    return res.json({
+      status: true,
+      message: "Discovery Profile saved",
+      data: engagement,
+    })
+  } catch (error) {
+    console.error("SAVE DISCOVERY PROFILE ERROR:", error)
 
     return res.status(500).json({
       status: false,

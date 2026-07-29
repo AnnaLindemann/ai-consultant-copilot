@@ -6,6 +6,7 @@ import type {
   CreateEngagementInput,
   UpdateEngagementInput,
 } from "../schemas/engagement.schema.js"
+import type { DiscoveryProfile } from "../../../shared/discovery-profile.schema.js"
 
 // Persistence for the Engagement aggregate — the single engagement store that
 // later phases attach their stage content to, not a parallel store (roadmap
@@ -80,6 +81,19 @@ export const updateEngagement = async (
   return prisma.engagement.update({
     where: { id },
     data: input,
+    include: { organization: true },
+  })
+}
+
+// Persist the complete Discovery Profile as one re-entrant stage update. The
+// fields remain on the Engagement aggregate; this is not a second state store.
+export const updateEngagementDiscovery = async (
+  id: string,
+  discoveryProfile: DiscoveryProfile,
+) => {
+  return prisma.engagement.update({
+    where: { id },
+    data: discoveryProfile,
     include: { organization: true },
   })
 }

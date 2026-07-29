@@ -12,8 +12,14 @@ fingerprint, token usage, latency, and cost — and traced in Langfuse.
 > **Terminology.** An **Organization** groups a client's engagements (identity
 > and context only, not a CRM). An **Engagement** is the primary business entity
 > and single source of truth for a client's work; it tracks its methodology
-> `stage`. See [`docs/domain-model.md`](docs/domain-model.md) for the full
-> ubiquitous language.
+> `stage`. Recommendations are grounded in two separate, reusable knowledge
+> bases: a **Consulting Knowledge Base** (stable consulting methodology
+> knowledge) and a **Technology Knowledge Base** (fast-changing AI-technology
+> knowledge, updated only through the human-approved **Technology Curator**).
+> Both are documented in the domain model and roadmap and are delivered in later
+> phases; they are not yet implemented. See
+> [`docs/domain-model.md`](docs/domain-model.md) for the full ubiquitous
+> language.
 
 The project is a monorepo with two parts:
 
@@ -83,8 +89,10 @@ npm run dev --prefix client
 ```
 
 Open <http://localhost:3000> to create an organization, open an engagement for
-it, and run an analysis, or <http://localhost:3000/engagements> to list and
-resume existing engagements.
+it, complete and revise its Customer Operations Discovery Profile, and run an
+analysis, or <http://localhost:3000/engagements> to list and resume existing
+engagements. Discovery records both known facts and explicit missing
+information so a later session resumes with the same profile and gaps.
 
 ## Backend API
 
@@ -101,6 +109,7 @@ Base URL: `http://localhost:8787`
 | POST   | `/engagements`                    | Open an engagement under an organization.      |
 | GET    | `/engagements/:id`                | Get one engagement (resume its state).         |
 | PATCH  | `/engagements/:id`                | Save an engagement (edit content and/or stage).|
+| PATCH  | `/engagements/:id/discovery`      | Save the complete, revisable Discovery Profile.|
 | POST   | `/engagements/:id/analyze`        | Run the AI analysis for an engagement.         |
 | GET    | `/engagements/:id/analysis-runs`  | List the engagement's Analysis Runs.           |
 

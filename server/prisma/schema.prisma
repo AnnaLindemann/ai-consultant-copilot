@@ -100,7 +100,7 @@ model Organization {
 //
 // Company-level identity/context (name, industry, size, geography) lives on the
 // Organization, not here. The physical table was renamed from the legacy
-// `ClientCase` in this phase (architecture.md §6), so no `@@map` remains.
+// `ClientCase` in Phase 1 (architecture.md §6), so no `@@map` remains.
 model Engagement {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
@@ -119,8 +119,9 @@ model Engagement {
 
   department String?
 
-  // Problem. Discovery content is optional: an empty engagement is a valid,
-  // working Phase 1 state (roadmap Phase 1 DoD). Phase 2 formalizes Discovery.
+  // Discovery Profile. Stable facts use typed columns while evolving nested
+  // lists use validated Json fields (architecture.md §6). Explicit gaps are
+  // persisted alongside known facts so discovery can be resumed and revised.
   statedProblem  String?
   painPoints     Json?
   affectedUsers  Json?
@@ -157,10 +158,11 @@ model Engagement {
   technicalConstraints  Json?
 
   // Goals
-  desiredOutcome String?
-  successMetrics Json?
-  mvpScope       String?
-  notes          String?
+  desiredOutcome     String?
+  successMetrics     Json?
+  mvpScope           String?
+  notes              String?
+  missingInformation Json?
 
   @@index([organizationId])
   @@index([stage])
