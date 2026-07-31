@@ -3,8 +3,9 @@
 Status: **Frozen** · Version: 1.2 · This document defines the product vision only. It does not define software architecture, roadmap, or implementation details.
 
 > **Revision 1.2 (approved).** Extends the vision in three ways, changing no existing principle:
-> - **The workbench becomes multi-user and workspace-bounded.** A **Workspace** is the ownership boundary; users hold one of three roles — **Administrator**, **Manager**, **Client** — and a **Client** takes part in exactly one thing: completing the Discovery form associated with their own self-registration, through a bounded **Client Discovery Portal** (§4A).
+> - **The workbench becomes multi-user and workspace-bounded.** A **Workspace** is the ownership boundary; users hold one of three roles — **Administrator**, **Manager**, **Client** — and a **Client** takes part in exactly one thing: completing the Discovery form associated with their own self-registration, through a bounded **Client Portal** (§4A).
 > - **Discovery is quantified and reviewable.** Discovery captures what the client's problem costs today and what success would measurably look like, and moves through a **draft / submit / return** review workflow whether the consultant or the client filled it in (§5).
+> - **The Client Portal is a bounded engagement surface, not a CRM.** It lets a client complete Discovery, monitor engagement status, receive notifications, and access manager-published documents through a clean Dashboard / Discovery / Documents / Profile experience (§4B, §8).
 > - **The MVP ships in German, on an internationalization-ready foundation** (§8A).
 >
 > **Revision 1.1 (approved).** Introduces a separate **Technology Knowledge Base** alongside the existing **Consulting Knowledge Base**, and the **Technology Curator** workflow that updates it under explicit human approval, keeping an audit history of approved updates. The Technology Knowledge Base is **hierarchical and category-based**, and updates are attributed to explicit **Technology Sources** (official vendor origins). No other part of the vision, and no existing principle, is changed.
@@ -25,7 +26,7 @@ The workbench assists the consultant through a structured consulting methodology
 
 The primary user is an **AI Consultant** engaged by a client to identify and recommend AI opportunities in the client's operations. The consultant remains the expert and the decision-maker at all times; the tool accelerates and structures their work, it does not replace their judgment.
 
-Consultants rarely work entirely alone, and clients hold information the consultant needs. The product therefore supports **a consulting team working side by side inside a Workspace**, and **a bounded form of client participation**: a self-registered client may complete the Discovery form for their own engagement and nothing else. The consultant remains the only person who decides what the engagement concludes (§4A).
+Consultants rarely work entirely alone, and clients hold information the consultant needs. The product therefore supports **a consulting team working side by side inside a Workspace**, and **a bounded form of client participation**: a self-registered client may complete the Discovery form for their own engagement and, through the Client Portal, see only the engagement surface approved for them. The consultant remains the only person who decides what the engagement concludes (§4A, §4B).
 
 ---
 
@@ -76,17 +77,39 @@ The workbench holds real client information, and more than one person touches it
 
 - **Administrator** — sees **all engagements in their own workspace** and manages that workspace's people, roles, engagement ownership, and client access associations.
 - **Manager** — the consultant role. Runs engagements and sees **only the engagements they own**. A colleague's engagement is not theirs to open.
-- **Client** — an external participant with **no access to the workbench**. A client reaches exactly one thing: the **Discovery form of the engagement they are associated with after self-registration**.
+- **Client** — an external participant with **no access to the workbench**. A client reaches only the **Client Portal** for the engagement they are associated with after self-registration.
 
 The role identifiers are `ADMIN`, `MANAGER`, and `CLIENT`; this document uses the human-readable role names above when reading more naturally.
 
-**Client participation is bounded and self-registered.** A client contributes through self-registration to one engagement's Discovery, in a dedicated **Client Discovery Portal** that shows them their own discovery form and nothing else — no assessment, no opportunities, no recommendations, no roadmap, no report, no other engagement, no other client. The client contributes facts; the consultant decides what the engagement makes of them.
+**Client participation is bounded and self-registered.** A client contributes through self-registration to one engagement's Discovery, in a dedicated **Client Portal** that shows them only the engagement surfaces approved for them — Dashboard, Discovery, Documents, and Profile — and nothing else. The client contributes facts; the consultant decides what the engagement makes of them.
 
 **Authentication is separate from consulting domain state.** The product keeps authentication data, sessions, verification, password reset, and invitation handling behind a dedicated infrastructure boundary. Clients self-register, confirm their email, and create their own password. Managers and additional administrators are created by an administrator and receive an invitation link to set their own password. The first administrator is created through a secure bootstrap process. Administrators never create, know, store, or view users' permanent passwords.
 
 **Access is decided by the system, not by the screen.** What a person may see and do is enforced by the product itself, on every action. Hiding a button is not a safeguard. And because client work is at stake, the product keeps a permanent record of the events that matter — who was invited, who submitted, who returned, who accepted, who was denied.
 
 This is an ownership and confidentiality model, not an administration product: the roles are few by design, and the workbench does not become an identity or permission-management system (see §10).
+
+---
+
+## 4B. Client Portal and document publishing
+
+The **Client Portal** is a bounded part of the Engagement, not a CRM and not a general collaboration workspace.
+
+- It gives the client a focused surface to **complete Discovery**, **monitor engagement status**, **receive notifications**, and **access manager-published documents**.
+- Its approved sections are **Dashboard**, **Discovery**, **Documents**, and **Profile**.
+- The **Documents** section is read-only. Clients can **view** and **download PDF** versions of published documents, but they cannot edit a manager document, upload changes, or replace the manager's version.
+- Only **Published** documents are visible to clients.
+- Document publication is explicit: the client submits Discovery, the manager reviews it, AI may generate a draft proposal, the manager reviews and edits it, and the manager explicitly publishes the document. The system stores the published version and sends an email notification that includes a link back to the Client Portal.
+
+The document lifecycle is:
+
+1. Draft
+2. Manager Review
+3. Approved
+4. Published
+5. Archived
+
+The manager can revoke a publication, but revocation removes client visibility rather than rewriting history. The administrator sees publication history, document permissions, and storage policy decisions so the portal remains governable without becoming a CRM.
 
 ---
 
@@ -194,7 +217,7 @@ AI output is treated as a reviewed draft, never as an unquestioned final answer.
 
 ## 8. The deliverable
 
-The output of an engagement is a **professional, client-ready consultant report** that a consultant can confidently place in front of a client. It assembles the discovery, assessment, prioritized problems, grounded recommendations, implementation roadmap, and follow-up questions into a coherent deliverable, is editable by the consultant, and is versioned.
+The output of an engagement is a **professional, client-ready consultant report** that a consultant can confidently place in front of a client. It assembles the discovery, assessment, prioritized problems, grounded recommendations, implementation roadmap, and follow-up questions into a coherent deliverable, is editable by the consultant, versioned, and published explicitly when the manager decides it is ready for the Client Portal.
 
 ---
 
@@ -225,10 +248,11 @@ These commitments are frozen and serve as the foundation for all future document
 7. **Human-in-the-loop.** Editable recommendations, versioned reports, and always-visible assumptions, confidence, and gaps. Client-provided discovery is held to the same rule: reviewed by the consultant before it counts.
 8. **Domain-first, extensible.** Customer Operations is implemented concretely first; additional domains can be added without redesign.
 9. **Workspace-bounded, least-privilege access.** The Workspace is the ownership boundary; an Administrator sees their own workspace, a Manager only the engagements they own, a Client only the Discovery form they are associated with through self-registration. Access is enforced by the product on every action, and access events are recorded.
-10. **Bounded client participation.** A client contributes at exactly one point — Discovery — by invitation, through a portal that shows them nothing else. Participation never becomes visibility into the consultant's analysis or deliverable.
+10. **Bounded client participation.** A client contributes at exactly one point — Discovery — by invitation, through a Client Portal that shows them only Dashboard, Discovery, Documents, and Profile for their own engagement. Participation never becomes visibility into another engagement, or into unpublished consultant work.
 11. **Measured value.** Discovery records what the problem costs today and what success would measurably look like — and records the absence of a baseline as a finding rather than passing over it.
 12. **German-first, localization-ready.** The MVP interface is German; the product is built so that further languages are translation, not redesign, and its internal vocabulary stays English.
 13. **Authentication is separate from consulting data.** Passwords, sessions, verification, resets, and invitation handling live behind a dedicated infrastructure boundary. Administrators never create, know, store, or view users' permanent passwords.
+14. **Clean, process-oriented UI.** The approved UI feels like a focused SaaS workspace, inspired by Linear and Notion: an engagement pipeline, a clear visual hierarchy, design tokens, and reusable components instead of one-off screens.
 
 ---
 
@@ -242,7 +266,8 @@ To keep the vision stable and focused, the following are deliberately deferred (
 - **Autonomous updates to the Technology Knowledge Base.** Every change requires explicit human approval through the Technology Curator; there is no self-updating knowledge.
 - **Any PromptOps or AI-engineering platform capability.** The workbench curates *knowledge about* technologies to inform recommendations; it does not build, benchmark, deploy, evaluate, or operate them.
 - **Additional interface languages.** The MVP is German-only; the architecture is prepared for more, but no second language is delivered.
-- **Client access beyond their own Discovery form.** No client-facing dashboard, deliverable sharing, messaging, or project portal. A client sees their own discovery form and nothing else.
+- **Client access beyond their own engagement surfaces.** No client may see another engagement, and no client may edit manager documents. The Client Portal stays bounded to Dashboard, Discovery, Documents, and Profile, with only published documents visible.
+- **General CRM or collaboration behavior.** The Client Portal is bounded to one engagement and remains limited to Dashboard, Discovery, Documents, and Profile, with read-only access to published documents only.
 - **Enterprise identity federation.** The product's initial authentication boundary is separate from the consulting domain and handles sign-up, passwords, sessions, verification, reset, and invitation links; SSO and external identity-provider integration are deferred.
 - **A general permission or administration framework.** Three roles, deliberately few — no custom roles, permission matrices, groups, delegation, or per-field access rules.
 - **Cross-workspace sharing.** Engagements, clients, and their data do not move or become visible between workspaces.

@@ -4,8 +4,9 @@ Status: **Stable** · Version: 1.2 · Derived from [product-vision.md](./product
 
 > **Revision 1.2 (approved).** Introduces the **access and collaboration side** of the domain and deepens Discovery:
 > - **Workspace** becomes the **ownership and isolation boundary** for all engagement-side concepts. A **User** holds one of three roles — **Administrator** (all engagements in their workspace), **Manager** (only the engagements they own), **Client** (only the Discovery form associated with their own self-registration). **Engagement Ownership** is explicit: every engagement belongs to one workspace and has one owning Manager.
-> - Adds **Discovery Access**, the **Client Discovery Portal** as a bounded client-facing surface, the discovery **Draft / Submit / Return** collaboration workflow, **Notification**, and an append-only **Audit Trail** — the third governance record, distinct from the engagement-scoped **Analysis Run** and the curation-scoped **Technology Update History**.
+> - Adds **Discovery Access**, the **Client Portal** as a bounded client-facing surface, the discovery **Draft / Submit / Return** collaboration workflow, **Notification**, and an append-only **Audit Trail** — the third governance record, distinct from the engagement-scoped **Analysis Run** and the curation-scoped **Technology Update History**.
 > - The **Discovery Profile** gains a **value & measurement baseline** (Business Impact; Error Frequency / Severity / Cost; Existing KPIs; Baseline Metrics; Target Success Metrics; Measurement Method; Data Sources), a **status** (draft / submitted / returned / accepted), and **provenance** (consultant-captured vs. client-provided).
+> - The **Client Portal** is not a CRM. It gives the client a focused engagement surface: Dashboard, Discovery, Documents, and Profile. Only Published documents are visible there, and publication is explicit and manager-controlled.
 > - Records that the **ubiquitous language is English and is never translated**, while user-facing presentation is localizable (German-only MVP).
 >
 > The knowledge side, the methodology, and every existing principle are unchanged. Roadmap phase numbers are unchanged; these capabilities are delivered by the Phase 2 Extension and Phase 3A.
@@ -63,7 +64,7 @@ Each entity below is described by its **purpose**, **main responsibilities**, an
 - **Purpose.** The authority a user holds. Three roles exist, and they are deliberately few.
   - **Administrator** — accesses **all engagements in their own workspace**, and manages that workspace's users, roles, ownership, and invitations. Their reach stops at the workspace boundary.
   - **Manager** — the consultant role. Creates and runs engagements and accesses **only the engagements they own**. A Manager cannot reach a colleague's engagement.
-  - **Client** — an external participant. Has **no workbench access at all**; reaches only the **Discovery form of the one engagement they are associated with through Discovery Access**, through the **Client Discovery Portal**.
+  - **Client** — an external participant. Has **no workbench access at all**; reaches only the **Discovery form of the one engagement they are associated with through Discovery Access**, through the **Client Portal**.
 - **Responsibilities.** Determines what a user may do, always in combination with the workspace boundary and — for Managers — engagement ownership. A role never grants reach across workspaces.
 - **Relationships.** Held by a **User** within a **Workspace**. Evaluated against **Engagement Ownership** for Managers and against **Discovery Access** for Clients.
 
@@ -74,6 +75,11 @@ The role identifiers are `ADMIN`, `MANAGER`, and `CLIENT`; the human-readable na
 - **Responsibilities.** Names the association between a self-registered client and one engagement's discovery, by whom, and until when; carries its own state (issued, accepted, revoked, expired). It is the **only** way a Client role obtains any access, and it grants nothing beyond that one engagement's Discovery. Revoking it ends the access immediately; it does not remove the content the client already contributed.
 - **Relationships.** Issued by a **Manager** (the engagement's owner) or an **Administrator**, for one **Engagement**, to one **Client** user. Its issuance, acceptance, revocation, and expiry are recorded in the **Audit Trail** and may raise **Notifications**.
 
+### Client Portal
+- **Purpose.** The bounded client-facing surface for one engagement. It lets the client complete Discovery, monitor engagement status, receive notifications, and access manager-published documents.
+- **Responsibilities.** Presents only the approved client surfaces: **Dashboard**, **Discovery**, **Documents**, and **Profile**. The **Documents** section is read-only. Clients may view and download PDF versions of published documents, but they cannot edit manager documents, upload changes, or modify the manager's version. The portal is not a CRM and not a general collaboration workspace.
+- **Relationships.** Reached by a **Client** through **Discovery Access** for one **Engagement**. Displays only the engagement's **Published** documents. Publication and download events are recorded in the **Audit Trail** and may raise **Notifications**.
+
 ### Organization
 - **Purpose.** Represents a client company the consultant is engaged with.
 - **Responsibilities.** Holds the identity and context of the client at a company level; groups all engagements conducted for that client.
@@ -82,7 +88,7 @@ The role identifiers are `ADMIN`, `MANAGER`, and `CLIENT`; the human-readable na
 ### Engagement
 - **Purpose.** The primary business entity. Represents one complete consulting engagement for an organization, from discovery through the final report.
 - **Responsibilities.** Acts as the container and single source of truth for all client-specific work produced during the methodology. Tracks where the engagement stands and allows the consultant to open, save, resume, and revisit it. It is the unit of work.
-- **Relationships.** Belongs to one **Organization** and, through it, to exactly one **Workspace**. Has exactly one **owning Manager** (**Engagement Ownership**); ownership may be transferred by an Administrator and is what a Manager's access is measured against. Owns a **Discovery Profile**, an **Assessment**, its **Opportunities**, **Recommendations**, an **Implementation Roadmap**, and one or more **Consultant Report** versions. References the **Consulting Knowledge Base** and the **Technology Knowledge Base**. Its AI-assisted steps produce **Analysis Runs**; actions upon it appear in the **Audit Trail**.
+- **Relationships.** Belongs to one **Organization** and, through it, to exactly one **Workspace**. Has exactly one **owning Manager** (**Engagement Ownership**); ownership may be transferred by an Administrator and is what a Manager's access is measured against. Owns a **Discovery Profile**, an **Assessment**, its **Opportunities**, **Recommendations**, an **Implementation Roadmap**, and one or more **Consultant Report** versions. References the **Consulting Knowledge Base** and the **Technology Knowledge Base**. Its AI-assisted steps produce **Analysis Runs**; actions upon it appear in the **Audit Trail**. Its published report versions are surfaced through the **Client Portal**.
 
 ### Discovery Profile
 - **Purpose.** Captures the structured information gathered about the client's situation, operations, problems, current process, tools, data, constraints, and goals — **and what that situation costs the business today, against what success would measurably look like**.
@@ -100,7 +106,7 @@ The role identifiers are `ADMIN`, `MANAGER`, and `CLIENT`; the human-readable na
   Two rules govern this baseline. **An absent baseline is a finding, not an empty field** — "the client does not measure this" is knowledge the assessment and the follow-up questions must carry forward. And **an estimate is never presented as a measurement**; how a figure was obtained travels with the figure.
 
   The Discovery Profile also carries its **status** in the review workflow (draft → submitted → returned → accepted; see §3A) and the **provenance** of its content — whether it was **consultant-captured** or **client-provided**. Client-provided content is a reviewed draft in exactly the sense AI-assisted output is: it enters later stages as accepted fact only after the consultant has reviewed it.
-- **Relationships.** Belongs to one **Engagement**. Is shaped by the discovery questions and taxonomy of the engagement's business domain (from the **Consulting Knowledge Base**). May be completed by a self-registered **Client** through the **Client Discovery Portal** under **Discovery Access**, and is reviewed by the engagement's owning **Manager**. Feeds the **Assessment**, **AI Readiness**, and **Opportunities**; its value & measurement baseline is the factual ground for expected value, ROI framing, and the report's success criteria.
+- **Relationships.** Belongs to one **Engagement**. Is shaped by the discovery questions and taxonomy of the engagement's business domain (from the **Consulting Knowledge Base**). May be completed by a self-registered **Client** through the **Client Portal** under **Discovery Access**, and is reviewed by the engagement's owning **Manager**. Feeds the **Assessment**, **AI Readiness**, and **Opportunities**; its value & measurement baseline is the factual ground for expected value, ROI framing, and the report's success criteria.
 
 ### Assessment
 - **Purpose.** The consultant's structured evaluation of the client's business situation and operational processes — identifying bottlenecks, inefficiencies, areas of concern, and how prepared the client is to adopt AI.
@@ -132,8 +138,13 @@ The role identifiers are `ADMIN`, `MANAGER`, and `CLIENT`; the human-readable na
 
 ### Consultant Report
 - **Purpose.** The professional, client-ready deliverable produced by the engagement.
-- **Responsibilities.** Assembles discovery, assessment, prioritized problems, grounded recommendations, roadmap, and follow-up questions into a coherent document a consultant can place in front of a client. Is editable by the consultant and versioned, preserving exactly what was reviewed and delivered at each iteration.
-- **Relationships.** Belongs to one **Engagement**. Draws its content from the engagement's other entities. Exists as one or more versions over the life of the engagement.
+- **Responsibilities.** Assembles discovery, assessment, prioritized problems, grounded recommendations, roadmap, and follow-up questions into a coherent document a consultant can place in front of a client. Is editable by the consultant and versioned, preserving exactly what was reviewed and delivered at each iteration. A report version passes through the lifecycle **Draft → Manager Review → Approved → Published → Archived**; only **Published** versions are visible to clients.
+- **Relationships.** Belongs to one **Engagement**. Draws its content from the engagement's other entities. Exists as one or more versions over the life of the engagement. Its publication history is surfaced to the manager and administrator as governance data.
+
+### Document Publication
+- **Purpose.** The explicit act and record of making one Consultant Report version visible in the Client Portal.
+- **Responsibilities.** Records which report version is published, who published it, when it was published, and whether publication has been revoked or archived. Publication is explicit; a report version is not visible to clients until it is published. Revoking publication removes client visibility, but does not erase history. The publication record is what supports publication history in the manager and administrator views.
+- **Relationships.** Belongs to one **Engagement** and references exactly one **Consultant Report** version. Its creation and revocation are recorded in the **Audit Trail** and may raise **Notifications**. Only the latest **Published** version for an engagement is visible in the Client Portal.
 
 ### Consulting Knowledge Base
 - **Purpose.** The reusable, curated body of consulting knowledge that grounds engagement work across all engagements. A core product capability, not a document library.
@@ -194,12 +205,12 @@ The most prominent kinds of knowledge are described below; §4.1 gives the compl
 
 ### Notification
 - **Purpose.** Tells a user that something happened which needs their attention.
-- **Responsibilities.** Informs — it never acts. A notification is raised for the events that move collaboration forward or change access: an invitation issued, a discovery submitted, a discovery returned with notes, an invitation revoked or expired. It carries what happened, on which engagement, and when, and it respects the recipient's role: a Client is never told anything about the engagement beyond their own discovery form.
+- **Responsibilities.** Informs — it never acts. A notification is raised for the events that move collaboration forward or change access: an invitation issued, a discovery submitted, a discovery returned with notes, a document published, a publication revoked, an invitation revoked or expired. It carries what happened, on which engagement, and when, and it respects the recipient's role: a Client is never told anything about the engagement beyond their own portal surface.
 - **Relationships.** Addressed to one **User**, raised by an event on an **Engagement** (typically **Discovery Access** or a Discovery Profile workflow transition). Never grants access; a recipient who lacks permission to see a thing is not given it by being notified.
 
 ### Audit Trail
 - **Purpose.** The append-only record of **access- and collaboration-relevant events** — who did what, to which engagement, and when.
-- **Responsibilities.** Records sign-in, invitation issued/accepted/revoked/expired, discovery submission, return, acceptance, engagement ownership transfer, role change, and **denied permission attempts**. Entries are never rewritten or deleted (append-only, as Consultant Report versions and the Technology Update History are). It exists so that access to client data can be reconstructed and accounted for afterwards.
+- **Responsibilities.** Records sign-in, invitation issued/accepted/revoked/expired, discovery submission, return, acceptance, document publication, publication revocation, document download, engagement ownership transfer, role change, and **denied permission attempts**. Entries are never rewritten or deleted (append-only, as Consultant Report versions and the Technology Update History are). It exists so that access to client data can be reconstructed and accounted for afterwards.
 - **Relationships.** Belongs to a **Workspace** and, where the event concerns one, references an **Engagement** and the acting **User**. It is the **third governance record** and is deliberately distinct from the other two: the **Analysis Run** records engagement AI assistance, the **Technology Update History** records approved knowledge curation, and the **Audit Trail** records access and collaboration. None is written by another's path, and none may be merged into another.
 
 ---
@@ -242,15 +253,17 @@ The methodology above describes *what* work happens. This section describes *who
 |---|---|
 | **Administrator** | Every engagement **in their own workspace**, plus management of that workspace's users, roles, ownership, and invitations. No reach into any other workspace. |
 | **Manager** | Only the engagements **they own**, in their own workspace. A colleague's engagement is not reachable, by any route. |
-| **Client** | Only the **Discovery form of the one engagement they are associated with through Discovery Access**, through the Client Discovery Portal. No assessment, opportunities, recommendations, roadmap, report, cost data, other engagement, or other client. |
+| **Client** | Only the **Discovery form of the one engagement they are associated with through Discovery Access**, through the Client Portal. No assessment, opportunities, recommendations, roadmap, report, cost data, other engagement, or other client. |
 
 - **Engagement Ownership** is a first-class relationship: exactly one owning Manager per engagement, transferable by an Administrator, and the thing a Manager's access is measured against.
 - **Permission is decided where the data is, not where the interface is.** A role restriction that exists only in the user interface is not a restriction. This is a domain rule because the confidentiality it protects is a domain concern, not a presentation concern.
 - **Least authority.** Roles are deliberately few and grant the least reach that lets each person do their work. New capabilities inherit the existing roles rather than inventing new ones.
 
-### 3A.3 The Client Discovery Portal and the Draft / Submit / Return workflow
+### 3A.3 The Client Portal and the Draft / Submit / Return workflow
 
-A client contributes to Discovery — and only to Discovery — through a bounded, self-registration-scoped surface, the **Client Discovery Portal**.
+A client contributes to Discovery — and only to Discovery — through a bounded, self-registration-scoped surface, the **Client Portal**.
+
+The portal's approved sections are **Dashboard**, **Discovery**, **Documents**, and **Profile**. The Documents section is read-only and shows only Published documents for the engagement. The portal is the client's primary place to see engagement status, notifications, and manager-published documents.
 
 Authentication is separate from this portal. Clients self-register, confirm their email, and set their own password. Managers and additional administrators are created by an administrator and receive an invitation link to set their own password. The first administrator is created through secure bootstrap. Administrators never create, know, store, or view users' permanent passwords.
 
@@ -267,13 +280,13 @@ Rules that hold across the workflow:
 - **Provenance survives the workflow.** What the client provided stays attributed to the client even after the consultant edits or accepts it, so the engagement's record stays honest about where a fact came from.
 - **Consultant review is mandatory before client-provided content counts.** Client-provided discovery is a reviewed draft, exactly like AI-assisted output (§5 Human-in-the-loop). It does not become accepted fact by being submitted; it becomes accepted fact by being reviewed.
 - **The consultant holds the review authority.** Accepting, returning, and re-opening are consultant actions. The client contributes and submits; the client does not decide what the engagement treats as true.
-- **Events are notified and audited.** Submission, return, acceptance, and the discovery-access lifecycle raise **Notifications** to the people who need them and append to the **Audit Trail**.
+- **Events are notified and audited.** Submission, return, acceptance, document publication, publication revocation, and the discovery-access lifecycle raise **Notifications** to the people who need them and append to the **Audit Trail**.
 
 ### 3A.4 Language of the domain
 
 The **ubiquitous language of this document is English and is never translated**. Entity names, role names, status values, event names, and every internal identifier stay English wherever they appear — in code, in data, in the audit trail, in contracts.
 
-What a user *reads* is a separate, presentational matter. The MVP presents a **German-only** interface — including the Client Discovery Portal — built so that additional languages are a translation task rather than a redesign. Client- and consultant-entered content is stored as entered and is never machine-translated; a fact's wording belongs to whoever wrote it.
+What a user *reads* is a separate, presentational matter. The MVP presents a **German-only** interface — including the Client Portal — built so that additional languages are a translation task rather than a redesign. Client- and consultant-entered content is stored as entered and is never machine-translated; a fact's wording belongs to whoever wrote it.
 
 ---
 
@@ -347,7 +360,7 @@ The domain model is shaped to support the vision's principles:
 - **Human-in-the-loop.** **Recommendations** are editable, **Consultant Reports** are versioned, and the **Assessment** (including its AI Readiness dimension) and **Recommendations** carry assumptions and confidence — the domain treats human review and override as first-class. **Client-provided Discovery is held to the same standard**: it is a reviewed draft, accepted only by the consultant's review, never by its submission.
 - **Isolation by ownership.** The **Workspace** is the ownership boundary; a **Manager** reaches only the engagements they own, an **Administrator** only their own workspace, and a **Client** only the Discovery form they are associated with through self-registration. Confidentiality is a domain property enforced where the data is, not an interface behavior.
 - **Authentication stays out of consulting state.** Passwords, sessions, verification, resets, and invitation mechanics are infrastructure concerns. The domain models users, roles, workspace membership, and invitations, but never permanent passwords.
-- **Bounded client participation.** A client contributes to the engagement at exactly one point — Discovery — through an explicit, revocable invitation and a bounded portal. Participation never becomes visibility into the consultant's analysis, recommendations, or deliverable.
+- **Bounded client participation.** A client contributes to the engagement at exactly one point — Discovery — through an explicit, revocable invitation and a bounded portal. The portal is still not a CRM or general collaboration platform: it shows Dashboard, Discovery, Documents, and Profile, with only Published documents visible. Participation never becomes visibility into unpublished consultant work or into another engagement.
 - **Accountability.** Access- and collaboration-relevant events are recorded in the append-only **Audit Trail**, so who reached which client's data, and what they did with it, can be reconstructed. It stands alongside — never merged with — the **Analysis Run** and the **Technology Update History**.
 - **Measured value.** Discovery captures not only what is wrong but **what it costs and what success would measurably look like** (business impact, error frequency/severity/cost, existing KPIs, baseline and target metrics, measurement method, data sources) — and records the absence of a baseline as a finding rather than as an empty field, so expected value and ROI stay grounded in the client's own numbers.
 - **Explainability.** Recommendations carry rationale and confidence, and the **Assessment** exposes assumptions across its dimensions, so every proposal can be explained rather than merely asserted.
@@ -369,7 +382,7 @@ Defining the domain also means stating what is deliberately outside it:
 - **Not a PromptOps or AI-engineering platform.** The Technology Knowledge Base curates *knowledge about* AI technologies and models to inform grounded recommendations. The workbench does not build, benchmark, evaluate, deploy, or operate those technologies, and it does not update that knowledge autonomously — the **Technology Curator** requires human approval for every change.
 - **Not a generic chatbot.** It is not an open-ended conversational assistant. It is a structured workbench organized around engagements, a defined methodology, and a curated knowledge base.
 - **Not a data platform or BI tool.** It does not ingest, store, or analyze the client's operational datasets; discovery captures structured *descriptions* of the situation, not the client's raw data. The value & measurement baseline records the client's *stated figures and where they came from*; it does not connect to the client's systems to measure them.
-- **Not a general client portal or collaboration platform.** The **Client Discovery Portal** exists for one purpose: a self-registered client completing the Discovery form of one engagement. It is not a client-facing dashboard, deliverable-sharing space, messaging system, or project portal, and client participation never extends to the assessment, recommendations, roadmap, or report.
+- **Not a general client portal or collaboration platform.** The **Client Portal** exists for one purpose: a self-registered client completing Discovery, monitoring engagement status, receiving notifications, and accessing manager-published documents for one engagement. It is not a CRM, not a messaging system, and not a project portal, and client participation never extends to editing manager documents or seeing unpublished content from other engagements.
 - **Not a general identity-management product.** **Workspace**, **User**, and **Role** exist to isolate and attribute the consultant's work, with deliberately few roles. The domain does not model organizational hierarchies, permission matrices, group management, identity federation, sessions, or password storage.
 
 These boundaries keep the product focused on supporting the consultant's judgment rather than expanding into adjacent systems.
@@ -400,10 +413,12 @@ These are the core business terms and their agreed meanings. They form the commo
 - **Role** — the authority a user holds: **Administrator** (all engagements in their own workspace, plus workspace user/role/ownership/invitation management), **Manager** (only the engagements they own — the consultant role), **Client** (only the Discovery form of the one engagement they are associated with through Discovery Access).
 - **Engagement Ownership** — the relationship naming the single **Manager** who owns an engagement; transferable by an Administrator, and the basis on which a Manager's access is decided.
 - **Discovery Access** — an explicit, time-bounded, revocable grant allowing one self-registered client to complete the Discovery form of one specific engagement. The only route by which a Client obtains any access.
-- **Client Discovery Portal** — the bounded, self-registration-scoped, client-facing surface where a self-registered client completes that Discovery form and nothing else.
+- **Client Portal** — the bounded, self-registration-scoped, client-facing surface for one engagement. It includes Dashboard, Discovery, Documents, and Profile; clients use it to complete Discovery, monitor engagement status, receive notifications, and view manager-published documents. It is not a CRM.
 - **Draft / Submit / Return** — the Discovery review workflow: worked on as a **draft**, **submitted** for review, **returned** with the consultant's notes if incomplete or wrong, and **accepted** once the consultant has reviewed it. Content is never lost on a transition, and submission alone never makes content accepted fact.
+- **Document Lifecycle** — the report/document lifecycle: **Draft → Manager Review → Approved → Published → Archived**. Only Published documents are visible to clients.
+- **Document Publication** — the explicit, manager-controlled act and record of making a Consultant Report version visible in the Client Portal. Publication and revocation are auditable, and the publication record supports publication history and download history.
 - **Notification** — a message telling a user about an event that needs their attention (invitation, submission, return, revocation). It informs; it never acts and never grants access.
-- **Audit Trail** — the append-only record of access- and collaboration-relevant events (sign-in, discovery-access lifecycle, submission/return/acceptance, ownership transfer, role change, denied attempts): who did what, to which engagement, when. The third governance record, distinct from the Analysis Run and the Technology Update History.
+- **Audit Trail** — the append-only record of access- and collaboration-relevant events (sign-in, discovery-access lifecycle, submission/return/acceptance, publication/revocation, document download, ownership transfer, role change, denied attempts): who did what, to which engagement, when. The third governance record, distinct from the Analysis Run and the Technology Update History.
 - **Organization** — a client company the consultant works with. Groups all engagements conducted for that client; it is not a customer-relationship record. Belongs to one workspace.
 - **Engagement** — one complete consulting engagement for an organization, from discovery through the final report and any later revisions. The primary business entity and the unit of work. Belongs to one workspace and has one owning Manager.
 - **Discovery** — the activity of gathering structured information about the client's situation, and the resulting **Discovery Profile** that captures what is known, what it costs, what success would look like, and what is still missing. It may be completed by the consultant or by a self-registered client, and carries a status and the provenance of its content.

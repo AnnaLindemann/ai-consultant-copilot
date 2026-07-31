@@ -1,0 +1,98 @@
+{
+  "$schema": "https://tr.designtokens.org/format/",
+  "meta": {
+    "name": "AI Consulting Workbench UI Kit",
+    "version": "1.0.0",
+    "primaryLocale": "de-DE"
+  },
+  "color": {
+    "background": {
+      "canvas": { "$value": "#F7F8FA", "$type": "color" },
+      "surface": { "$value": "#FFFFFF", "$type": "color" },
+      "subtle": { "$value": "#F1F3F6", "$type": "color" },
+      "inverse": { "$value": "#172033", "$type": "color" }
+    },
+    "text": {
+      "primary": { "$value": "#172033", "$type": "color" },
+      "secondary": { "$value": "#667085", "$type": "color" },
+      "muted": { "$value": "#98A2B3", "$type": "color" },
+      "inverse": { "$value": "#FFFFFF", "$type": "color" }
+    },
+    "border": {
+      "default": { "$value": "#E4E7EC", "$type": "color" },
+      "strong": { "$value": "#D0D5DD", "$type": "color" }
+    },
+    "primary": {
+      "050": { "$value": "#EEF2FF", "$type": "color" },
+      "600": { "$value": "#315EFB", "$type": "color" },
+      "700": { "$value": "#2448D8", "$type": "color" }
+    },
+    "success": {
+      "050": { "$value": "#ECFDF3", "$type": "color" },
+      "600": { "$value": "#16845B", "$type": "color" }
+    },
+    "warning": {
+      "050": { "$value": "#FFFAEB", "$type": "color" },
+      "600": { "$value": "#B54708", "$type": "color" }
+    },
+    "danger": {
+      "050": { "$value": "#FEF3F2", "$type": "color" },
+      "600": { "$value": "#D92D20", "$type": "color" }
+    },
+    "info": {
+      "050": { "$value": "#EFF8FF", "$type": "color" },
+      "600": { "$value": "#175CD3", "$type": "color" }
+    }
+  },
+  "font": {
+    "family": {
+      "sans": { "$value": "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif", "$type": "fontFamily" }
+    },
+    "size": {
+      "xs": { "$value": "12px", "$type": "dimension" },
+      "sm": { "$value": "14px", "$type": "dimension" },
+      "md": { "$value": "16px", "$type": "dimension" },
+      "lg": { "$value": "18px", "$type": "dimension" },
+      "xl": { "$value": "22px", "$type": "dimension" },
+      "2xl": { "$value": "28px", "$type": "dimension" },
+      "3xl": { "$value": "32px", "$type": "dimension" }
+    },
+    "weight": {
+      "regular": { "$value": 400, "$type": "fontWeight" },
+      "medium": { "$value": 500, "$type": "fontWeight" },
+      "semibold": { "$value": 600, "$type": "fontWeight" },
+      "display": { "$value": 650, "$type": "fontWeight" }
+    }
+  },
+  "space": {
+    "1": { "$value": "4px", "$type": "dimension" },
+    "2": { "$value": "8px", "$type": "dimension" },
+    "3": { "$value": "12px", "$type": "dimension" },
+    "4": { "$value": "16px", "$type": "dimension" },
+    "5": { "$value": "20px", "$type": "dimension" },
+    "6": { "$value": "24px", "$type": "dimension" },
+    "8": { "$value": "32px", "$type": "dimension" },
+    "10": { "$value": "40px", "$type": "dimension" },
+    "12": { "$value": "48px", "$type": "dimension" },
+    "16": { "$value": "64px", "$type": "dimension" }
+  },
+  "radius": {
+    "control": { "$value": "8px", "$type": "dimension" },
+    "card": { "$value": "12px", "$type": "dimension" },
+    "dialog": { "$value": "16px", "$type": "dimension" },
+    "pill": { "$value": "999px", "$type": "dimension" }
+  },
+  "layout": {
+    "sidebarExpanded": { "$value": "248px", "$type": "dimension" },
+    "sidebarCollapsed": { "$value": "72px", "$type": "dimension" },
+    "contextRail": { "$value": "320px", "$type": "dimension" },
+    "contentMax": { "$value": "1440px", "$type": "dimension" },
+    "formMax": { "$value": "760px", "$type": "dimension" },
+    "clientPortalMax": { "$value": "960px", "$type": "dimension" }
+  },
+  "breakpoint": {
+    "mobile": { "$value": "0px", "$type": "dimension" },
+    "tablet": { "$value": "768px", "$type": "dimension" },
+    "desktop": { "$value": "1280px", "$type": "dimension" }
+  }
+}

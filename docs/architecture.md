@@ -5,9 +5,9 @@ Status: **Draft** · Version: 1.2 · Derived from [product-vision.md](./product-
 > **Revision 1.2 (approved).** Reflects the domain model's new access side and the extended Discovery Profile:
 > - The **Workspace** becomes the ownership and isolation boundary in the architecture: every engagement-side query, command, aggregate, and export is workspace-scoped, and **authorization is enforced server-side on every request** (§7A). Authentication, authorization, roles, and isolation are delivered in **Phase 3A**, **not** Phase 11 — which is refocused on deployment, monitoring, operational security, backup, recovery, and performance.
 > - **Authentication data stays separate from consulting domain state.** Better Auth is the initial authentication provider behind `AuthenticationProvider`, and Resend is the initial email-delivery provider behind the email boundary. The consulting domain depends on neither provider directly.
-> - Adds the **Client Discovery Portal** as a bounded client-facing surface, the discovery **Draft / Submit / Return** workflow, **Notifications**, and an append-only **Audit Trail** — the third governance log, kept distinct from Analysis Runs and the Technology Update History.
+> - Adds the **Client Portal** as a bounded client-facing surface, the discovery **Draft / Submit / Return** workflow, **Notifications**, and an append-only **Audit Trail** — the third governance log, kept distinct from Analysis Runs and the Technology Update History. The portal surface includes Dashboard, Discovery, Documents, and Profile; the Documents view is read-only and shows only published versions.
 > - Adds persistence and orchestration support for the Discovery Profile's **value & measurement baseline**, status, and content provenance (Phase 2 Extension).
-> - Commits the frontend to an **internationalization-ready, German-only** UI: user-facing strings are localizable from the start, internal identifiers stay English (§7.1).
+> - Commits the frontend to an **internationalization-ready, German-only** UI: user-facing strings are localizable from the start, internal identifiers stay English (§7.1). The visual direction is a clean, process-oriented SaaS interface with an engagement pipeline, design tokens, and reusable components.
 >
 > Section numbering is preserved: the new access architecture is added as **§7A**, mirroring the lettered Phase 3A/5A convention, and new principles are appended rather than inserted. **No existing phase number and no architectural principle is changed.**
 >
@@ -36,6 +36,7 @@ These principles govern every decision below. They are the implementation-side r
 11. **The Workspace is the ownership boundary, and authorization is server-side.** *(Revision 1.2, from Phase 3A.)* Every engagement-side read, write, listing, aggregation, and export is scoped to the acting user's workspace, and every access decision — workspace, role, engagement ownership, discovery access — is made and enforced on the server, on every request. The client may reflect permissions; it never constitutes them. A capability that is safe only because the UI hides it is a defect.
 12. **German-only UI, internationalization-ready architecture.** *(Revision 1.2.)* User-facing strings are externalized and localizable from the start; internal identifiers — domain types, field names, enum and status values, event names, API contracts, log and audit entries — remain English. Locale is a presentation concern and never reaches the domain layer.
 13. **Authentication is infrastructure, not consulting state.** *(Revision 1.2.)* Passwords, sessions, verification, reset, and invitation-link handling live behind a dedicated access/auth boundary. The consulting domain knows users, roles, workspace membership, and invitations; it never knows permanent passwords.
+14. **Clean, process-oriented UI.** *(Revision 1.2.)* The approved frontend is a focused SaaS workspace inspired by Linear and Notion: the engagement pipeline is visually clear, design tokens provide consistency, and reusable components keep the consultant workspace and client portal coherent without one-off screens.
 
 ---
 
@@ -47,7 +48,7 @@ Until Phase 3A the system runs as a single-consultant web application; **from Ph
 ┌──────────────────────────────────────────────────────────────┐
 │  Frontend (Next.js / React)                                    │
 │  Engagement workspace UI — methodology stages, review & edit   │
-│  Client Discovery Portal (Phase 3A) — self-registered client, discovery│
+│  Client Portal (Phase 3A) — dashboard, discovery, documents, profile    │
 │  i18n-ready presentation (German-only MVP)                     │
 └───────────────┬──────────────────────────────────────────────┘
                 │  HTTP / JSON (REST) + authenticated session
@@ -229,12 +230,12 @@ Key properties:
 - **Stage views over persisted state.** Each methodology stage is a view that reads engagement state and lets the consultant generate (AI-assisted), then **review, edit, accept, or override**. Because stages are re-entrant on the backend, the UI can return to and re-run any stage without a wizard-style forced sequence.
 - **Human-in-the-loop is visible.** Assumptions, confidence, and gaps are surfaced in the stage views; AI output is clearly presented as a draft; report versions are listed and comparable. This is a UI obligation derived from the vision, not a backend concern.
 - **The backend is the source of truth.** The client does not compute grounding, cost, or evaluation; it renders what the backend persisted. This keeps business logic server-side and the client replaceable.
-- **Two frontend surfaces from Phase 3A.** The **consultant workspace UI** (the existing engagement-centric surface, for Administrators and Managers) and the **Client Discovery Portal** (for self-registered Clients) are separate surfaces with separate navigation and separate entry points. The portal renders one engagement's Discovery form and nothing else — no stage navigation, no engagement list, no cost or analysis-run views, no report. Keeping them separate means a client-facing page cannot accidentally inherit a consultant-facing component that fetches more than the client may see.
+- **Two frontend surfaces from Phase 3A.** The **consultant workspace UI** (the existing engagement-centric surface, for Administrators and Managers) and the **Client Portal** (for self-registered Clients) are separate surfaces with separate navigation and separate entry points. The portal renders one engagement's Dashboard, Discovery, Documents, and Profile, with the Documents view read-only and limited to published versions — no stage navigation, no engagement list, no cost or analysis-run views, no report. Keeping them separate means a client-facing page cannot accidentally inherit a consultant-facing component that fetches more than the client may see.
 - **Permission-aware UI is a convenience, never a control.** The consultant UI hides or disables what the acting user's role and ownership do not permit, but every one of those actions is independently refused by the server (§7A). The client is never trusted with a permission decision.
 
 ### 7.1 Internationalization-ready UI (German-only MVP)
 
-The MVP ships a **German-only** interface — consultant workspace and Client Discovery Portal alike — on a foundation that makes a second language a translation task rather than a rewrite.
+The MVP ships a **German-only** interface — consultant workspace and Client Portal alike — on a foundation that makes a second language a translation task rather than a rewrite.
 
 - **All user-facing strings are externalized.** Labels, help text, validation and error messages, notification text, empty states, and exported document headings are looked up by key rather than written inline in components. There is no hard-coded German literal in a component.
 - **Internal identifiers stay English.** Domain types, field names, enum and status values (`draft`, `submitted`, `returned`, `accepted`), role names, stage names, event names, API contracts, and audit entries are English and are never translated. Translation happens at the presentation edge, by mapping an identifier to a localized string.
@@ -271,7 +272,7 @@ This section is the implementation shape of domain-model §3A. It is delivered b
 |---|---|
 | **Administrator** | All engagements **in their own workspace**; manages that workspace's users, roles, engagement ownership, and invitations. No cross-workspace reach whatsoever. |
 | **Manager** | Only engagements **they own**, in their own workspace — the consultant role. |
-| **Client** | Only the Discovery form of the **one engagement named by valid Discovery Access**, through the Client Discovery Portal. |
+| **Client** | Only the **Client Portal** of the one engagement named by valid Discovery Access. The portal exposes Dashboard, Discovery, Documents, and Profile; documents are read-only and only published versions are visible. |
 
 Roles are deliberately few and are **not** a general permission framework: no per-field permissions, no groups, no custom roles, no delegation (principle §1.6). Engagement ownership is transferable by an Administrator, and the transfer is audited.
 
@@ -282,11 +283,11 @@ Roles are deliberately few and are **not** a general permission framework: no pe
 - **Denials do not leak existence.** A request for a resource in another workspace is refused the same way as a request for a resource that does not exist, so responses cannot be used to enumerate other workspaces' data.
 - **The knowledge bases are outside the boundary** and remain shared, read-only from engagements (§9). They hold no client-specific content.
 
-### 7A.5 Discovery Access and the Client Discovery Portal
+### 7A.5 Discovery Access and the Client Portal
 
 - **Discovery access is the only grant.** It names one self-registered client, one engagement, an issuer, and an expiry; it can be revoked, and revocation takes effect immediately on the next request. It is validated on every portal request, not only at acceptance.
 - **Access notifications use the email boundary.** Access-related emails are sent through the dedicated email-delivery provider boundary, not by the consulting domain.
-- **The portal is a separate surface with its own routes** (§7), serving one engagement's Discovery. Portal endpoints are authorized as *client + valid discovery access + this engagement's discovery*, and reach nothing else. They do not reuse the consultant endpoints with a filter — a narrower surface is easier to keep narrow.
+- **The portal is a separate surface with its own routes** (§7), serving one engagement's Dashboard, Discovery, Documents, and Profile. Portal endpoints are authorized as *client + valid discovery access + this engagement* and reach nothing else. They do not reuse the consultant endpoints with a filter — a narrower surface is easier to keep narrow.
 - **Revocation does not delete contributions.** Content the client already provided stays in the Discovery Profile with its provenance intact.
 
 ### 7A.6 The Draft / Submit / Return workflow
@@ -308,6 +309,13 @@ Roles are deliberately few and are **not** a general permission framework: no pe
 - **What is recorded.** Sign-in, invitation issued/accepted/revoked/expired, discovery submitted/returned/accepted, engagement ownership transfer, role change, and **denied permission attempts** — with the acting user, the target engagement where applicable, and the timestamp.
 - **Three logs, three purposes, never merged.** The **Analysis Run** records engagement AI assistance (§8); the **Technology Update History** records approved knowledge curation (§9.3); the **Audit Trail** records access and collaboration. None is written by another's path, and none absorbs another's role. Conflating them would destroy the meaning of all three.
 - **Audit entries are English and identifier-based** (§7.1), so they stay queryable regardless of the user's display language.
+
+### 7A.9 Document publication and Client Portal documents
+
+- **Publication is explicit.** A consultant report version is not visible to clients until a Manager explicitly publishes it. Publication is a manager action, and revocation removes visibility rather than rewriting history.
+- **Only published documents are visible to clients.** The Client Portal Documents view is read-only; clients can view and download published PDFs, but they cannot edit manager documents, upload changes, or modify the manager's version.
+- **Publication notifies the client.** Publishing raises a notification and sends an email that links the client back to the Client Portal, because the portal is the primary place to access published documents.
+- **Download history is auditable.** Client downloads are recorded as audit events so managers and administrators can see document access history without conflating it with publication history.
 
 ---
 
@@ -447,7 +455,7 @@ server/
 
 client/
   app/                        # Next.js App Router — engagement workspace + stage views
-    portal/                   # (Phase 3A) Client Discovery Portal — separate client-facing surface
+    portal/                   # (Phase 3A) Client Portal — separate client-facing surface
   components/                 # stage/review/edit UI components
   i18n/                       # user-facing string catalogue (German-only MVP, key-based lookup)
 ```
@@ -505,7 +513,7 @@ Each seam corresponds to a roadmap boundary, so the roadmap can be executed phas
 8. **Reuse-first posture**: prompt versioning/fingerprinting, cost calc, Langfuse, and Analysis Run persistence are extended, never rebuilt.
 9. **Workspace as the enforced ownership boundary, with one access-decision point** *(Revision 1.2, Phase 3A)*. Workspace scope is applied in the repositories so no service can issue an unscoped engagement-side query, and a single `AccessPolicy` answers every access question in a fixed order (workspace → role → ownership/invitation), rather than per-route checks. Authorization is server-side on every request, deny-by-default, and non-revealing in its denials.
 10. **Authentication and email delivery behind dedicated infrastructure boundaries** *(Revision 1.2, Phase 3A)*. Better Auth is the initial authentication provider behind `AuthenticationProvider`, and Resend is the initial email-delivery provider behind `EmailDeliveryProvider`. Passwords, sessions, verification, reset, and invitation emails stay out of consulting-domain state.
-11. **A separate, narrow client-facing surface** *(Phase 3A)*. The Client Discovery Portal is its own surface with its own endpoints authorized as *client + valid invitation + this engagement's discovery*, rather than the consultant endpoints with a filter applied. Narrowness is the safeguard.
+11. **A separate, narrow client-facing surface** *(Phase 3A)*. The Client Portal is its own surface with its own endpoints authorized as *client + valid invitation + this engagement*, rather than the consultant endpoints with a filter applied. Narrowness is the safeguard.
 12. **A third governance log — the append-only Audit Trail** *(Phase 3A)* for access and collaboration events, deliberately separate from the engagement-scoped Analysis Run and the curation-scoped Technology Update History. Three logs, three purposes, never merged.
 13. **Key-based localization with English internal identifiers** *(Revision 1.2)*. User-facing strings are looked up by key and one locale (German) ships; enums, statuses, events, contracts, and audit entries stay English, so a new language never reaches the domain, the storage, or the contracts.
 
@@ -522,7 +530,7 @@ Each seam corresponds to a roadmap boundary, so the roadmap can be executed phas
 - **An unscoped query leaking across workspaces.** *(Phase 3A.)* A single engagement-side query written without the workspace scope — most likely in a listing, a count, a search, or a cost roll-up rather than in a record fetch — silently breaks isolation and is easy to miss in review. Mitigation: require the scope as part of the repository operation rather than as an optional filter, cover aggregates and exports with isolation tests, and treat any unscoped engagement-side query as a review-blocking defect.
 - **Authorization drifting into the UI.** If a capability is protected only by a hidden button, it is unprotected. Mitigation: every UI-hidden action has a server-side denial test; permission logic in the client is treated as a convenience layer with no authority.
 - **Access checks scattering as stages multiply.** Per-route ad-hoc checks diverge over time and produce inconsistent reach. Mitigation: keep the single `AccessPolicy` decision point and deny-by-default; a new route that implements its own rule is a defect.
-- **The Client Discovery Portal widening over time.** Pressure to "just show the client the assessment too" is how a narrow surface becomes a client portal the product boundary rejects (domain-model §6). Mitigation: keep the portal's endpoints separate and discovery-access-scoped, and treat widening client reach as a documentation decision, not an implementation choice.
+- **The Client Portal widening over time.** Pressure to "just show the client the assessment too" is how a narrow surface becomes a client portal the product boundary rejects (domain-model §6). Mitigation: keep the portal's endpoints separate and discovery-access-scoped, and treat widening client reach as a documentation decision, not an implementation choice.
 - **Audit-log conflation.** Merging the Audit Trail with Analysis Runs (or the Technology Update History) for convenience destroys the meaning of all three and their append-only guarantees. Mitigation: separate ports and tables, with append-only enforced by the absence of an update/delete path.
 - **Localization decay.** German literals inlined in components, or English identifiers translated in data, quietly remove the i18n seam and turn a future language into a rewrite. Mitigation: no user-facing literal in a component, no translated enum or event name, and both checked in review (coding-standards §12A).
 
@@ -530,4 +538,4 @@ Each seam corresponds to a roadmap boundary, so the roadmap can be executed phas
 
 - **Created:** `docs/architecture.md` (this document).
 - **Revised (1.1):** updated to introduce the Technology Knowledge Base (category-organized), the Technology Curator (sole human-approved write path), first-class Technology Sources for provenance, and the append-only Technology Update History alongside the Consulting Knowledge Base, delivered as the Phase 5A extension. Existing roadmap phase numbers and the MVP boundary are unchanged (RAG stays Phase 10, Production Readiness Phase 11). No code was written or changed as part of this documentation revision.
-- **Revised (1.2):** added the multi-user, workspace, and access architecture (§7A) delivered by **Phase 3A** — authentication behind a port, one server-side `AccessPolicy` decision point, workspace scope enforced in the repositories, the Administrator/Manager/Client role model, engagement ownership, client self-registration, the separate Client Discovery Portal surface, the Draft/Submit/Return state machine, notifications, and the append-only Audit Trail as the third governance log. Added the internationalization-ready, German-only frontend commitment (§7.1) and two new architecture principles (§1.11, §1.12). Extended §2–§4, §6–§8, §12–§15, the assumptions, decisions, and risks accordingly, and **moved authentication/authorization out of Phase 11**, which is now deployment, monitoring, operational security, backup, recovery, and performance. Section numbering was preserved by adding §7A as a lettered section and appending new principles/decisions. No code was written or changed as part of this documentation revision.
+- **Revised (1.2):** added the multi-user, workspace, and access architecture (§7A) delivered by **Phase 3A** — authentication behind a port, one server-side `AccessPolicy` decision point, workspace scope enforced in the repositories, the Administrator/Manager/Client role model, engagement ownership, client self-registration, the separate Client Portal surface, the Draft/Submit/Return state machine, notifications, and the append-only Audit Trail as the third governance log. Added the internationalization-ready, German-only frontend commitment (§7.1) and two new architecture principles (§1.11, §1.12). Extended §2–§4, §6–§8, §12–§15, the assumptions, decisions, and risks accordingly, and **moved authentication/authorization out of Phase 11**, which is now deployment, monitoring, operational security, backup, recovery, and performance. Section numbering was preserved by adding §7A as a lettered section and appending new principles/decisions. No code was written or changed as part of this documentation revision.

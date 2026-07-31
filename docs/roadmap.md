@@ -4,8 +4,9 @@ Status: **Stable** · Version: 1.2 · Derived from [product-vision.md](./product
 
 > **Revision 1.2 (approved).** Three changes, **none of which renumbers an existing phase** and none of which moves the MVP boundary (still after Phase 9):
 > 1. **Phase 2 (Client Discovery) is extended** with the engagement's **value & measurement baseline** (Business Impact; Error Frequency / Severity / Cost; Existing KPIs; Baseline Metrics; Target Success Metrics; Measurement Method; Data Sources) and with a **discovery draft / submitted workflow** plus **client-completed Discovery reviewed by the consultant**. The extension is delivered as a **re-entry into Phase 2** ("Phase 2 Extension"), sequenced **after the in-flight Phase 3 is accepted and before Phase 3A** — it does not disturb Phase 3.
-> 2. **A new Phase 3A — Multi-user & Client Collaboration Foundation** is added immediately after Phase 3, introducing the **Workspace** as the ownership and isolation boundary, the **Administrator / Manager / Client** roles, authentication, server-side authorization, engagement ownership, client self-registration, the **Client Discovery Portal**, the **Draft / Submit / Return** workflow, notifications, and an append-only **Audit Trail**. Authentication and email delivery are kept behind dedicated infrastructure boundaries so the consulting domain does not depend directly on either provider. Like Phase 5A, it is a lettered insertion, not a renumbering.
+> 2. **A new Phase 3A — Multi-user & Client Collaboration Foundation** is added immediately after Phase 3, introducing the **Workspace** as the ownership and isolation boundary, the **Administrator / Manager / Client** roles, authentication, server-side authorization, engagement ownership, client self-registration, the **Client Portal**, the **Draft / Submit / Return** workflow, notifications, and an append-only **Audit Trail**. Authentication and email delivery are kept behind dedicated infrastructure boundaries so the consulting domain does not depend directly on either provider. Like Phase 5A, it is a lettered insertion, not a renumbering.
 > 3. **Phase 11 (Production Readiness) is refocused** on deployment, monitoring, operational security, backup, recovery, and performance. **Authentication and authorization move out of Phase 11 into Phase 3A.**
+> 4. **Report publication becomes explicit.** Consultant Report versions are manager-published to the Client Portal, only published versions are visible to clients, and publication sends an email notification with a portal link.
 >
 > Revision 1.2 also records the **internationalization-ready, German-only MVP** commitment as a cross-cutting UI obligation: user-facing strings are localizable from the start, internal identifiers stay English.
 >
@@ -23,7 +24,7 @@ This roadmap is **implementation-independent**. It defines *what business capabi
 - **Grounding order is fixed.** Recommendations are grounded in the curated Consulting Knowledge Base, and the technologies and models they name are grounded in the Technology Knowledge Base — so the curated-knowledge foundation (Phase 5 and its Phase 5A extension) precedes solution matching (Phase 6). **RAG remains after the curated Consulting Knowledge Base phase**, as an enhancement over meaningful curated content — never as the initial retrieval mechanism.
 - **Lettered phases are extensions, not renumberings.** Phase 3A and Phase 5A are inserted at the point in the sequence where the capability is needed, without shifting any existing phase number or the MVP boundary. They are full phases in every other respect: each delivers one complete business capability, leaves the application working, and passes the same acceptance gates.
 - **Access control begins at Phase 3A and applies to every phase after it.** From Phase 3A onward, the **Workspace** is the ownership and isolation boundary for all engagement-side data, and every capability a later phase adds is reachable only through server-side authentication and authorization. This obligation is stated once in [Cross-cutting Capabilities](#cross-cutting-capabilities) rather than repeated per phase.
-- **The user interface is German-only at MVP but internationalization-ready from the start.** This is a cross-cutting UI obligation on every phase that ships user-facing surface, also stated once in [Cross-cutting Capabilities](#cross-cutting-capabilities).
+- **The user interface is German-only at MVP but internationalization-ready from the start.** This is a cross-cutting UI obligation on every phase that ships user-facing surface, also stated once in [Cross-cutting Capabilities](#cross-cutting-capabilities). The approved UI direction is a clean, process-oriented SaaS experience with an engagement pipeline, design tokens, and reusable components.
 - **Cost tracking and observability are cross-cutting.** Wherever a phase introduces new AI-assisted functionality, that functionality is recorded as an **Analysis Run** with cost, token usage, latency, prompt version, and prompt fingerprint, and traced in Langfuse. This obligation applies to every phase that adds AI functionality and is stated once in [Cross-cutting Capabilities](#cross-cutting-capabilities).
 
 ## Roadmap Principle
@@ -114,7 +115,7 @@ Technical improvements are introduced only when they directly support business v
 - Allow the Discovery Profile to be revised as understanding improves; it is re-entrant.
 - Shape discovery around the Customer Operations domain (its discovery questions and taxonomy are supplied by the Consulting Knowledge Base once curated in Phase 5; until then, discovery uses the agreed Customer Operations structure).
 
-> **Sequencing of the Revision 1.2 extension.** The value & measurement baseline and the draft/submitted + client-completed workflow are delivered as a **re-entry into Phase 2** (the "Phase 2 Extension"), sequenced **after Phase 3 is accepted and before Phase 3A begins**. Phase 2's original scope is already accepted and in place; the extension is a follow-on increment on that accepted capability, not a reopening of the phase order. It is placed before Phase 3A because Phase 3A's Client Discovery Portal and Draft / Submit / Return workflow build directly on the discovery workflow and provenance this extension introduces. It is placed after Phase 3 so the in-flight assessment work is not disturbed. Phase 3 itself is unchanged by this revision; whether the assessment later reads the value & measurement baseline is a separate, future decision, not a change to Phase 3's accepted scope.
+> **Sequencing of the Revision 1.2 extension.** The value & measurement baseline and the draft/submitted + client-completed workflow are delivered as a **re-entry into Phase 2** (the "Phase 2 Extension"), sequenced **after Phase 3 is accepted and before Phase 3A begins**. Phase 2's original scope is already accepted and in place; the extension is a follow-on increment on that accepted capability, not a reopening of the phase order. It is placed before Phase 3A because Phase 3A's Client Portal and Draft / Submit / Return workflow build directly on the discovery workflow and provenance this extension introduces. It is placed after Phase 3 so the in-flight assessment work is not disturbed. Phase 3 itself is unchanged by this revision; whether the assessment later reads the value & measurement baseline is a separate, future decision, not a change to Phase 3's accepted scope.
 
 **Definition of Done.**
 - A consultant can enter, save, and revise a Discovery Profile on an engagement.
@@ -160,11 +161,11 @@ Technical improvements are introduced only when they directly support business v
 
 ## Phase 3A — Multi-user & Client Collaboration Foundation
 
-> **Extension inserted after Phase 3, not a renumbering.** Phase 3A follows the same convention as Phase 5A: it is placed where the capability is needed — once there is real engagement content worth protecting and worth sharing with a client — without shifting any existing phase number or the MVP boundary. It is sequenced **after the Phase 2 Extension** (Revision 1.2), because the Client Discovery Portal builds on the discovery draft/submitted workflow and provenance that extension delivers. **Authentication and authorization are delivered here, not in Phase 11.**
+> **Extension inserted after Phase 3, not a renumbering.** Phase 3A follows the same convention as Phase 5A: it is placed where the capability is needed — once there is real engagement content worth protecting and worth sharing with a client — without shifting any existing phase number or the MVP boundary. It is sequenced **after the Phase 2 Extension** (Revision 1.2), because the Client Portal builds on the discovery draft/submitted workflow and provenance that extension delivers. **Authentication and authorization are delivered here, not in Phase 11.**
 
 **Goal.** Turn the workbench from a single-consultant tool into a safe, multi-user working environment in which a consulting team runs engagements side by side and a client can contribute to Discovery without ever seeing anything else.
 
-**Business capability.** Operate engagements inside a **Workspace** with real users and roles — **Administrator**, **Manager**, **Client** — where a Manager owns their engagements, an Administrator oversees the whole workspace, and a self-registered Client completes only the Discovery form associated with their own account, through the **Client Discovery Portal**, under a **Draft / Submit / Return** workflow with notifications and an audit trail. Authentication, access association, and email-based verification/password flows are handled through dedicated infrastructure boundaries, not through consulting-domain state.
+**Business capability.** Operate engagements inside a **Workspace** with real users and roles — **Administrator**, **Manager**, **Client** — where a Manager owns their engagements, an Administrator oversees the whole workspace, and a self-registered Client completes only the Discovery form associated with their own account, through the **Client Portal**, under a **Draft / Submit / Return** workflow with notifications and an audit trail. Authentication, access association, and email-based verification/password flows are handled through dedicated infrastructure boundaries, not through consulting-domain state.
 
 **Scope.**
 - **Workspace.** Introduce the **Workspace** as the ownership and isolation boundary for all engagement-side data. Every user, organization, engagement, and all engagement state belongs to exactly one workspace. Nothing crosses a workspace boundary.
@@ -178,10 +179,10 @@ Technical improvements are introduced only when they directly support business v
 - **Workspace isolation.** Every read and write of engagement-side data is scoped to the acting user's workspace, so data from one workspace can never be read, listed, counted, aggregated, referenced, or exported from another.
 - **Engagement ownership.** Every engagement has exactly one owning Manager and belongs to exactly one workspace. Ownership can be transferred by an Administrator. Ownership is what a Manager's access is measured against.
 - **Client access association.** A Manager (or Administrator) associates a self-registered client contact with the Discovery form of **one specific engagement**. The association is explicit, scoped to that engagement's discovery, time-bounded, and revocable; revoking it ends the client's access immediately.
-- **Client Discovery Portal.** A restricted, client-facing surface where a self-registered client sees **only their own engagement's Discovery form** — no assessment, no opportunities, no recommendations, no report, no other engagement, no other client, and no workbench navigation.
+- **Client Portal.** A restricted, client-facing surface where a self-registered client sees **only their own engagement's Dashboard, Discovery, Documents, and Profile** — no assessment, no opportunities, no recommendations, no report, no other engagement, no other client, and no workbench navigation. The Documents section is read-only and shows only Published documents.
 - **Draft / Submit / Return workflow.** The client works in **draft**, **submits** when finished, and the consultant **reviews** the submission and either **accepts** it or **returns** it with notes for completion or correction. Returned discovery goes back to draft for the client; the cycle can repeat. Every transition preserves prior content — a return never discards what the client wrote, and an acceptance never discards what the consultant edited.
-- **Notifications.** Users are notified of the events that need their attention: an invitation issued, a discovery submitted, a discovery returned, an invitation revoked or expired. Notifications inform; they never act on a user's behalf.
-- **Audit trail.** Record an **append-only Audit Trail** of access- and collaboration-relevant events: sign-in, invitation issued/accepted/revoked/expired, submission, return, acceptance, ownership transfer, role change, and denied-permission attempts — who did what, to which engagement, and when. It is distinct from the engagement's **Analysis Runs** (AI assistance) and from the **Technology Update History** (knowledge curation); the three logs are never conflated.
+- **Notifications.** Users are notified of the events that need their attention: an invitation issued, a discovery submitted, a discovery returned, a document published, a publication revoked, an invitation revoked or expired. Notifications inform; they never act on a user's behalf.
+- **Audit trail.** Record an **append-only Audit Trail** of access- and collaboration-relevant events: sign-in, invitation issued/accepted/revoked/expired, submission, return, acceptance, publication, publication revocation, document download, ownership transfer, role change, and denied-permission attempts — who did what, to which engagement, and when. It is distinct from the engagement's **Analysis Runs** (AI assistance) and from the **Technology Update History** (knowledge curation); the three logs are never conflated.
 - **Migration of existing work.** Existing organizations and engagements are brought into a workspace with an owning Manager as part of this phase, so the application is fully working — with access control on — at the end of it, and no engagement is left unowned or unreachable.
 - **Authentication data separation.** Auth state, password handling, sessions, verification, and invitation delivery are stored and processed outside consulting-domain tables and services.
 - **Out of scope here.** Enterprise identity federation (SSO/SAML/OIDC providers), cross-workspace sharing, per-user access to individual engagement sections beyond the roles above, and client access to any stage other than Discovery. Production deployment, monitoring, backup, and operational hardening remain Phase 11.
@@ -342,16 +343,19 @@ Technical improvements are introduced only when they directly support business v
 
 **Goal.** Assemble the engagement into a professional, client-ready deliverable and turn remaining gaps into follow-up questions.
 
-**Business capability.** Produce a **versioned Consultant Report** and **Follow-up Questions**.
+**Business capability.** Produce a **versioned Consultant Report**, publish the selected version to the **Client Portal**, and produce **Follow-up Questions**.
 
 **Scope.**
 - Assemble discovery, assessment, prioritized problems, grounded recommendations, roadmap, and follow-up questions into one coherent, client-ready document.
 - The report is **editable** by the consultant and **versioned**, preserving exactly what was reviewed and delivered at each iteration.
+- The consultant can explicitly **publish** a chosen report version to the Client Portal, **revoke** publication, and preserve version and publication history.
+- Only **Published** report versions are visible to clients; the Client Portal Documents view is read-only and acts as the primary place to access the published PDF.
+- Publishing sends an email notification to the client with a link back to the Client Portal.
 - Turn outstanding gaps and missing information into **Follow-up Questions** for the client, using the Consulting Knowledge Base's follow-up templates.
 - Any AI-assisted assembly or drafting runs are recorded and observed per [Cross-cutting Capabilities](#cross-cutting-capabilities).
 
 **Definition of Done.**
-- A consultant can generate, edit, and save a Consultant Report version and place it in front of a client.
+- A consultant can generate, edit, save, publish, and revoke a Consultant Report version, and the client can access the published PDF through the Client Portal.
 - Each delivered version is preserved and retrievable.
 - Follow-up questions covering the engagement's gaps are produced and included.
 
@@ -359,6 +363,7 @@ Technical improvements are introduced only when they directly support business v
 - Report is client-ready.
 - Report is editable.
 - Report is versioned.
+- Published reports are visible in the Client Portal and unpublished versions are not.
 
 ---
 
@@ -491,7 +496,7 @@ From Phase 3A onward, the following applies to **every** phase that adds any cap
 
 ### Language and localization readiness (all phases with user-facing surface)
 
-The MVP ships a **German-only** user interface, built on an **internationalization-ready** foundation from the start. This applies to every phase that adds user-facing surface, including the Phase 3A Client Discovery Portal:
+The MVP ships a **German-only** user interface, built on an **internationalization-ready** foundation from the start. This applies to every phase that adds user-facing surface, including the Phase 3A Client Portal:
 
 - **User-facing strings are localizable, not hard-coded.** Every string a user reads — labels, help text, validation messages, notifications, emails, exported document headings — is authored so that adding a second language later is a translation task, not a rewrite.
 - **Internal identifiers remain English.** Domain terms, entity and field names, enum and status values, stage and role names, event names, API contracts, and log/audit entries stay in English. The ubiquitous language of `domain-model.md` is English and is never translated in code or data.

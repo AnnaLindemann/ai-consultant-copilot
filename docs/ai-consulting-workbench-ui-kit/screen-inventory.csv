@@ -1,0 +1,43 @@
+id,role,page,primary_purpose,priority
+C01,Client,Registration,Self-register for associated engagement,Foundation
+C02,Client,Email confirmation,Verify client identity,Foundation
+C03,Client,Overview,Show current status and next action,Discovery
+C04,Client,Discovery form,Enter and save structured discovery information,Discovery
+C05,Client,Discovery submitted,Confirm immutable submission and review state,Discovery
+C06,Client,Discovery returned,Show manager feedback and enable revision,Discovery
+C07,Client,Discovery accepted,Show accepted read-only state,Discovery
+C08,Client,Documents,List published client-visible documents,Report delivery
+C09,Client,Proposal detail,Open and download published PDF,Report delivery
+C10,Client,No documents,Explain absence of published documents,Report delivery
+C11,Client,Access unavailable,Handle expired or revoked access,Foundation
+C12,Client,Profile and security,Manage own account,Foundation
+M01,Manager,Dashboard,Show owned work and next actions,Multi-user
+M02,Manager,Engagement list,Compare and filter owned engagements,Multi-user
+M03,Manager,Engagement overview,Orient manager within one engagement,Consulting
+M04,Manager,Discovery review,Accept or return client submission,Discovery
+M05,Manager,Assessment workspace,Review structured assessment and readiness,Consulting
+M06,Manager,Problem prioritization,Prioritize evidence-backed problems,Consulting
+M07,Manager,Recommendations,Review grounded editable recommendations,Consulting
+M08,Manager,Roadmap editor,Build implementation roadmap,Consulting
+M09,Manager,Report workspace,Assemble and edit client-ready report,Report delivery
+M10,Manager,Report versions,Manage immutable report versions,Report delivery
+M11,Manager,Publish report dialog,Publish approved version to client,Report delivery
+M12,Manager,Publication result,Separate publication and email outcomes,Report delivery
+M13,Manager,Published proposal view,Verify exact client view,Report delivery
+M14,Manager,Engagement history,Review meaningful business events,Multi-user
+M15,Manager,Knowledge search,Find grounded consulting knowledge,Knowledge
+M16,Manager,Reports overview,Track reports across owned engagements,Report delivery
+A01,Administrator,Dashboard,Show workspace operations,Multi-user
+A02,Administrator,All engagements,Manage workspace engagement overview,Multi-user
+A03,Administrator,Organizations,Manage client organizations,Multi-user
+A04,Administrator,Managers,Manage manager lifecycle,Multi-user
+A05,Administrator,Users and access,Manage roles invitations and client access,Multi-user
+A06,Administrator,Ownership transfer,Transfer engagement owner safely,Multi-user
+A07,Administrator,Client access administration,Manage registration and access lifecycle,Multi-user
+A08,Administrator,Audit,Inspect append-only workspace events,Multi-user
+A09,Administrator,Consulting Knowledge Base,Curate reusable consulting knowledge,Knowledge
+A10,Administrator,Technology Knowledge Base,Curate technology profiles and hierarchy,Knowledge
+A11,Administrator,Technology update proposals,Approve or reject sourced updates,Knowledge
+A12,Administrator,Technology update history,Inspect approved KB changes,Knowledge
+A13,Administrator,Notification operations,Resolve failed or pending notifications,Report delivery
+A14,Administrator,System settings,Manage supported configuration,Foundation

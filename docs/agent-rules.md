@@ -73,6 +73,7 @@ The consultant **always remains in control**. The AI assists; it does not decide
 
 - **The AI never moves a submission through the workflow.** Submitting, returning, accepting, and reopening a Discovery Profile are actions by the client or the consultant. The AI does not perform them, trigger them, or treat a stage as advanced because it considers the content sufficient.
 - **The AI may draft what a person then sends.** It may propose the notes accompanying a return, or the follow-up questions that would fill a gap — always as an editable draft the consultant reviews before it reaches the client. Nothing the AI writes goes to a client unreviewed.
+- **The AI never publishes or revokes a document.** Report publication, publication revocation, and archival are manager or administrator actions; the AI does not perform them or make them happen implicitly.
 - **The AI never notifies a client.** Notifications and invitations are product actions triggered by people; the AI does not send, compose-and-send, or schedule anything outward-facing (§2, §14).
 
 ### 2A.5 Quantitative discovery is handled honestly

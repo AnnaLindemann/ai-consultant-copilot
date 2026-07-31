@@ -1,0 +1,18 @@
+capability,client,manager,administrator,notes
+View associated engagement summary,own associated engagement only,owned engagements,all workspace engagements,Server-side authorization required
+Edit Discovery,draft or returned own form,owned engagements,all workspace engagements,Accepted snapshots are read-only
+Submit Discovery,yes,yes for owned engagements,yes,Creates review state
+Accept or return Discovery,no,owned engagements,all workspace engagements,Return requires note
+View assessment,no,owned engagements,all workspace engagements,Internal only
+View recommendations,no,owned engagements,all workspace engagements,Internal only
+Edit report draft,no,owned engagements,all workspace engagements,AI output remains editable
+Approve report version,no,owned engagements subject to policy,yes,Policy for self-approval remains open
+Publish approved report,no,owned engagements,all workspace engagements,Publication and email are separate outcomes
+View published report,own associated engagement only,yes,yes,Client sees explicitly published versions only
+Download published PDF,own associated engagement only,yes,yes,Authorization checked on every download
+Edit published report,no,no,no,Create a new version instead
+Withdraw published report,no,owned engagements subject to policy,yes,Audit retained
+Manage users and roles,no,no,yes,Administrators never see permanent passwords
+Transfer engagement ownership,no,no,yes,Audit event required
+View audit,no,relevant business history only,workspace audit,Append-only
+Manage knowledge bases,no,phase/policy dependent,yes,Client never has access
