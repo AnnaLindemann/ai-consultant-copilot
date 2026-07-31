@@ -13,6 +13,8 @@ This folder is a frontend design source for the project.
 
 The approved product and frozen project documents now include a Client Portal that supports Discovery and manager-published read-only proposals. The Client receives an e-mail notification and may open or download the published PDF.
 
+The approved visual direction is a light-first, premium consulting workspace with restrained warm-gold brand emphasis. The marketing site may be more atmospheric, but the operational workbench must stay calm, readable, and information-dense; dark mode is not a new implementation requirement unless it is already planned elsewhere.
+
 Before implementing proposal delivery, deliberately update the relevant frozen product/domain/roadmap/architecture documents and authorization contract. Do not treat this UI document alone as an authorization source.
 
 ## Suggested repository location

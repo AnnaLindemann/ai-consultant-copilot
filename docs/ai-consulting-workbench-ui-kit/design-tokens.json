@@ -23,9 +23,9 @@
       "strong": { "$value": "#D0D5DD", "$type": "color" }
     },
     "primary": {
-      "050": { "$value": "#EEF2FF", "$type": "color" },
-      "600": { "$value": "#315EFB", "$type": "color" },
-      "700": { "$value": "#2448D8", "$type": "color" }
+      "050": { "$value": "#FFF7E0", "$type": "color" },
+      "600": { "$value": "#8A6714", "$type": "color" },
+      "700": { "$value": "#6E520F", "$type": "color" }
     },
     "success": {
       "050": { "$value": "#ECFDF3", "$type": "color" },

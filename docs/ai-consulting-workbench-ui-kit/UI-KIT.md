@@ -88,7 +88,27 @@ The publication action and the e-mail notification are separate results. A faile
 
 ## 3. Design direction
 
-### 3.1 Visual character
+### 3.1 Brand identity
+
+The interface should read as a **Modern Premium B2B Consulting Workspace**: professional, minimal, calm, premium, high in information clarity, and low in visual noise.
+
+Key characteristics:
+
+- consulting workspace first, not a CRM;
+- light working surfaces with clear hierarchy;
+- restrained warm-gold brand emphasis;
+- strong typography and compact structure;
+- thin borders and minimal elevation;
+- readable, efficient, and calm for long daily use.
+
+### 3.2 Theme strategy
+
+- **Light theme is the primary working theme** for the operational workbench.
+- **Dark theme may be used more atmospherically** and may more closely reflect the SVNTN marketing website.
+- Both themes must preserve accessibility, contrast, and readability.
+- Dark mode is not a current implementation requirement unless it is already explicitly planned elsewhere.
+
+### 3.3 Color direction
 
 The interface uses a restrained modern B2B SaaS aesthetic inspired by the clarity of Linear, Stripe, Notion, and Vercel, without copying any of them.
 
@@ -99,13 +119,46 @@ Key characteristics:
 - strong typographic hierarchy;
 - minimal decoration;
 - compact but not cramped information density;
-- one blue primary accent;
+- a restrained warm-gold primary accent inspired by SVNTN;
 - semantic colors used only for status and feedback;
 - cards used for grouped meaning, not for every line of content;
 - tables for comparison-heavy operational data;
 - generous whitespace around decision points.
 
-### 3.2 Design principles
+Gold is the primary brand emphasis for selected states, focus accents, and limited highlights. It must not overwhelm the interface, substitute for semantic colors, or introduce low-contrast text or decorative gradients that reduce usability.
+
+### 3.4 Visual language
+
+- strong typography;
+- thin borders;
+- restrained surfaces and cards;
+- subtle gradients only when they support hierarchy;
+- minimal elevation;
+- no neon;
+- no glassmorphism;
+- no visually heavy cinematic backgrounds in operational screens.
+
+### 3.5 Motion
+
+- purposeful only;
+- typically `150-250 ms`;
+- no continuous decorative animation in work surfaces;
+- reduced-motion support is mandatory.
+
+### 3.6 Icons and imagery
+
+- consistent outline icons with a shared stroke style;
+- abstract technology or process visuals are acceptable;
+- no stock-photo-heavy design;
+- no generic AI robots, glowing brains, or similar AI clichés.
+
+### 3.7 Marketing site versus application
+
+The marketing site may be atmospheric and visually dramatic, including a darker presentation if that helps express the brand.
+
+The internal workbench must translate the same brand into a lighter, quieter, more usable operational interface. Brand consistency should come from typography, accent color, spacing, borders, and motion discipline rather than copying the marketing layout.
+
+### 3.8 Design principles
 
 #### Calm over impressive
 The product handles business decisions. It must look trustworthy, not theatrical.
@@ -142,9 +195,9 @@ The canonical machine-readable values are in `design-tokens.json`.
 | `color.text.inverse` | `#FFFFFF` | Text on inverse surfaces |
 | `color.border.default` | `#E4E7EC` | Standard borders |
 | `color.border.strong` | `#D0D5DD` | Strong separators and input hover |
-| `color.primary.600` | `#315EFB` | Primary action |
-| `color.primary.700` | `#2448D8` | Primary hover |
-| `color.primary.050` | `#EEF2FF` | Selected item and primary tint |
+| `color.primary.600` | `#8A6714` | Primary action, selected state, focus accent |
+| `color.primary.700` | `#6E520F` | Primary hover |
+| `color.primary.050` | `#FFF7E0` | Selected item and primary tint |
 | `color.success.600` | `#16845B` | Completed, accepted |
 | `color.success.050` | `#ECFDF3` | Success background |
 | `color.warning.600` | `#B54708` | Waiting, returned, caution |
