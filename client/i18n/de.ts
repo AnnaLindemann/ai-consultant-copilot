@@ -341,6 +341,105 @@ const uiMessages = {
   "discovery.baseline.figure.remove": "Kennzahl entfernen",
   "discovery.baseline.figure.hint":
     "Eine gemessene Kennzahl muss nennen, wie sie gemessen wird; eine Kennzahl aus einer Schätzung kann nicht als gemessen erfasst werden.",
+
+  // --- access: sign-in, self-registration, invitation (Phase 3A) ----------
+  "auth.page.eyebrow": "AI Consulting Workbench",
+  "auth.page.title": "Anmelden oder Konto anlegen",
+  "auth.page.subtitle":
+    "Melden Sie sich mit Ihrem Zugang an. Kundinnen und Kunden legen ihr Konto selbst an; Consultants und Administratorinnen erhalten eine Einladung.",
+  "auth.page.back_home": "Zur Startseite",
+
+  "auth.tab.login": "Anmelden",
+  "auth.tab.register": "Konto anlegen",
+  "auth.tab.invitation": "Einladung",
+  "auth.tab.bootstrap": "Erst-Administrator",
+
+  "auth.form.login.title": "Anmeldung",
+  "auth.form.login.submit": "Anmelden",
+  "auth.form.register.title": "Eigenes Konto anlegen",
+  "auth.form.register.hint":
+    "Legen Sie Ihr Konto selbst an und bestätigen Sie Ihre E-Mail-Adresse. Ihr Consultant gibt Ihnen anschließend das Discovery-Formular frei.",
+  "auth.form.register.submit": "Konto anlegen",
+  "auth.form.invitation.title": "Einladung annehmen",
+  "auth.form.invitation.hint":
+    "Sie haben einen Einladungslink erhalten? Legen Sie hier Ihr eigenes Passwort fest.",
+  "auth.form.invitation.submit": "Passwort festlegen",
+  "auth.form.bootstrap.title": "Ersten Administrator anlegen",
+  "auth.form.bootstrap.hint":
+    "Einmalig, mit dem Bootstrap-Secret dieser Installation.",
+  "auth.form.bootstrap.submit": "Bootstrap ausführen",
+  "auth.form.submitting": "Bitte warten …",
+
+  "auth.field.email": "E-Mail",
+  "auth.field.password": "Passwort",
+  "auth.field.password_hint": "Mindestens 12 Zeichen.",
+  "auth.field.display_name": "Anzeigename",
+  "auth.field.invitation_token": "Einladungs-Token",
+  "auth.field.bootstrap_secret": "Bootstrap-Secret",
+  "auth.field.workspace_name": "Workspace-Name",
+  "auth.field.administrator_email": "E-Mail der Administratorin",
+  "auth.field.administrator_name": "Name der Administratorin",
+
+  "auth.message.login_successful": "Anmeldung erfolgreich.",
+  "auth.message.logout_successful": "Abmeldung erfolgreich.",
+  "auth.message.verification_sent":
+    "Wenn diese Adresse verwendet werden kann, ist eine Bestätigungs-E-Mail unterwegs. Bitte bestätigen Sie die Adresse und melden Sie sich anschließend an.",
+  "auth.message.invitation_accepted":
+    "Einladung angenommen. Sie können sich jetzt anmelden.",
+  "auth.message.bootstrap_complete":
+    "Bootstrap abgeschlossen. Sie können sich jetzt anmelden.",
+  "auth.message.invitation_issued": "Einladung verschickt.",
+  "auth.message.discovery_access_granted": "Discovery-Zugang erteilt.",
+
+  "auth.error.unauthenticated":
+    "Bitte melden Sie sich an, um fortzufahren.",
+  "auth.error.forbidden":
+    "Für diese Aktion fehlt Ihnen die Berechtigung.",
+  "auth.error.not_found": "Nicht gefunden.",
+  "auth.error.invalid_input":
+    "Die Angaben sind unvollständig oder ungültig. Das Passwort muss mindestens 12 Zeichen haben.",
+  "auth.error.invalid_credentials":
+    "E-Mail-Adresse oder Passwort stimmen nicht.",
+  "auth.error.email_not_verified":
+    "Bitte bestätigen Sie zuerst Ihre E-Mail-Adresse.",
+  "auth.error.email_already_registered":
+    "Für diese Adresse besteht bereits ein Konto.",
+  "auth.error.password_too_weak":
+    "Das Passwort ist zu kurz. Bitte mindestens 12 Zeichen verwenden.",
+  "auth.error.provider_unavailable":
+    "Die Anmeldung ist zurzeit nicht möglich. Bitte später erneut versuchen.",
+  "auth.error.bootstrap_unavailable":
+    "Diese Installation ist bereits eingerichtet.",
+  "auth.error.invitation_invalid": "Dieser Einladungslink ist ungültig.",
+  "auth.error.invitation_unavailable":
+    "Diese Einladung ist abgelaufen oder wurde zurückgezogen.",
+  "auth.error.client_not_registered":
+    "Für diese Adresse besteht noch kein Konto. Die Kundenseite legt ihr Konto selbst an, bevor Sie die Discovery freigeben können.",
+  "auth.error.client_email_unverified":
+    "Diese Adresse ist noch nicht bestätigt.",
+  "auth.error.not_a_client":
+    "Diese Adresse gehört zu keinem Kundenkonto dieses Workspace. Die Discovery kann nur für ein Kundenkonto freigegeben werden.",
+  "auth.error.user_not_in_workspace":
+    "Diese Person gehört nicht zu diesem Workspace.",
+  "auth.error.not_a_manager":
+    "Ein Engagement kann nur einer Managerin oder einer Administratorin gehören.",
+  "auth.error.invitation_not_revocable":
+    "Diese Einladung kann nicht mehr zurückgezogen werden.",
+  "auth.error.notification_not_found": "Diese Benachrichtigung gibt es nicht.",
+  "auth.error.discovery_access_not_found":
+    "Dieser Discovery-Zugang wurde nicht gefunden.",
+
+  // --- Client Discovery Portal (Phase 3A) ---------------------------------
+  "portal.eyebrow": "Client Discovery Portal",
+  "portal.title": "Discovery-Profil",
+  "portal.subtitle":
+    "Sie sehen ausschließlich dieses Discovery-Formular. Nach dem Einreichen prüft der Consultant es und gibt es bei Bedarf mit Anmerkungen zurück.",
+  "portal.unavailable.title": "Discovery nicht verfügbar",
+  "portal.unavailable.hint":
+    "Möglicherweise ist der Zugang abgelaufen oder wurde zurückgezogen, oder Sie sind nicht angemeldet.",
+  "portal.unavailable.sign_in": "Zur Anmeldung",
+  "portal.error.invalid_input":
+    "Die Angaben sind unvollständig oder ungültig.",
 } as const
 
 export const de = { ...serverMessages, ...uiMessages }

@@ -57,6 +57,26 @@ enum Currency {
   OTHER
 }
 
+enum UserRole {
+  ADMIN
+  MANAGER
+  CLIENT
+}
+
+enum InvitationStatus {
+  pending
+  accepted
+  revoked
+  expired
+}
+
+enum DiscoveryAccessStatus {
+  pending
+  active
+  revoked
+  expired
+}
+
 // Where the Discovery Profile stands in its review workflow (Phase 2
 // Extension; domain-model.md §3A.3). Submission is a review checkpoint, not a
 // lock: discovery stays revisable in every state, and acceptance never ends the
@@ -108,6 +128,9 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
   name        String
   industry    String?
   companySize CompanySize?
@@ -116,6 +139,7 @@ model Organization {
 
   engagements Engagement[]
 
+  @@index([workspaceId])
   @@index([name])
   @@index([createdAt])
 }
@@ -135,8 +159,14 @@ model Engagement {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  owningManagerId String
+  owningManager   User @relation("EngagementOwnedBy", fields: [owningManagerId], references: [id], onDelete: Restrict)
 
   // A short label distinguishing engagements within one organization.
   title String?
@@ -217,7 +247,14 @@ model Engagement {
   assessment            Json?
   assessmentReviewState AssessmentReviewState?
 
+  invitations       ClientInvitation[]
+  discoveryAccesses  DiscoveryAccess[]
+  notifications     Notification[]
+  auditTrails       AuditTrail[]
+
   @@index([organizationId])
+  @@index([workspaceId])
+  @@index([owningManagerId])
   @@index([stage])
   @@index([discoveryStatus])
   @@index([createdAt])
@@ -227,6 +264,9 @@ model Engagement {
 
 model AnalysisRun {
   id String @id @default(cuid())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   engagementId String
   engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
@@ -267,6 +307,254 @@ model AnalysisRun {
   createdAt DateTime @default(now())
 
   @@index([engagementId])
+  @@index([workspaceId])
   @@index([provider, model])
+  @@index([createdAt])
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name String
+
+  users        User[]
+  organizations Organization[]
+  engagements  Engagement[]
+  analysisRuns  AnalysisRun[]
+  invitations  ClientInvitation[]
+  discoveryAccesses DiscoveryAccess[]
+  notifications Notification[]
+  auditTrails  AuditTrail[]
+
+  @@index([name])
+  @@index([createdAt])
+}
+
+model User {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  email String
+  displayName String?
+  role UserRole
+  emailVerifiedAt DateTime?
+
+  // The authentication identity behind this workspace membership. The
+  // credential itself lives in the access/auth table group and is owned by the
+  // authentication provider; the consulting domain holds only the reference
+  // (architecture.md §1.13, §7A.1). Nullable because the Phase 3A migration's
+  // placeholder owner exists before anyone can sign in, and because a
+  // self-registered client has an authentication identity before a consultant
+  // associates them with a workspace.
+  authUserId String? @unique
+  authUser   AuthUser? @relation(fields: [authUserId], references: [id], onDelete: SetNull)
+
+  issuedInvitations ClientInvitation[] @relation("InvitationIssuer")
+  acceptedInvitations ClientInvitation[] @relation("InvitationAcceptedBy")
+  discoveryAccessGranted DiscoveryAccess[] @relation("DiscoveryAccessGrantor")
+  discoveryAccesses DiscoveryAccess[] @relation("DiscoveryAccessRecipient")
+  ownedEngagements Engagement[] @relation("EngagementOwnedBy")
+  notifications Notification[]
+  auditTrails AuditTrail[]
+
+  @@unique([workspaceId, email])
+  @@index([workspaceId])
+  @@index([role])
+}
+
+// ---------------------------------------------------------------------------
+// The access/auth table group (architecture.md §2, §6, §7A.1). These four
+// models are owned by the authentication provider — Better Auth — and are
+// deliberately kept out of the consulting-domain tables: no engagement-side
+// code reads or writes them, and the consulting domain never stores a
+// permanent password. Their shape is the provider's contract, which is why the
+// field names are the provider's rather than this repository's usual style.
+// ---------------------------------------------------------------------------
+
+// Better Auth's `user` model: the authentication identity. Workspace
+// membership and Role live on the consulting-domain `User`, which references
+// this row — an identity can exist before it belongs to any workspace, which is
+// exactly the state of a self-registered client awaiting Discovery Access.
+model AuthUser {
+  id            String   @id
+  name          String
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessions   AuthSession[]
+  accounts   AuthAccount[]
+  membership User?
+
+  @@index([email])
+}
+
+// Better Auth's `session` model. Sessions are the provider's concern; the
+// backend holds no engagement state between requests (architecture.md §2).
+model AuthSession {
+  id        String   @id
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// Better Auth's `account` model. For email/password sign-in this is where the
+// hashed password lives — inside the auth boundary, never in a consulting
+// table (coding-standards.md §6A).
+model AuthAccount {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  userId String
+  user   AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Better Auth's `verification` model: email-verification and password-reset
+// tokens. It replaces the hand-rolled EmailVerificationToken and
+// PasswordResetToken tables, so there is one implementation of these flows.
+model AuthVerification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@index([expiresAt])
+}
+
+model ClientInvitation {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdByUserId String
+  createdByUser User @relation("InvitationIssuer", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  email String
+  role UserRole
+  engagementId String?
+  engagement Engagement? @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  tokenHash String @unique
+  status InvitationStatus @default(pending)
+  expiresAt DateTime
+  acceptedAt DateTime?
+  revokedAt DateTime?
+  acceptedByUserId String?
+  acceptedByUser User? @relation("InvitationAcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([email])
+  @@index([engagementId])
+  @@index([status])
+}
+
+model DiscoveryAccess {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  engagementId String
+  engagement Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User @relation("DiscoveryAccessRecipient", fields: [userId], references: [id], onDelete: Cascade)
+
+  grantedByUserId String
+  grantedByUser User @relation("DiscoveryAccessGrantor", fields: [grantedByUserId], references: [id], onDelete: Restrict)
+
+  status DiscoveryAccessStatus @default(active)
+  expiresAt DateTime?
+  acceptedAt DateTime?
+  revokedAt DateTime?
+
+  @@unique([engagementId, userId])
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([engagementId])
+  @@index([status])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  engagementId String?
+  engagement Engagement? @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  kind String
+  payload Json
+  readAt DateTime?
+
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([engagementId])
+  @@index([kind])
+}
+
+model AuditTrail {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  userId String?
+  user   User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  engagementId String?
+  engagement Engagement? @relation(fields: [engagementId], references: [id], onDelete: SetNull)
+
+  eventType String
+  payload Json
+
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([engagementId])
+  @@index([eventType])
   @@index([createdAt])
 }

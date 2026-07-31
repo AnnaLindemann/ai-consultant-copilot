@@ -40,6 +40,8 @@ type DiscoveryProfileEditorProps = {
   engagementId: string
   initialProfile: DiscoveryProfile
   workflow: DiscoveryWorkflowState
+  pathPrefix?: string
+  lockContributor?: DiscoveryActor
 }
 
 const API_BASE_URL =
@@ -114,13 +116,16 @@ export default function DiscoveryProfileEditor({
   engagementId,
   initialProfile,
   workflow,
+  pathPrefix = "/engagements",
+  lockContributor,
 }: DiscoveryProfileEditorProps) {
   const router = useRouter()
   const [profile, setProfile] = useState(initialProfile)
-  // Who is entering this content. It is declared, not authenticated:
-  // authenticated identity and the client's own portal arrive with Phase 3A.
-  // What it decides here is attribution — whose statement a fact is.
-  const [contributor, setContributor] = useState<DiscoveryActor>("consultant")
+  // Who is entering this content. It is declared, not authenticated in the
+  // consultant workspace; the portal locks it to the client identity.
+  const [contributor, setContributor] = useState<DiscoveryActor>(
+    lockContributor ?? "consultant",
+  )
   const [gapCategory, setGapCategory] =
     useState<DiscoveryGapCategory>("situation")
   const [gapDescription, setGapDescription] = useState("")
@@ -161,10 +166,11 @@ export default function DiscoveryProfileEditor({
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/engagements/${engagementId}/discovery`,
+        `${API_BASE_URL}${pathPrefix}/${engagementId}/discovery`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({ contributor, profile }),
         },
       )
@@ -201,17 +207,23 @@ export default function DiscoveryProfileEditor({
           <p style={introStyle}>{t("discovery.editor.intro")}</p>
         </div>
         <div style={{ display: "grid", gap: 10, justifyItems: "end" }}>
-          <SelectField
-            label={t("discovery.editor.contributor.label")}
-            value={contributor}
-            options={CONTRIBUTORS}
-            optionLabels={{
-              consultant: t("discovery.actor.consultant"),
-              client: t("discovery.actor.client"),
-            }}
-            includeUnknown={false}
-            onChange={(value) => setContributor(value as DiscoveryActor)}
-          />
+          {lockContributor ? (
+            <div style={{ ...introStyle, margin: 0 }}>
+              {t(`discovery.actor.${lockContributor}`)}
+            </div>
+          ) : (
+            <SelectField
+              label={t("discovery.editor.contributor.label")}
+              value={contributor}
+              options={CONTRIBUTORS}
+              optionLabels={{
+                consultant: t("discovery.actor.consultant"),
+                client: t("discovery.actor.client"),
+              }}
+              includeUnknown={false}
+              onChange={(value) => setContributor(value as DiscoveryActor)}
+            />
+          )}
           <button
             type="button"
             onClick={saveProfile}
@@ -230,6 +242,7 @@ export default function DiscoveryProfileEditor({
         engagementId={engagementId}
         actor={contributor}
         workflow={workflow}
+        pathPrefix={pathPrefix}
       />
 
       <DiscoverySection title={t("discovery.section.situation")}>

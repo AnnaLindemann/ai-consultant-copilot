@@ -8,16 +8,30 @@ import type { DiscoveryTransitionFailure } from "../services/discovery.service.j
 
 type RouteMockEngagement = {
   id: string
+  workspaceId: string
+  owningManagerId: string
   organization: { id: string; name: string; industry: string | null }
 }
 
 const engagement: RouteMockEngagement = {
   id: "eng_1",
+  workspaceId: "ws_1",
+  owningManagerId: "user_1",
   organization: {
     id: "org_1",
     name: "Example Org",
     industry: null,
   },
+}
+
+// The acting user is established at the boundary and passed inward; these tests
+// exercise the transition outcomes with the real AccessPolicy in the loop.
+const actingUser = {
+  id: "user_1",
+  workspaceId: "ws_1",
+  role: "ADMIN" as const,
+  email: "admin@example.com",
+  displayName: "Admin",
 }
 
 let transitionResult:
@@ -42,6 +56,27 @@ mock.module("../repositories/engagement.repository.js", {
     toDiscoveryProfile: () => ({}),
     toDiscoveryWorkflowState: () => ({}),
     updateEngagement: async () => engagement,
+  },
+})
+
+mock.module("../lib/prisma.js", {
+  namedExports: {
+    prisma: {},
+  },
+})
+
+mock.module("../lib/auth-context.js", {
+  namedExports: {
+    requireActingUser: async () => actingUser,
+  },
+})
+
+mock.module("../repositories/access.repository.js", {
+  namedExports: {
+    appendAuditTrail: async () => ({}),
+    getDiscoveryAccessForClient: async () => null,
+    getActiveDiscoveryAccessByEngagement: async () => null,
+    createNotification: async () => ({}),
   },
 })
 
@@ -168,7 +203,7 @@ test("Discovery baseline refusals return identifiers and the unexplained subject
   const response = await fetch(`${baseUrl}/engagements/eng_1/discovery/submit`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ actor: "client" }),
+    body: JSON.stringify({ actor: "consultant" }),
   })
   const body = (await response.json()) as {
     status: boolean

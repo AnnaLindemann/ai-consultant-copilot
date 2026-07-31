@@ -36,6 +36,7 @@ mock.module("../repositories/engagement.repository.js", {
     toDiscoveryProfile: () => discoveryProfile,
     updateEngagementAssessment: async (
       engagementId: string,
+      _scope: unknown,
       assessment: Assessment,
       reviewState: string,
     ) => {
@@ -55,6 +56,7 @@ mock.module("../repositories/analysis-run.repository.js", {
 })
 
 const { generateAssessment } = await import("./assessment.service.js")
+const scope = { workspaceId: "ws_1", userId: "user_1", role: "ADMIN" as const }
 
 const emptyDiscoveryProfile: DiscoveryProfile = {
   department: null,
@@ -166,9 +168,7 @@ beforeEach(() => {
 })
 
 test("a generated Assessment is persisted as an unreviewed AI draft", async () => {
-  const result = await generateAssessment(engagementFixture(), {
-    replaceConsultantEdits: false,
-  })
+  const result = await generateAssessment(engagementFixture(), scope, { replaceConsultantEdits: false })
 
   assert.equal(result.success, true)
   assert.equal(savedAssessments.length, 1)
@@ -181,9 +181,7 @@ test("a generated Assessment is persisted as an unreviewed AI draft", async () =
 })
 
 test("a generated Assessment records its Analysis Run with the stage's trust signals", async () => {
-  await generateAssessment(engagementFixture(), {
-    replaceConsultantEdits: false,
-  })
+  await generateAssessment(engagementFixture(), scope, { replaceConsultantEdits: false })
 
   assert.equal(recordedRuns.length, 1)
 
@@ -206,9 +204,7 @@ test("a generated Assessment records its Analysis Run with the stage's trust sig
 test("unusable AI output leaves the Assessment untouched but still records the run", async () => {
   llmCall = async () => llmResponse("Here is the assessment you asked for:")
 
-  const result = await generateAssessment(engagementFixture(), {
-    replaceConsultantEdits: false,
-  })
+  const result = await generateAssessment(engagementFixture(), scope, { replaceConsultantEdits: false })
 
   assert.equal(result.success, false)
   assert.equal(result.success === false && result.failure, "ai_output_invalid")
@@ -222,9 +218,7 @@ test("AI output that breaks the Assessment contract is not persisted", async () 
   llmCall = async () =>
     llmResponse(JSON.stringify({ summary: "Looks fine.", dimensions: {} }))
 
-  const result = await generateAssessment(engagementFixture(), {
-    replaceConsultantEdits: false,
-  })
+  const result = await generateAssessment(engagementFixture(), scope, { replaceConsultantEdits: false })
 
   assert.equal(result.success, false)
   assert.equal(savedAssessments.length, 0)
@@ -237,9 +231,7 @@ test("a provider failure is recorded as a run and changes no engagement state", 
     throw new Error("provider unavailable")
   }
 
-  const result = await generateAssessment(engagementFixture(), {
-    replaceConsultantEdits: false,
-  })
+  const result = await generateAssessment(engagementFixture(), scope, { replaceConsultantEdits: false })
 
   assert.equal(result.success, false)
   assert.equal(result.success === false && result.failure, "ai_step_failed")
@@ -252,9 +244,7 @@ test("a provider failure is recorded as a run and changes no engagement state", 
 test("an empty Discovery Profile is refused before any AI call is made", async () => {
   discoveryProfile = emptyDiscoveryProfile
 
-  const result = await generateAssessment(engagementFixture(), {
-    replaceConsultantEdits: false,
-  })
+  const result = await generateAssessment(engagementFixture(), scope, { replaceConsultantEdits: false })
 
   assert.equal(result.success, false)
   assert.equal(result.success === false && result.failure, "discovery_not_ready")
@@ -264,10 +254,7 @@ test("an empty Discovery Profile is refused before any AI call is made", async (
 })
 
 test("a re-run never silently replaces the consultant's own Assessment", async () => {
-  const result = await generateAssessment(
-    engagementFixture({ assessmentReviewState: "consultant_edited" }),
-    { replaceConsultantEdits: false },
-  )
+  const result = await generateAssessment(engagementFixture({ assessmentReviewState: "consultant_edited" }), scope, { replaceConsultantEdits: false })
 
   assert.equal(result.success, false)
   assert.equal(
@@ -279,10 +266,7 @@ test("a re-run never silently replaces the consultant's own Assessment", async (
 })
 
 test("the consultant can explicitly regenerate over an accepted Assessment", async () => {
-  const result = await generateAssessment(
-    engagementFixture({ assessmentReviewState: "accepted" }),
-    { replaceConsultantEdits: true },
-  )
+  const result = await generateAssessment(engagementFixture({ assessmentReviewState: "accepted" }), scope, { replaceConsultantEdits: true })
 
   assert.equal(result.success, true)
   assert.equal(savedAssessments.length, 1)

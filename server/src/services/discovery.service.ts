@@ -7,6 +7,7 @@ import {
 import {
   toDiscoveryProfile,
   toDiscoveryWorkflowState,
+  type EngagementScope,
   updateEngagementDiscovery,
   updateEngagementDiscoveryWorkflow,
   type EngagementWithOrganization,
@@ -35,13 +36,14 @@ import type {
 // where the save leaves the profile's status.
 export const saveDiscoveryProfile = async (
   engagement: EngagementWithOrganization,
+  scope: EngagementScope,
   discoveryProfile: DiscoveryProfile,
   contributor: DiscoveryActor,
 ) => {
   const previousProfile = toDiscoveryProfile(engagement)
   const { status, contentProvenance } = toDiscoveryWorkflowState(engagement)
 
-  return updateEngagementDiscovery(engagement.id, discoveryProfile, {
+  return updateEngagementDiscovery(engagement.id, scope, discoveryProfile, {
     status: nextStatusAfterContentSave(status, contributor),
     contentProvenance: applyContentProvenance(
       previousProfile,
@@ -85,6 +87,7 @@ export type TransitionDiscoveryInput = {
 // attribution (domain-model.md §3A.3; architecture.md §7A.6).
 export const transitionDiscovery = async (
   engagement: EngagementWithOrganization,
+  scope: EngagementScope,
   input: TransitionDiscoveryInput,
 ): Promise<TransitionDiscoveryResult> => {
   const { status } = toDiscoveryWorkflowState(engagement)
@@ -128,7 +131,7 @@ export const transitionDiscovery = async (
 
   const now = new Date()
 
-  const updated = await updateEngagementDiscoveryWorkflow(engagement.id, {
+  const updated = await updateEngagementDiscoveryWorkflow(engagement.id, scope, {
     status: check.nextStatus,
     ...(input.transition === "submit"
       ? { submittedAt: now, submittedBy: input.actor }

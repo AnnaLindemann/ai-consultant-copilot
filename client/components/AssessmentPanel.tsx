@@ -149,6 +149,7 @@ export default function AssessmentPanel({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({ replaceConsultantEdits }),
         },
       )
@@ -193,6 +194,7 @@ export default function AssessmentPanel({
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({
             assessment,
             reviewState: nextReviewState,

@@ -53,6 +53,7 @@ export default function EngagementAnalysisPanel({
   async function loadRunHistory() {
     const response = await fetch(
       `${API_BASE_URL}/engagements/${engagementId}/analysis-runs`,
+      { credentials: "include" },
     )
 
     const result = await response.json()
@@ -73,6 +74,7 @@ export default function EngagementAnalysisPanel({
         `${API_BASE_URL}/engagements/${engagementId}/analyze`,
         {
           method: "POST",
+          credentials: "include",
         },
       )
 

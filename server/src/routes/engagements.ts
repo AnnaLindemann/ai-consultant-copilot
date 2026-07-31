@@ -2,6 +2,17 @@ import { Router, type Response } from "express"
 import type { ZodError } from "zod"
 
 import { discoveryTransitionMessageIds } from "../../../shared/discovery-messages.js"
+import {
+  engagementScopeOf,
+  type ActingUser,
+  type EngagementScope,
+} from "../domain/access/access.js"
+import { requireActingUser } from "../lib/auth-context.js"
+import {
+  authorizeEngagementAction,
+  authorizeWorkspaceAction,
+  denyRequest,
+} from "../services/authorization.service.js"
 
 import {
   createEngagementSchema,
@@ -15,7 +26,6 @@ import {
 } from "../schemas/discovery.schema.js"
 import {
   createEngagement,
-  getEngagementById,
   getEngagements,
   toDiscoveryProfile,
   toDiscoveryWorkflowState,
@@ -25,6 +35,11 @@ import {
 import { getOrganizationById } from "../repositories/organization.repository.js"
 import { analyzeEngagement } from "../services/analysis.service.js"
 import { getAnalysisRunsByEngagementId } from "../repositories/analysis-run.repository.js"
+import { appendAuditTrail } from "../repositories/access.repository.js"
+import {
+  notifyEngagementClient,
+  raiseNotification,
+} from "../services/notification.service.js"
 import {
   saveDiscoveryProfile,
   transitionDiscovery,
@@ -39,8 +54,15 @@ import {
   generateAssessment,
   saveAssessment,
 } from "../services/assessment.service.js"
+import { failureIdentity } from "../lib/failure-identity.js"
 
 const router = Router()
+
+// The consultant workbench surface. Every route establishes the acting user,
+// then asks the AccessPolicy through `authorizeEngagementAction` /
+// `authorizeWorkspaceAction`. The engagement a handler works on is the one the
+// authorization already loaded through the workspace-scoped repository, so
+// there is no second, unscoped fetch (architecture.md §7A.2, §7A.4).
 
 // How a refused or failed assessment generation is reported at the boundary:
 // the consultant is missing a precondition (422), their own edits are protected
@@ -64,9 +86,18 @@ const discoveryTransitionFailureStatus: Record<
   baseline_not_explained: 422,
 }
 
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeWorkspaceAction(actingUser, "engagement.list")
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
   try {
-    const engagements = await getEngagements()
+    // Listings are scoped exactly as record fetches are: an Administrator sees
+    // their workspace, a Manager sees what they own, and nothing crosses a
+    // workspace boundary (architecture.md §7A.4).
+    const engagements = await getEngagements(engagementScopeOf(actingUser))
 
     return res.json({
       status: true,
@@ -74,7 +105,7 @@ router.get("/", async (_req, res) => {
       data: engagements,
     })
   } catch (error) {
-    console.error("LOAD ENGAGEMENTS ERROR:", error)
+    console.error("LOAD_ENGAGEMENTS_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -84,32 +115,33 @@ router.get("/", async (_req, res) => {
 })
 
 router.get("/:id", async (req, res) => {
-  try {
-    const engagement = await getEngagementById(req.params.id)
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
 
-    if (!engagement) {
-      return res.status(404).json({
-        status: false,
-        message: "Engagement not found",
-      })
-    }
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "engagement.read",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
 
-    return res.json({
-      status: true,
-      message: "Engagement loaded",
-      data: withDiscoveryState(engagement),
-    })
-  } catch (error) {
-    console.error("LOAD ENGAGEMENT DETAILS ERROR:", error)
-
-    return res.status(500).json({
-      status: false,
-      message: "Internal server error",
-    })
-  }
+  return res.json({
+    status: true,
+    message: "Engagement loaded",
+    data: withDiscoveryState(authorized.resource),
+  })
 })
 
 router.post("/", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeWorkspaceAction(
+    actingUser,
+    "engagement.create",
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
   const parseResult = createEngagementSchema.safeParse(req.body)
   if (!parseResult.success) {
     return res.status(400).json({
@@ -120,10 +152,12 @@ router.post("/", async (req, res) => {
   }
 
   try {
-    // The engagement must belong to a real Organization; a dangling
-    // organizationId is rejected before we attempt to persist.
+    // The engagement must belong to a real Organization in the caller's own
+    // workspace; a dangling or out-of-workspace organizationId is refused
+    // before we attempt to persist.
     const organization = await getOrganizationById(
       parseResult.data.organizationId,
+      engagementScopeOf(actingUser),
     )
     if (!organization) {
       return res.status(404).json({
@@ -132,7 +166,10 @@ router.post("/", async (req, res) => {
       })
     }
 
-    const engagement = await createEngagement(parseResult.data)
+    const engagement = await createEngagement(
+      engagementScopeOf(actingUser),
+      parseResult.data,
+    )
 
     return res.status(201).json({
       status: true,
@@ -140,7 +177,7 @@ router.post("/", async (req, res) => {
       data: engagement,
     })
   } catch (error) {
-    console.error("CREATE ENGAGEMENT ERROR:", error)
+    console.error("CREATE_ENGAGEMENT_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -153,6 +190,16 @@ router.post("/", async (req, res) => {
 // methodology stage, so the consultant can resume where they left off
 // (roadmap Phase 1).
 router.patch("/:id", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "engagement.update",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
   const parseResult = updateEngagementSchema.safeParse(req.body)
   if (!parseResult.success) {
     return res.status(400).json({
@@ -163,15 +210,11 @@ router.patch("/:id", async (req, res) => {
   }
 
   try {
-    const existing = await getEngagementById(req.params.id)
-    if (!existing) {
-      return res.status(404).json({
-        status: false,
-        message: "Engagement not found",
-      })
-    }
-
-    const engagement = await updateEngagement(req.params.id, parseResult.data)
+    const engagement = await updateEngagement(
+      req.params.id,
+      authorized.scope,
+      parseResult.data,
+    )
 
     return res.json({
       status: true,
@@ -179,7 +222,7 @@ router.patch("/:id", async (req, res) => {
       data: engagement,
     })
   } catch (error) {
-    console.error("SAVE ENGAGEMENT ERROR:", error)
+    console.error("SAVE_ENGAGEMENT_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -194,6 +237,16 @@ router.patch("/:id", async (req, res) => {
 // inferred or invented by the application. The contributor is required so each
 // changed section is attributed to whoever actually provided it.
 router.patch("/:id/discovery", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "discovery.save",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
   const parseResult = saveDiscoveryProfileSchema.safeParse(req.body)
   if (!parseResult.success) {
     return res.status(400).json({
@@ -204,16 +257,9 @@ router.patch("/:id/discovery", async (req, res) => {
   }
 
   try {
-    const existing = await getEngagementById(req.params.id)
-    if (!existing) {
-      return res.status(404).json({
-        status: false,
-        message: "discovery.error.engagement_not_found",
-      })
-    }
-
     const engagement = await saveDiscoveryProfile(
-      existing,
+      authorized.resource,
+      authorized.scope,
       parseResult.data.profile,
       parseResult.data.contributor,
     )
@@ -224,7 +270,7 @@ router.patch("/:id/discovery", async (req, res) => {
       data: withDiscoveryState(engagement),
     })
   } catch (error) {
-    console.error("SAVE DISCOVERY PROFILE ERROR:", error)
+    console.error("SAVE_DISCOVERY_PROFILE_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -237,43 +283,93 @@ router.patch("/:id/discovery", async (req, res) => {
 // contributor's checkpoint; accepting, returning, and reopening are the
 // consultant's review authority. No transition touches discovery content.
 router.post("/:id/discovery/submit", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "discovery.submit",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
   const parseResult = submitDiscoverySchema.safeParse(req.body ?? {})
   if (!parseResult.success) return invalidTransitionInput(res, parseResult.error)
 
-  return runDiscoveryTransition(res, req.params.id, {
+  // A consultant submitting through the workbench submits as the consultant;
+  // a client's submission has its own portal endpoint. Claiming to act as the
+  // other party is refused rather than trusted.
+  if (parseResult.data.actor !== "consultant") {
+    return res.status(403).json({
+      status: false,
+      message: "auth.error.forbidden",
+    })
+  }
+
+  return runDiscoveryTransition(res, actingUser, authorized.resource, authorized.scope, {
     transition: "submit",
-    actor: parseResult.data.actor,
+    actor: "consultant",
   })
 })
 
 router.post("/:id/discovery/return", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "discovery.review",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
   const parseResult = returnDiscoverySchema.safeParse(req.body ?? {})
   if (!parseResult.success) return invalidTransitionInput(res, parseResult.error)
 
-  return runDiscoveryTransition(res, req.params.id, {
+  return runDiscoveryTransition(res, actingUser, authorized.resource, authorized.scope, {
     transition: "return",
-    actor: parseResult.data.actor,
+    actor: "consultant",
     notes: parseResult.data.notes,
   })
 })
 
 router.post("/:id/discovery/accept", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "discovery.review",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
   const parseResult = reviewDiscoverySchema.safeParse(req.body ?? {})
   if (!parseResult.success) return invalidTransitionInput(res, parseResult.error)
 
-  return runDiscoveryTransition(res, req.params.id, {
+  return runDiscoveryTransition(res, actingUser, authorized.resource, authorized.scope, {
     transition: "accept",
-    actor: parseResult.data.actor,
+    actor: "consultant",
   })
 })
 
 router.post("/:id/discovery/reopen", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "discovery.review",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
   const parseResult = reviewDiscoverySchema.safeParse(req.body ?? {})
   if (!parseResult.success) return invalidTransitionInput(res, parseResult.error)
 
-  return runDiscoveryTransition(res, req.params.id, {
+  return runDiscoveryTransition(res, actingUser, authorized.resource, authorized.scope, {
     transition: "reopen",
-    actor: parseResult.data.actor,
+    actor: "consultant",
   })
 })
 
@@ -281,6 +377,18 @@ router.post("/:id/discovery/reopen", async (req, res) => {
 // Profile. Re-runnable against updated discovery without restarting the
 // engagement (roadmap Phase 3).
 router.post("/:id/assessment", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  // Triggering a generation is itself an authorized action, so no AI step can
+  // be the route by which data crosses a boundary (architecture.md §5).
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "engagement.generate",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
   const parseResult = generateAssessmentSchema.safeParse(req.body ?? {})
   if (!parseResult.success) {
     return res.status(400).json({
@@ -291,15 +399,7 @@ router.post("/:id/assessment", async (req, res) => {
   }
 
   try {
-    const engagement = await getEngagementById(req.params.id)
-    if (!engagement) {
-      return res.status(404).json({
-        status: false,
-        message: "Engagement not found",
-      })
-    }
-
-    const result = await generateAssessment(engagement, {
+    const result = await generateAssessment(authorized.resource, authorized.scope, {
       replaceConsultantEdits: parseResult.data.replaceConsultantEdits ?? false,
     })
 
@@ -326,7 +426,7 @@ router.post("/:id/assessment", async (req, res) => {
       },
     })
   } catch (error) {
-    console.error("GENERATE ASSESSMENT ERROR:", error)
+    console.error("GENERATE_ASSESSMENT_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -338,6 +438,16 @@ router.post("/:id/assessment", async (req, res) => {
 // Save the consultant's reviewed Assessment as a complete snapshot — the AI
 // draft is theirs to edit, override, or accept (agent-rules.md §10).
 router.patch("/:id/assessment", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "engagement.update",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
   const parseResult = saveAssessmentSchema.safeParse(req.body)
   if (!parseResult.success) {
     return res.status(400).json({
@@ -348,16 +458,9 @@ router.patch("/:id/assessment", async (req, res) => {
   }
 
   try {
-    const existing = await getEngagementById(req.params.id)
-    if (!existing) {
-      return res.status(404).json({
-        status: false,
-        message: "Engagement not found",
-      })
-    }
-
     const engagement = await saveAssessment(
       req.params.id,
+      authorized.scope,
       parseResult.data.assessment,
       parseResult.data.reviewState ?? "consultant_edited",
     )
@@ -368,7 +471,7 @@ router.patch("/:id/assessment", async (req, res) => {
       data: engagement,
     })
   } catch (error) {
-    console.error("SAVE ASSESSMENT ERROR:", error)
+    console.error("SAVE_ASSESSMENT_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -378,24 +481,31 @@ router.patch("/:id/assessment", async (req, res) => {
 })
 
 router.get("/:id/analysis-runs", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  // Run history and the cost roll-up over it are as much a disclosure as the
+  // engagement itself, so they are authorized and scoped identically
+  // (architecture.md §8, §12).
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "analysis_run.read",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
   try {
-    const engagement = await getEngagementById(req.params.id)
-
-    if (!engagement) {
-      return res.status(404).json({
-        status: false,
-        message: "Engagement not found",
-      })
-    }
-
-    const analysisRuns = await getAnalysisRunsByEngagementId(req.params.id)
+    const analysisRuns = await getAnalysisRunsByEngagementId(
+      actingUser.workspaceId,
+      req.params.id,
+    )
 
     return res.json({
       status: true,
       data: analysisRuns,
     })
   } catch (error) {
-    console.error("GET ANALYSIS RUNS ERROR:", error)
+    console.error("GET_ANALYSIS_RUNS_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -405,14 +515,18 @@ router.get("/:id/analysis-runs", async (req, res) => {
 })
 
 router.post("/:id/analyze", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "engagement.generate",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
   try {
-    const engagement = await getEngagementById(req.params.id)
-
-    if (!engagement) {
-      return res.status(404).json({ status: false, message: "Engagement not found" })
-    }
-
-    const result = await analyzeEngagement(engagement)
+    const result = await analyzeEngagement(authorized.resource, authorized.scope)
 
     if (!result.success) {
       return res.status(422).json({
@@ -434,7 +548,7 @@ router.post("/:id/analyze", async (req, res) => {
       },
     })
   } catch (error) {
-    console.error("ANALYSIS ERROR:", error)
+    console.error("RUN_ANALYSIS_FAILED", failureIdentity(error))
     return res.status(500).json({ status: false, message: "Analysis failed" })
   }
 })
@@ -456,22 +570,17 @@ const invalidTransitionInput = (res: Response, error: ZodError) =>
   })
 
 // The four review transitions differ only in their payload, so they share one
-// path from "engagement exists" to a structured outcome.
+// path from an authorized engagement to a structured outcome, one audit entry,
+// and one notification.
 const runDiscoveryTransition = async (
   res: Response,
-  engagementId: string,
+  actingUser: ActingUser,
+  engagement: EngagementWithOrganization,
+  scope: EngagementScope,
   input: TransitionDiscoveryInput,
 ) => {
   try {
-    const engagement = await getEngagementById(engagementId)
-    if (!engagement) {
-      return res.status(404).json({
-        status: false,
-        message: "discovery.error.engagement_not_found",
-      })
-    }
-
-    const result = await transitionDiscovery(engagement, input)
+    const result = await transitionDiscovery(engagement, scope, input)
 
     if (!result.success) {
       // Discovery content is unchanged in every refusal case. The refusal is
@@ -488,13 +597,23 @@ const runDiscoveryTransition = async (
       })
     }
 
+    await appendAuditTrail({
+      workspaceId: scope.workspaceId,
+      userId: actingUser.id,
+      engagementId: engagement.id,
+      eventType: DISCOVERY_AUDIT_EVENT[input.transition],
+      payload: { transition: input.transition, actor: input.actor },
+    })
+
+    await notifyDiscoveryTransition(actingUser, engagement, input)
+
     return res.json({
       status: true,
       message: discoveryTransitionMessageIds[input.transition],
       data: withDiscoveryState(result.engagement),
     })
   } catch (error) {
-    console.error("DISCOVERY TRANSITION ERROR:", error)
+    console.error("DISCOVERY_TRANSITION_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -502,5 +621,48 @@ const runDiscoveryTransition = async (
     })
   }
 }
+
+const DISCOVERY_AUDIT_EVENT = {
+  submit: "discovery_submitted",
+  return: "discovery_returned",
+  accept: "discovery_accepted",
+  reopen: "discovery_reopened",
+} as const
+
+// Who each transition concerns. A consultant's submission notifies the owning
+// Manager; a review outcome notifies the client who is working on the
+// discovery. Payloads carry identifiers only — a notification never carries
+// engagement content (architecture.md §7A.7).
+const notifyDiscoveryTransition = async (
+  actingUser: ActingUser,
+  engagement: EngagementWithOrganization,
+  input: TransitionDiscoveryInput,
+) => {
+  if (input.transition === "submit") {
+    return raiseNotification({
+      workspaceId: engagement.workspaceId,
+      userId: engagement.owningManagerId,
+      engagementId: engagement.id,
+      kind: "discovery_submitted",
+      payload: { engagementId: engagement.id, submittedBy: actingUser.id },
+    })
+  }
+
+  return notifyEngagementClient({
+    workspaceId: engagement.workspaceId,
+    engagementId: engagement.id,
+    kind: DISCOVERY_REVIEW_NOTIFICATION[input.transition],
+    payload: { engagementId: engagement.id },
+  })
+}
+
+// A review outcome the client is told about. `submit` is handled above, because
+// it concerns the consultant rather than the client.
+const DISCOVERY_REVIEW_NOTIFICATION = {
+  submit: "discovery_submitted",
+  return: "discovery_returned",
+  accept: "discovery_accepted",
+  reopen: "discovery_reopened",
+} as const
 
 export default router

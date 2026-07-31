@@ -23,6 +23,10 @@ import type {
   Assessment,
   AssessmentReviewState,
 } from "../../../shared/assessment.schema.js"
+import {
+  engagementReach,
+  type EngagementScope,
+} from "../domain/access/access.js"
 
 // Persistence for the Engagement aggregate — the single engagement store that
 // later phases attach their stage content to, not a parallel store (roadmap
@@ -35,20 +39,77 @@ export type EngagementWithOrganization = Prisma.EngagementGetPayload<{
   include: { organization: true }
 }>
 
-export const createEngagement = async (input: CreateEngagementInput) => {
+// The workspace-and-ownership scope. It is a **required** parameter of every
+// operation below, so no code path can read or write engagement-side data
+// without it — isolation is a structural property here rather than something
+// each service must remember (architecture.md §7A.4; coding-standards.md §6A).
+// The scope type and the reach rule live in the domain, so the reach a query
+// gets and the reach the AccessPolicy grants cannot drift apart.
+export type { EngagementScope }
+
+// Translate the domain's reach into a Prisma filter. A Client's reach is their
+// own active, unexpired Discovery Access, so revocation and expiry end their
+// reach in the query itself and not only in the policy check above it.
+const engagementScopeWhere = (
+  scope: EngagementScope,
+  now: Date = new Date(),
+): Prisma.EngagementWhereInput => {
+  const reach = engagementReach(scope)
+
+  switch (reach.kind) {
+    case "whole_workspace":
+      return { workspaceId: reach.workspaceId }
+    case "owned_engagements":
+      return {
+        workspaceId: reach.workspaceId,
+        owningManagerId: reach.owningManagerId,
+      }
+    case "granted_discovery":
+      return {
+        workspaceId: reach.workspaceId,
+        discoveryAccesses: {
+          some: {
+            userId: reach.clientUserId,
+            workspaceId: reach.workspaceId,
+            status: "active",
+            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+          },
+        },
+      }
+  }
+}
+
+const assertEngagementInScope = async (id: string, scope: EngagementScope) => {
+  const engagement = await prisma.engagement.findFirst({
+    where: { id, ...engagementScopeWhere(scope) },
+    select: { id: true },
+  })
+
+  if (!engagement) {
+    throw new Error("Engagement not found")
+  }
+}
+
+export const createEngagement = async (
+  scope: EngagementScope,
+  input: CreateEngagementInput,
+) => {
   const { organizationId, ...content } = input
 
   return prisma.engagement.create({
     data: {
-      organization: { connect: { id: organizationId } },
+      workspaceId: scope.workspaceId,
+      owningManagerId: scope.userId,
+      organizationId,
       ...content,
     },
     include: { organization: true },
   })
 }
 
-export const getEngagements = async () => {
+export const getEngagements = async (scope: EngagementScope) => {
   return prisma.engagement.findMany({
+    where: engagementScopeWhere(scope),
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -63,9 +124,12 @@ export const getEngagements = async () => {
   })
 }
 
-export const getEngagementsByOrganizationId = async (organizationId: string) => {
+export const getEngagementsByOrganizationId = async (
+  scope: EngagementScope,
+  organizationId: string,
+) => {
   return prisma.engagement.findMany({
-    where: { organizationId },
+    where: { ...engagementScopeWhere(scope), organizationId },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -78,22 +142,28 @@ export const getEngagementsByOrganizationId = async (organizationId: string) => 
 }
 
 // Full engagement state (with its organization) for resuming an engagement and
-// for feeding the analysis prompt.
+// for feeding the analysis prompt. The scope is required: there is no unscoped
+// way to fetch an engagement by identifier, which is what stops a direct-id
+// request from crossing a workspace or ownership boundary.
 export const getEngagementById = async (
   id: string,
+  scope: EngagementScope,
 ): Promise<EngagementWithOrganization | null> => {
-  return prisma.engagement.findUnique({
-    where: { id },
+  return prisma.engagement.findFirst({
+    where: { id, ...engagementScopeWhere(scope) },
     include: { organization: true },
   })
 }
+
 
 // Save an engagement: persist a subset of its content and/or its stage marker.
 // Undefined fields are left untouched, so a partial save never clears state.
 export const updateEngagement = async (
   id: string,
+  scope: EngagementScope,
   input: UpdateEngagementInput,
 ) => {
+  await assertEngagementInScope(id, scope)
   return prisma.engagement.update({
     where: { id },
     data: input,
@@ -107,6 +177,7 @@ export const updateEngagement = async (
 // provenance move in one write, so a saved fact is never left unattributed.
 export const updateEngagementDiscovery = async (
   id: string,
+  scope: EngagementScope,
   discoveryProfile: DiscoveryProfile,
   workflow: {
     status: DiscoveryStatus
@@ -115,9 +186,11 @@ export const updateEngagementDiscovery = async (
 ) => {
   const { valueMeasurementBaseline, ...profileColumns } = discoveryProfile
 
+  await assertEngagementInScope(id, scope)
   return prisma.engagement.update({
     where: { id },
     data: {
+      workspaceId: scope.workspaceId,
       ...profileColumns,
       valueMeasurementBaseline:
         valueMeasurementBaseline as unknown as Prisma.InputJsonValue,
@@ -134,6 +207,7 @@ export const updateEngagementDiscovery = async (
 // stands, never what it says (architecture.md §7A.6).
 export const updateEngagementDiscoveryWorkflow = async (
   id: string,
+  scope: EngagementScope,
   workflow: {
     status: DiscoveryStatus
     submittedAt?: Date
@@ -142,6 +216,7 @@ export const updateEngagementDiscoveryWorkflow = async (
     returnNotes?: string
   },
 ) => {
+  await assertEngagementInScope(id, scope)
   return prisma.engagement.update({
     where: { id },
     data: {
@@ -159,9 +234,11 @@ export const updateEngagementDiscoveryWorkflow = async (
 // move as one so a stored Assessment is never left without its review state.
 export const updateEngagementAssessment = async (
   id: string,
+  scope: EngagementScope,
   assessment: Assessment,
   reviewState: AssessmentReviewState,
 ) => {
+  await assertEngagementInScope(id, scope)
   return prisma.engagement.update({
     where: { id },
     data: {

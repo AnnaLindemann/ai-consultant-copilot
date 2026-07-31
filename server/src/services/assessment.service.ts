@@ -16,6 +16,7 @@ import {
 } from "../repositories/analysis-run.repository.js"
 import {
   toDiscoveryProfile,
+  type EngagementScope,
   updateEngagementAssessment,
   type EngagementWithOrganization,
 } from "../repositories/engagement.repository.js"
@@ -25,6 +26,7 @@ import type {
   AssessmentReviewState,
 } from "../../../shared/assessment.schema.js"
 import type { EvaluationResult } from "../evaluation/evaluation.types.js"
+import { failureIdentity } from "../lib/failure-identity.js"
 
 // Why an assessment could not be generated. Each is a domain-meaningful
 // outcome the consultant can act on, not an exception (architecture.md §13).
@@ -59,6 +61,7 @@ export type GenerateAssessmentOptions = {
 // record Analysis Run → trace (architecture.md §5).
 export const generateAssessment = async (
   engagement: EngagementWithOrganization,
+  scope: EngagementScope,
   options: GenerateAssessmentOptions,
 ): Promise<GenerateAssessmentResult> => {
   const discoveryProfile = toDiscoveryProfile(engagement)
@@ -92,6 +95,7 @@ export const generateAssessment = async (
     name: "generate-assessment",
     metadata: {
       engagementId: engagement.id,
+      workspaceId: scope.workspaceId,
       stage: "assessment",
       promptVersion: ASSESSMENT_PROMPT.version,
       promptFingerprint: ASSESSMENT_PROMPT.fingerprint,
@@ -129,6 +133,7 @@ export const generateAssessment = async (
     trace?.update({
       metadata: {
         engagementId: engagement.id,
+        workspaceId: scope.workspaceId,
         stage: "assessment",
         success: false,
         error: errorMessage,
@@ -136,6 +141,7 @@ export const generateAssessment = async (
     })
 
     await recordAssessmentRun({
+      workspaceId: scope.workspaceId,
       engagementId: engagement.id,
       stage: "assessment",
       provider: llmConfig.provider,
@@ -192,6 +198,7 @@ export const generateAssessment = async (
   })
 
   const analysisRunId = await recordAssessmentRun({
+    workspaceId: scope.workspaceId,
     engagementId: engagement.id,
     stage: "assessment",
     provider: llmResponse.provider,
@@ -211,6 +218,7 @@ export const generateAssessment = async (
   trace?.update({
     metadata: {
       engagementId: engagement.id,
+      workspaceId: scope.workspaceId,
       analysisRunId,
       stage: "assessment",
       promptVersion: ASSESSMENT_PROMPT.version,
@@ -235,6 +243,7 @@ export const generateAssessment = async (
   // Validated output is persisted as an unreviewed draft the consultant owns.
   await updateEngagementAssessment(
     engagement.id,
+    scope,
     parsedResult.assessment,
     "ai_draft",
   )
@@ -252,9 +261,10 @@ export const generateAssessment = async (
 // discovery does.
 export const saveAssessment = async (
   engagementId: string,
+  scope: EngagementScope,
   assessment: Assessment,
   reviewState: Exclude<AssessmentReviewState, "ai_draft">,
-) => updateEngagementAssessment(engagementId, assessment, reviewState)
+) => updateEngagementAssessment(engagementId, scope, assessment, reviewState)
 
 // Recording the run and flushing the trace are best-effort: they must never
 // fail the consultant's stage (coding-standards.md §7).
@@ -265,7 +275,7 @@ const recordAssessmentRun = async (
     const analysisRun = await createAnalysisRun(input)
     return analysisRun.id
   } catch (error) {
-    console.error("CREATE ASSESSMENT ANALYSIS RUN ERROR:", error)
+    console.error("CREATE_ASSESSMENT_ANALYSIS_RUN_FAILED", failureIdentity(error))
     return undefined
   } finally {
     await langfuse?.flushAsync()

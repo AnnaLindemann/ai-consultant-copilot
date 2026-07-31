@@ -27,11 +27,9 @@ import {
 // a German label, and nothing the server can send is left untranslated.
 
 const catalogue: Record<string, string> = de
-const componentsDir = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "components",
-)
+const clientDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..")
+const componentsDir = path.join(clientDir, "components")
+const appDir = path.join(clientDir, "app")
 
 const has = (key: string) => Object.hasOwn(catalogue, key)
 
@@ -105,6 +103,60 @@ test("every key the Discovery components look up exists in the catalogue", () =>
   }
 
   assert.deepEqual(missing, [], "keys are looked up but not translated")
+})
+
+test("every key the access surfaces look up exists in the catalogue", () => {
+  // The Phase 3A surfaces — sign-in, self-registration, invitation acceptance,
+  // bootstrap, and the Client Discovery Portal — are held to the same rule as
+  // the Discovery components: no user-facing literal, every key translated.
+  const files = [
+    path.join(appDir, "auth", "page.tsx"),
+    path.join(appDir, "portal", "engagements", "[id]", "page.tsx"),
+  ]
+
+  const missing: string[] = []
+
+  for (const file of files) {
+    const source = readFileSync(file, "utf8")
+
+    for (const [, key] of source.matchAll(/\bt\(\s*"([^"]+)"/g)) {
+      if (!has(key)) missing.push(`${path.basename(path.dirname(file))}: ${key}`)
+    }
+
+    // Keys passed as props (labelKey, hintKey, …) are looked up just the same.
+    for (const [, key] of source.matchAll(/\b\w*[kK]ey:\s*"([^"]+)"/g)) {
+      if (!has(key)) missing.push(`${path.basename(path.dirname(file))}: ${key}`)
+    }
+  }
+
+  assert.deepEqual(missing, [], "keys are looked up but not translated")
+})
+
+test("the access surfaces carry no hard-coded user-facing literal", () => {
+  // A German literal in a component is a defect however small
+  // (coding-standards.md §12A): it is the one thing that quietly turns a second
+  // language back into a rewrite.
+  const files = [
+    path.join(appDir, "auth", "page.tsx"),
+    path.join(appDir, "portal", "engagements", "[id]", "page.tsx"),
+  ]
+
+  const offenders: string[] = []
+
+  for (const file of files) {
+    const source = readFileSync(file, "utf8")
+
+    for (const [lineNumber, line] of source.split("\n").entries()) {
+      // Umlauts and eszett are a reliable tell for prose that escaped the
+      // catalogue; comments are documentation, not user-facing text.
+      const isComment = /^\s*(\/\/|\*|\/\*)/.test(line)
+      if (!isComment && /[äöüßÄÖÜ]/.test(line)) {
+        offenders.push(`${path.basename(path.dirname(file))}:${lineNumber + 1}`)
+      }
+    }
+  }
+
+  assert.deepEqual(offenders, [], "a user-facing literal was written inline")
 })
 
 test("no Discovery message is left empty or untranslated", () => {

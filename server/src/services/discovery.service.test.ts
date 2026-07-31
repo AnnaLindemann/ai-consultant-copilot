@@ -40,6 +40,7 @@ mock.module("../repositories/engagement.repository.js", {
     toDiscoveryWorkflowState: () => persistedWorkflow,
     updateEngagementDiscovery: async (
       _id: string,
+      _scope: unknown,
       profile: DiscoveryProfile,
       workflow: {
         status: DiscoveryStatus
@@ -51,6 +52,7 @@ mock.module("../repositories/engagement.repository.js", {
     },
     updateEngagementDiscoveryWorkflow: async (
       _id: string,
+      _scope: unknown,
       workflow: { status: DiscoveryStatus },
     ) => {
       workflowWrites.push(workflow)
@@ -64,6 +66,7 @@ const { saveDiscoveryProfile, transitionDiscovery } = await import(
 )
 
 const engagement = { id: "eng_1" } as unknown as EngagementWithOrganization
+const scope = { workspaceId: "ws_1", userId: "user_1", role: "ADMIN" as const }
 
 const emptyProfile: DiscoveryProfile = {
   department: null,
@@ -152,11 +155,7 @@ beforeEach(() => {
 test("a client's contribution is attributed to them and returns discovery to draft", async () => {
   persistedWorkflow = workflowState("accepted")
 
-  await saveDiscoveryProfile(
-    engagement,
-    { ...emptyProfile, dataTypes: ["Tickets"] },
-    "client",
-  )
+  await saveDiscoveryProfile(engagement, scope, { ...emptyProfile, dataTypes: ["Tickets"] }, "client")
 
   assert.equal(discoveryWrites.length, 1)
   assert.equal(discoveryWrites[0].workflow.status, "draft")
@@ -173,11 +172,7 @@ test("a consultant save keeps the client's attribution on content they did not t
     data: "client_provided",
   })
 
-  await saveDiscoveryProfile(
-    engagement,
-    { ...persistedProfile, gdprConcerns: true },
-    "consultant",
-  )
+  await saveDiscoveryProfile(engagement, scope, { ...persistedProfile, gdprConcerns: true }, "consultant")
 
   assert.equal(
     discoveryWrites[0].workflow.contentProvenance.data,
@@ -190,7 +185,7 @@ test("a consultant save keeps the client's attribution on content they did not t
 })
 
 test("discovery cannot be submitted while part of the baseline is silently empty", async () => {
-  const result = await transitionDiscovery(engagement, {
+  const result = await transitionDiscovery(engagement, scope, {
     transition: "submit",
     actor: "client",
   })
@@ -227,7 +222,7 @@ test("a submission records who submitted it and touches no discovery content", a
     valueMeasurementBaseline: explainedBaseline(),
   }
 
-  const result = await transitionDiscovery(engagement, {
+  const result = await transitionDiscovery(engagement, scope, {
     transition: "submit",
     actor: "client",
   })
@@ -242,7 +237,7 @@ test("a submission records who submitted it and touches no discovery content", a
 test("a client cannot accept their own submission", async () => {
   persistedWorkflow = workflowState("submitted")
 
-  const result = await transitionDiscovery(engagement, {
+  const result = await transitionDiscovery(engagement, scope, {
     transition: "accept",
     actor: "client",
   })
@@ -263,7 +258,7 @@ test("a client cannot accept their own submission", async () => {
 test("returning discovery carries the consultant's notes back to the contributor", async () => {
   persistedWorkflow = workflowState("submitted")
 
-  const result = await transitionDiscovery(engagement, {
+  const result = await transitionDiscovery(engagement, scope, {
     transition: "return",
     actor: "consultant",
     notes: "Please add the ticket volumes we discussed.",
@@ -281,7 +276,7 @@ test("returning discovery carries the consultant's notes back to the contributor
 test("accepted discovery can be reopened for revision without losing content", async () => {
   persistedWorkflow = workflowState("accepted")
 
-  const result = await transitionDiscovery(engagement, {
+  const result = await transitionDiscovery(engagement, scope, {
     transition: "reopen",
     actor: "consultant",
   })
@@ -294,7 +289,7 @@ test("accepted discovery can be reopened for revision without losing content", a
 test("an illegal transition reports the status it was refused in", async () => {
   persistedWorkflow = workflowState("accepted")
 
-  const result = await transitionDiscovery(engagement, {
+  const result = await transitionDiscovery(engagement, scope, {
     transition: "return",
     actor: "consultant",
   })
@@ -318,9 +313,9 @@ test("no refusal carries user-facing prose", async () => {
   persistedWorkflow = workflowState("submitted")
 
   const refusals = [
-    await transitionDiscovery(engagement, { transition: "accept", actor: "client" }),
-    await transitionDiscovery(engagement, { transition: "submit", actor: "client" }),
-    await transitionDiscovery(engagement, { transition: "reopen", actor: "client" }),
+    await transitionDiscovery(engagement, scope, { transition: "accept", actor: "client" }),
+    await transitionDiscovery(engagement, scope, { transition: "submit", actor: "client" }),
+    await transitionDiscovery(engagement, scope, { transition: "reopen", actor: "client" }),
   ]
 
   for (const refusal of refusals) {

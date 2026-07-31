@@ -40,6 +40,7 @@ export default function EngagementStageControl({
       const response = await fetch(`${API_BASE_URL}/engagements/${engagementId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ stage: nextStage }),
       })
 

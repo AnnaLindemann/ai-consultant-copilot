@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { cookies } from "next/headers"
 
 import { STAGE_LABELS } from "../../lib/engagement-stage"
 
@@ -24,8 +25,10 @@ const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8787"
 
 export default async function EngagementsPage() {
+  const cookieHeader = await serializeCookies()
   const response = await fetch(`${API_BASE_URL}/engagements`, {
     cache: "no-store",
+    headers: cookieHeader ? { cookie: cookieHeader } : undefined,
   })
 
   const result = (await response.json()) as EngagementsResponse
@@ -94,6 +97,13 @@ export default async function EngagementsPage() {
       )}
     </main>
   )
+}
+
+async function serializeCookies() {
+  return (await cookies())
+    .getAll()
+    .map(({ name, value }) => `${name}=${value}`)
+    .join("; ")
 }
 
 const pageStyle: React.CSSProperties = {

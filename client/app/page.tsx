@@ -113,6 +113,7 @@ export default function Home() {
       const response = await fetch(`${API_BASE_URL}/organizations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           name: organizationForm.name,
           industry: organizationForm.industry || undefined,
@@ -152,6 +153,7 @@ export default function Home() {
       const response = await fetch(`${API_BASE_URL}/engagements`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           organizationId,
           title: engagementForm.title || undefined,
@@ -190,7 +192,7 @@ export default function Home() {
     try {
       const response = await fetch(
         `${API_BASE_URL}/engagements/${engagementId}/analyze`,
-        { method: "POST" },
+        { method: "POST", credentials: "include" },
       )
 
       const result = await response.json()
@@ -213,6 +215,7 @@ export default function Home() {
 
     const response = await fetch(
       `${API_BASE_URL}/engagements/${targetEngagementId}/analysis-runs`,
+      { credentials: "include" },
     )
 
     const result = await response.json()

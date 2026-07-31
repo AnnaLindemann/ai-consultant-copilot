@@ -4,10 +4,15 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "tsx --experimental-test-module-mocks --test \"src/**/*.test.ts\"",
+    "test": "npm run test:unit",
+    "test:unit": "tsx --experimental-test-module-mocks --test \"src/**/*.test.ts\"",
+    "test:integration": "tsx --test \"src/**/*.integration-test.ts\"",
+    "test:integration:optional": "INTEGRATION_TESTS_OPTIONAL=1 tsx --test \"src/**/*.integration-test.ts\"",
+    "test:all": "npm run test:unit && npm run test:integration",
     "dev": "tsx watch src/server.ts",
     "typecheck": "tsc --noEmit",
-    "llm:test": "tsx src/scripts/test-llm.ts"
+    "llm:test": "tsx src/scripts/test-llm.ts",
+    "mail:dev": "tsx src/scripts/read-dev-mailbox.ts"
   },
   "keywords": [],
   "author": "",
@@ -16,12 +21,14 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "better-auth": "^1.6.25",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "groq-sdk": "^1.1.2",
     "langfuse": "^3.38.20",
     "pg": "^8.20.0",
+    "resend": "^6.18.1",
     "zod": "^4.4.2"
   },
   "devDependencies": {

@@ -9,5 +9,6 @@
     "strict": true,
     "types": ["node"],
     "skipLibCheck": true
-  }
+  },
+  "exclude": ["node_modules", "dist", "tmp"]
 }

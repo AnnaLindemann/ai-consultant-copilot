@@ -28,6 +28,7 @@ type DiscoveryReviewControlProps = {
   engagementId: string
   actor: DiscoveryActor
   workflow: DiscoveryWorkflowState
+  pathPrefix?: string
 }
 
 const API_BASE_URL =
@@ -48,6 +49,7 @@ export default function DiscoveryReviewControl({
   engagementId,
   actor,
   workflow,
+  pathPrefix = "/engagements",
 }: DiscoveryReviewControlProps) {
   const router = useRouter()
   const [returnNotes, setReturnNotes] = useState("")
@@ -64,10 +66,11 @@ export default function DiscoveryReviewControl({
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/engagements/${engagementId}/discovery/${transition}`,
+        `${API_BASE_URL}${pathPrefix}/${engagementId}/discovery/${transition}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify(
             transition === "return"
               ? { actor, notes: returnNotes }

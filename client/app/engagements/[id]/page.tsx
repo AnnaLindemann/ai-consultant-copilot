@@ -2,6 +2,7 @@ import EngagementAnalysisPanel from "../../../components/EngagementAnalysisPanel
 import EngagementStageControl from "../../../components/EngagementStageControl"
 import DiscoveryProfileEditor from "../../../components/DiscoveryProfileEditor"
 import AssessmentPanel from "../../../components/AssessmentPanel"
+import { cookies } from "next/headers"
 import { STAGE_LABELS, type EngagementStage } from "../../../lib/engagement-stage"
 import type { DiscoveryProfile } from "../../../../shared/discovery-profile.schema"
 import type { DiscoveryWorkflowState } from "../../../../shared/discovery-workflow.schema"
@@ -74,9 +75,11 @@ export default async function EngagementDetailsPage({
   params,
 }: EngagementDetailsPageProps) {
   const { id } = await params
+  const cookieHeader = await serializeCookies()
 
   const response = await fetch(`${API_BASE_URL}/engagements/${id}`, {
     cache: "no-store",
+    headers: cookieHeader ? { cookie: cookieHeader } : undefined,
   })
 
   const result = (await response.json()) as EngagementDetailsResponse
@@ -153,9 +156,13 @@ export default async function EngagementDetailsPage({
 // The audit trail is a read of what the backend recorded; a failure to load it
 // must not take the engagement workspace down with it.
 async function loadAnalysisRuns(engagementId: string): Promise<AnalysisRun[]> {
+  const cookieHeader = await serializeCookies()
   const response = await fetch(
     `${API_BASE_URL}/engagements/${engagementId}/analysis-runs`,
-    { cache: "no-store" },
+    {
+      cache: "no-store",
+      headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+    },
   )
 
   if (!response.ok) return []
@@ -163,6 +170,13 @@ async function loadAnalysisRuns(engagementId: string): Promise<AnalysisRun[]> {
   const result = (await response.json()) as AnalysisRunsResponse
 
   return result.data ?? []
+}
+
+async function serializeCookies() {
+  return (await cookies())
+    .getAll()
+    .map(({ name, value }) => `${name}=${value}`)
+    .join("; ")
 }
 
 function formatBoolean(value: boolean | null): string {

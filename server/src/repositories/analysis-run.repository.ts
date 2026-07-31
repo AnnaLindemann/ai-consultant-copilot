@@ -9,6 +9,7 @@ import { prisma } from "../lib/prisma.js"
 export type AnalysisRunStage = "analysis" | "assessment"
 
 export type CreateAnalysisRunInput = {
+  workspaceId: string
   engagementId: string
   stage: AnalysisRunStage
   provider: string
@@ -28,6 +29,7 @@ export type CreateAnalysisRunInput = {
 export const createAnalysisRun = async (input: CreateAnalysisRunInput) => {
   return prisma.analysisRun.create({
     data: {
+      workspaceId: input.workspaceId,
       engagementId: input.engagementId,
       stage: input.stage,
       provider: input.provider,
@@ -46,9 +48,13 @@ export const createAnalysisRun = async (input: CreateAnalysisRunInput) => {
   })
 }
 
-export const getAnalysisRunsByEngagementId = async (engagementId: string) => {
+export const getAnalysisRunsByEngagementId = async (
+  workspaceId: string,
+  engagementId: string,
+) => {
   return prisma.analysisRun.findMany({
     where: {
+      workspaceId,
       engagementId,
     },
     orderBy: {

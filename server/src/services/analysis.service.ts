@@ -7,9 +7,13 @@ import type { ConsultantReport } from "../../../shared/consultant-report.schema.
 import type { EvaluationResult } from "../evaluation/evaluation.types.js"
 import { calculateLlmCost } from "../evaluation/calculate-llm-cost.js"
 import { createAnalysisRun } from "../repositories/analysis-run.repository.js"
-import type { EngagementWithOrganization } from "../repositories/engagement.repository.js"
+import type {
+  EngagementScope,
+  EngagementWithOrganization,
+} from "../repositories/engagement.repository.js"
 import { ANALYSIS_PROMPT } from "../prompts/analysis-prompt.js"
 import { langfuse } from "../observability/langfuse.js"
+import { failureIdentity } from "../lib/failure-identity.js"
 
 export type AnalyzeEngagementResult =
   | {
@@ -25,11 +29,13 @@ export type AnalyzeEngagementResult =
 
 export const analyzeEngagement = async (
   input: EngagementWithOrganization,
+  scope: EngagementScope,
 ): Promise<AnalyzeEngagementResult> => {
   const trace = langfuse?.trace({
     name: "analyze-engagement",
     metadata: {
       engagementId: input.id,
+      workspaceId: scope.workspaceId,
       promptVersion: ANALYSIS_PROMPT.version,
       promptFingerprint: ANALYSIS_PROMPT.fingerprint,
     },
@@ -80,6 +86,7 @@ export const analyzeEngagement = async (
   // (architecture.md §5, §13; coding-standards.md §7).
   try {
     const analysisRun = await createAnalysisRun({
+      workspaceId: scope.workspaceId,
       engagementId: input.id,
       stage: "analysis",
       provider: llmResponse.provider,
@@ -96,9 +103,10 @@ export const analyzeEngagement = async (
       errorMessage: parsedResult.success ? undefined : parsedResult.error,
     })
 
-    trace?.update({
+      trace?.update({
       metadata: {
         engagementId: input.id,
+        workspaceId: scope.workspaceId,
         analysisRunId: analysisRun.id,
         promptVersion: ANALYSIS_PROMPT.version,
         promptFingerprint: ANALYSIS_PROMPT.fingerprint,
@@ -108,7 +116,7 @@ export const analyzeEngagement = async (
       },
     })
   } catch (error) {
-    console.error("CREATE ANALYSIS RUN ERROR:", error)
+    console.error("CREATE_ANALYSIS_RUN_FAILED", failureIdentity(error))
   } finally {
     await langfuse?.flushAsync()
   }

@@ -15,6 +15,16 @@ build/
 logs/
 *.log
 
+# Database backups. Kept on the machine that made them — a dump of a working
+# database carries real client content and belongs in no repository.
+backups/
+*.dump
+*.sql.gz
+
+# Scratch space. Holds the local development mailbox (server/tmp/dev-mailbox),
+# which stores verification, reset, and invitation links as files.
+tmp/
+
 # OS
 .DS_Store
 
