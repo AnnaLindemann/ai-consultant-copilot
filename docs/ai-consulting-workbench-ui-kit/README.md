@@ -18,7 +18,7 @@ Before implementing proposal delivery, deliberately update the relevant frozen p
 ## Suggested repository location
 
 ```text
-docs/ui-kit/
+docs/ai-consulting-workbench-ui-kit/
   README.md
   UI-KIT.md
   design-tokens.json
