@@ -106,6 +106,25 @@ enum AssessmentReviewState {
   accepted
 }
 
+// Where the prioritized Opportunities stand in the human-in-the-loop cycle
+// (roadmap Phase 4). It mirrors AssessmentReviewState deliberately: each stage
+// carries its own review marker, so neither stage's stored contract moves when
+// the other's does.
+enum OpportunityReviewState {
+  ai_draft
+  consultant_edited
+  accepted
+}
+
+// Whether an Opportunity version is the one being worked on or the preserved
+// record of what was prioritized earlier (roadmap Phase 4). Regeneration
+// supersedes rather than overwrites: no version is ever rewritten or deleted,
+// mirroring append-only Consultant Report versions (architecture.md §4.3).
+enum OpportunityVersionStatus {
+  active
+  superseded
+}
+
 // Where an engagement currently stands in the consulting methodology
 // (domain-model.md §3). Phase 1 only tracks the stage marker; later phases
 // add the content each stage produces. `discovery` is the first stage, so a
@@ -247,6 +266,17 @@ model Engagement {
   assessment            Json?
   assessmentReviewState AssessmentReviewState?
 
+  // How many times the Assessment has been written. It gives a reader a plain
+  // number to refer to ("prioritized from Assessment revision 3"); whether a
+  // derived stage has gone *stale* is decided by the content fingerprint the
+  // derived stage recorded, not by this counter.
+  assessmentRevision Int @default(0)
+
+  // Prioritized Opportunities (roadmap Phase 4). Every generated set is an
+  // immutable version in its own table rather than a column here: regeneration
+  // must add a version, never overwrite one (architecture.md §4.3).
+  opportunityVersions OpportunityVersion[]
+
   invitations       ClientInvitation[]
   discoveryAccesses  DiscoveryAccess[]
   notifications     Notification[]
@@ -306,9 +336,75 @@ model AnalysisRun {
 
   createdAt DateTime @default(now())
 
+  opportunityVersions OpportunityVersion[]
+
   @@index([engagementId])
   @@index([workspaceId])
   @@index([provider, model])
+  @@index([createdAt])
+}
+
+// One immutable, versioned snapshot of the engagement's prioritized
+// Opportunities (roadmap Phase 4).
+//
+// Generation creates version 1; every regeneration creates the next version and
+// supersedes — never rewrites — the one before it, so what the consultant saw
+// and reasoned about at each iteration stays recoverable. The consultant's
+// edits and manual ordering are autosaved *within* the active version, so
+// editing does not multiply versions.
+//
+// The version records what produced it and what it was derived from: the
+// Analysis Run behind the generation (architecture.md §8), the Assessment
+// revision, and a fingerprint of the Assessment's content, which is what lets
+// the active version be recognized as stale after the Assessment changes.
+model OpportunityVersion {
+  id String @id @default(cuid())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  versionNumber Int
+  status        OpportunityVersionStatus @default(active)
+
+  // The validated prioritization. Still-stabilizing stage output is stored as
+  // Json paired with a Zod schema in `shared/` (architecture.md §6).
+  content     Json
+  reviewState OpportunityReviewState @default(ai_draft)
+
+  // The Assessment this version was derived from.
+  sourceAssessmentRevision    Int
+  sourceAssessmentFingerprint String
+
+  // The Analysis Run behind the generation. Nullable only because recording a
+  // run is best-effort and must never fail the consultant's stage
+  // (coding-standards.md §7); the generation path always attempts the link.
+  analysisRunId String?
+  analysisRun   AnalysisRun? @relation(fields: [analysisRunId], references: [id], onDelete: SetNull)
+
+  createdAt       DateTime @default(now())
+  createdByUserId String?
+  createdBy       User?    @relation("OpportunityVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  lastModifiedAt       DateTime @default(now())
+  lastModifiedByUserId String?
+  lastModifiedBy       User?    @relation("OpportunityVersionLastModifiedBy", fields: [lastModifiedByUserId], references: [id], onDelete: SetNull)
+
+  // The optimistic-concurrency token. An autosave carries the revision it read
+  // and is refused if the version has moved on since, so two people editing the
+  // same version cannot silently overwrite each other (architecture.md §13).
+  revision Int @default(0)
+
+  // Version numbers are unique per engagement, which is also what makes two
+  // regenerations racing each other fail loudly instead of both "winning". The
+  // migration adds a partial unique index enforcing at most one *active*
+  // version per engagement — a guarantee Prisma's schema language cannot yet
+  // express, so it lives in the migration alongside this note.
+  @@unique([engagementId, versionNumber])
+  @@index([engagementId, status])
+  @@index([workspaceId])
   @@index([createdAt])
 }
 
@@ -323,6 +419,7 @@ model Workspace {
   organizations Organization[]
   engagements  Engagement[]
   analysisRuns  AnalysisRun[]
+  opportunityVersions OpportunityVersion[]
   invitations  ClientInvitation[]
   discoveryAccesses DiscoveryAccess[]
   notifications Notification[]
@@ -360,6 +457,8 @@ model User {
   discoveryAccessGranted DiscoveryAccess[] @relation("DiscoveryAccessGrantor")
   discoveryAccesses DiscoveryAccess[] @relation("DiscoveryAccessRecipient")
   ownedEngagements Engagement[] @relation("EngagementOwnedBy")
+  createdOpportunityVersions OpportunityVersion[] @relation("OpportunityVersionCreatedBy")
+  modifiedOpportunityVersions OpportunityVersion[] @relation("OpportunityVersionLastModifiedBy")
   notifications Notification[]
   auditTrails AuditTrail[]
 

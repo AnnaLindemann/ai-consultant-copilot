@@ -1,4 +1,5 @@
 import type { DiscoveryMessageId } from "../../shared/discovery-messages"
+import type { OpportunityMessageId } from "../../shared/opportunity-messages"
 
 // The German string catalogue — the MVP's single active locale
 // (architecture.md §7.1). Keys are named after what a string *is* (its surface
@@ -32,6 +33,41 @@ const serverMessages: Record<DiscoveryMessageId, string> = {
     "Teile der Wert- und Messbasis sind weder beantwortet noch als Messlücke festgehalten ({subjectCount}). Halten Sie mit Begründung fest, was die Kundenseite heute nicht messen kann, bevor Sie einreichen.",
   "discovery.error.internal":
     "Unerwarteter Serverfehler. Die Discovery wurde nicht verändert. Bitte erneut versuchen.",
+}
+
+// The outcomes the Opportunity prioritization endpoints report (roadmap Phase
+// 4). Typed against the shared contract for the same reason as above.
+const opportunityServerMessages: Record<OpportunityMessageId, string> = {
+  "opportunity.message.prioritized":
+    "Entwurf der priorisierten Opportunities erstellt. Bitte prüfen, anpassen und speichern.",
+  "opportunity.message.saved": "Opportunities gespeichert",
+  "opportunity.message.accepted": "Opportunities angenommen",
+  "opportunity.error.invalid_input":
+    "Die Opportunities sind unvollständig oder ungültig. Jede Opportunity braucht mindestens ein zitiertes Assessment-Ergebnis, eine Begründung und einen eindeutigen Rang.",
+  "opportunity.error.assessment_not_ready":
+    "Es gibt noch kein Assessment mit Ergebnissen. Erstellen Sie zuerst das Assessment, bevor Sie Opportunities priorisieren.",
+  "opportunity.error.consultant_edits_protected":
+    "Diese Priorisierung enthält Ihre eigenen Änderungen. Ein erneuter Lauf würde sie ersetzen und braucht deshalb Ihre ausdrückliche Bestätigung.",
+  "opportunity.error.success_criteria_placeholder":
+    "Mindestens ein Erfolgskriterium enthält noch einen Platzhalter. Bitte tragen Sie die Kennzahl, die Messmethode, die Datenquelle und die noch offenen Werte vor dem Speichern ein.",
+  "opportunity.error.ai_step_failed":
+    "Der KI-Anbieter war nicht erreichbar. Es wurde nichts verändert – bitte erneut versuchen.",
+  "opportunity.error.ai_output_invalid":
+    "Die KI-Antwort war unbrauchbar. Es wurde kein Entwurf erstellt und nichts verändert.",
+  "opportunity.error.ai_output_ungrounded":
+    "Die KI hat sich auf Assessment-Ergebnisse berufen, die es nicht gibt. Der Entwurf wurde verworfen und nichts verändert.",
+  "opportunity.error.stale_update":
+    "Diese Fassung ist veraltet. Laden Sie die aktuelle Version erneut, bevor Sie weiter speichern.",
+  "opportunity.error.historical_version_readonly":
+    "Diese frühere Version ist nur lesbar. Öffnen Sie die aktive Fassung, um weiterzubearbeiten.",
+  "opportunity.error.version_not_found":
+    "Diese Version wurde nicht gefunden.",
+  "opportunity.error.version_conflict":
+    "Eine andere Neupriorisierung wurde gerade gespeichert. Laden Sie die aktuelle Fassung neu und versuchen Sie es erneut.",
+  "opportunity.error.persistence_failed":
+    "Die Opportunity-Version konnte nicht gespeichert werden. Bitte erneut versuchen.",
+  "opportunity.error.internal":
+    "Unerwarteter Serverfehler. Die Opportunities wurden nicht verändert. Bitte erneut versuchen.",
 }
 
 const uiMessages = {
@@ -440,8 +476,118 @@ const uiMessages = {
   "portal.unavailable.sign_in": "Zur Anmeldung",
   "portal.error.invalid_input":
     "Die Angaben sind unvollständig oder ungültig.",
+
+  // --- Problem Prioritization & Opportunities (Phase 4) -------------------
+  // Internal identifiers — the assessment dimensions, the three-step scale, the
+  // AI-readiness qualification, the review state — stay English on the wire and
+  // in storage; only their rendering is German.
+  "assessment.dimension.businessProcess": "Geschäftsprozess",
+  "assessment.dimension.data": "Daten",
+  "assessment.dimension.technology": "Technologie",
+  "assessment.dimension.aiReadiness": "KI-Reife",
+  "assessment.dimension.risks": "Risiken",
+  "assessment.dimension.opportunities": "Opportunities",
+
+  "opportunity.level.low": "gering",
+  "opportunity.level.medium": "mittel",
+  "opportunity.level.high": "hoch",
+
+  "opportunity.ai_readiness.ready": "KI-bereit",
+  "opportunity.ai_readiness.conditional": "Bedingt – Voraussetzungen offen",
+  "opportunity.ai_readiness.not_ready": "Noch nicht KI-bereit",
+
+  "opportunity.review_state.ai_draft": "KI-Entwurf – noch nicht geprüft",
+  "opportunity.review_state.consultant_edited": "Von Ihnen bearbeitet",
+  "opportunity.review_state.accepted": "Von Ihnen angenommen",
+
+  "opportunity.eyebrow": "Phase 4 · Priorisierung",
+  "opportunity.title": "Opportunities",
+  "opportunity.intro":
+    "Aus dem Assessment abgeleitete Verbesserungskandidaten, gewichtet nach Nutzen, Aufwand, Wirkung und Zuversicht, gegen die KI-Reife qualifiziert und gegeneinander priorisiert. Der Entwurf gehört Ihnen: bearbeiten, umsortieren, verwerfen oder annehmen.",
+  "opportunity.empty":
+    "Noch keine Priorisierung. Erstellen Sie einen Entwurf aus dem gespeicherten Assessment.",
+  "opportunity.no_assessment":
+    "Für dieses Engagement gibt es noch kein Assessment mit Ergebnissen. Die Priorisierung setzt darauf auf.",
+  "opportunity.none_found":
+    "Diese Priorisierung enthält keine Opportunity. Fügen Sie eine hinzu oder erstellen Sie den Entwurf erneut.",
+
+  "opportunity.action.generate": "Opportunities priorisieren",
+  "opportunity.action.regenerate": "Aus Assessment neu priorisieren",
+  "opportunity.action.generating": "Wird erstellt …",
+  "opportunity.action.save": "Opportunities speichern",
+  "opportunity.action.saving": "Wird gespeichert …",
+  "opportunity.action.accept": "Opportunities annehmen",
+  "opportunity.action.add": "Opportunity hinzufügen",
+  "opportunity.action.move_up": "Nach oben",
+  "opportunity.action.move_down": "Nach unten",
+  "opportunity.action.replace_edits":
+    "Meine Änderungen ersetzen und neu priorisieren",
+  "opportunity.warning.replace_edits":
+    "Ein neuer Lauf ersetzt die von Ihnen bearbeitete Priorisierung. Die gespeicherte Fassung lässt sich danach nicht wiederherstellen.",
+  "opportunity.warning.ungrounded":
+    "Nicht belegte Zitate: {findings}",
+  "opportunity.warning.stale":
+    "Das Assessment hat sich seit dieser Priorisierung geändert. Eine Neupriorisierung wird empfohlen.",
+
+  "opportunity.rank": "Rang {rank}",
+  "opportunity.field.summary": "Gesamtbild der Priorisierung",
+  "opportunity.field.title": "Opportunity",
+  "opportunity.field.problem": "Problem aus dem Assessment",
+  "opportunity.field.improvement": "Verbesserungsansatz",
+  "opportunity.field.value": "Nutzen",
+  "opportunity.field.effort": "Aufwand",
+  "opportunity.field.impact": "Wirkung",
+  "opportunity.field.confidence": "Zuversicht",
+  "opportunity.field.priority_rationale": "Begründung des Rangs",
+  "opportunity.field.assumptions": "Annahmen",
+  "opportunity.field.source_findings": "Belegende Assessment-Ergebnisse",
+  "opportunity.field.ai_readiness": "Qualifizierung gegen die KI-Reife",
+  "opportunity.field.ai_readiness_qualification": "Einstufung",
+  "opportunity.field.ai_readiness_rationale": "Begründung",
+  "opportunity.field.ai_readiness_blockers": "Voraussetzungen und Hindernisse",
+  "opportunity.success_criteria.title": "Erfolgskriterien",
+  "opportunity.success_criteria.intro":
+    "Halten Sie fest, woran sich der Erfolg später messen lässt. Die KI liefert den Vorschlag, die Kundenseite liefert die Werte, und offene Punkte bleiben ausdrücklich als offen markiert.",
+  "opportunity.success_criteria.item": "Kriterium {rank}",
+  "opportunity.success_criteria.add": "Erfolgskriterium hinzufügen",
+  "opportunity.success_criteria.metric": "Kennzahl",
+  "opportunity.success_criteria.measurement_method": "Messmethode",
+  "opportunity.success_criteria.data_source": "Datenquelle",
+  "opportunity.success_criteria.assumptions": "Annahmen",
+  "opportunity.success_criteria.baseline": "Ausgangswert",
+  "opportunity.success_criteria.target": "Zielwert",
+  "opportunity.success_criteria.timeframe": "Zeitrahmen",
+  "opportunity.success_criteria.value_known": "Bekannt",
+  "opportunity.success_criteria.value_unknown": "Unbekannt",
+  "opportunity.success_criteria.value_placeholder": "Zu definieren",
+  "opportunity.success_criteria.source_placeholder":
+    "Aus Bericht, System oder Gespräch",
+  "opportunity.success_criteria.validation_note_placeholder":
+    "Was noch geklärt werden muss",
+
+  "opportunity.source.add": "Ergebnis zitieren",
+  "opportunity.source.none":
+    "Noch kein Ergebnis zitiert. Jede Opportunity braucht mindestens eines.",
+  "opportunity.source.unavailable":
+    "Das Assessment enthält keine Ergebnisse, die zitiert werden könnten.",
+
+  "opportunity.gaps.title": "Offene Fragen",
+  "opportunity.gaps.intro":
+    "Was die Priorisierung nicht klären konnte – festgehalten statt geraten.",
+  "opportunity.gaps.empty": "Keine offenen Fragen festgehalten.",
+  "opportunity.gaps.placeholder":
+    "Was müsste bekannt sein, um die Reihenfolge sicher zu beurteilen?",
+  "opportunity.gaps.add": "Offene Frage hinzufügen",
+
+  "opportunity.hint.pipe": "Einträge mit senkrechtem Strich (|) trennen.",
+  "opportunity.hint.requirements":
+    "Jede Opportunity braucht ein Problem, einen Verbesserungsansatz, mindestens ein zitiertes Assessment-Ergebnis, mindestens ein Erfolgskriterium und eine Begründung ihres Rangs. Eine Einstufung unterhalb von „KI-bereit“ muss mindestens eine Voraussetzung nennen, und bei geringer Zuversicht ist mindestens eine Annahme zu nennen.",
 } as const
 
-export const de = { ...serverMessages, ...uiMessages }
+export const de = {
+  ...serverMessages,
+  ...opportunityServerMessages,
+  ...uiMessages,
+}
 
 export type MessageKey = keyof typeof de

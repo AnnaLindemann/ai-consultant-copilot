@@ -1,24 +1,24 @@
-import type { AssessmentDraft } from "../../../shared/assessment.schema.js"
+import type { OpportunityPrioritizationDraft } from "../../../shared/opportunity.schema.js"
 import { parseLlmJson } from "./parse-llm-json.js"
-import { validateAssessment } from "./validate-assessment.js"
+import { validateOpportunities } from "./validate-opportunities.js"
 
-type ParseAssessmentResult =
+type ParseOpportunitiesResult =
   | {
       success: true
-      assessment: AssessmentDraft
+      prioritization: OpportunityPrioritizationDraft
       jsonParseSuccess: true
       schemaValid: true
       error?: never
     }
   | {
       success: false
-      assessment?: never
+      prioritization?: never
       jsonParseSuccess: boolean
       schemaValid: boolean
       error: string
     }
 
-export function parseAssessment(raw: string): ParseAssessmentResult {
+export function parseOpportunities(raw: string): ParseOpportunitiesResult {
   let parsed: unknown
 
   try {
@@ -33,11 +33,11 @@ export function parseAssessment(raw: string): ParseAssessmentResult {
   }
 
   try {
-    const assessment = validateAssessment(parsed)
+    const prioritization = validateOpportunities(parsed)
 
     return {
       success: true,
-      assessment,
+      prioritization,
       jsonParseSuccess: true,
       schemaValid: true,
     }
@@ -49,7 +49,7 @@ export function parseAssessment(raw: string): ParseAssessmentResult {
       error:
         error instanceof Error
           ? error.message
-          : "LLM JSON failed Assessment validation",
+          : "LLM JSON failed Opportunity validation",
     }
   }
 }

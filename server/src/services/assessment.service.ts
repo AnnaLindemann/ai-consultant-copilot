@@ -1,8 +1,11 @@
+import { randomUUID } from "node:crypto"
+
 import { calculateLlmCost } from "../evaluation/calculate-llm-cost.js"
 import { evaluateAnalysisOutput } from "../evaluation/evaluate-analysis-output.js"
 import {
   canReplaceAssessment,
   hasDiscoveryContentToAssess,
+  identifyAssessmentFindings,
 } from "../domain/engagement/assessment.js"
 import { callLlm } from "../lib/llm-client.js"
 import { getDefaultLlmConfig } from "../lib/llm-config.js"
@@ -24,6 +27,7 @@ import {
 import type {
   Assessment,
   AssessmentReviewState,
+  AssessmentSubmission,
 } from "../../../shared/assessment.schema.js"
 import type { EvaluationResult } from "../evaluation/evaluation.types.js"
 import { failureIdentity } from "../lib/failure-identity.js"
@@ -241,16 +245,16 @@ export const generateAssessment = async (
   }
 
   // Validated output is persisted as an unreviewed draft the consultant owns.
-  await updateEngagementAssessment(
-    engagement.id,
-    scope,
-    parsedResult.assessment,
-    "ai_draft",
-  )
+  // Identity is added here, on the server: the model writes findings, and each
+  // one gets a stable id that downstream stages cite and that survives every
+  // later re-wording of its title.
+  const assessment = identifyAssessmentFindings(parsedResult.assessment, mintFindingId)
+
+  await updateEngagementAssessment(engagement.id, scope, assessment, "ai_draft")
 
   return {
     success: true,
-    assessment: parsedResult.assessment,
+    assessment,
     reviewState: "ai_draft",
     evaluation,
   }
@@ -259,12 +263,25 @@ export const generateAssessment = async (
 // Save the consultant's reviewed Assessment. Consultant authorship is
 // deterministic engagement state, so it records no Analysis Run — the same way
 // discovery does.
+// Findings the consultant kept carry the id they already had; findings they
+// added get one here. Nothing downstream loses its citation because a title was
+// re-worded, and nothing the browser sent decides an identity.
 export const saveAssessment = async (
   engagementId: string,
   scope: EngagementScope,
-  assessment: Assessment,
+  submitted: AssessmentSubmission,
   reviewState: Exclude<AssessmentReviewState, "ai_draft">,
-) => updateEngagementAssessment(engagementId, scope, assessment, reviewState)
+) =>
+  updateEngagementAssessment(
+    engagementId,
+    scope,
+    identifyAssessmentFindings(submitted, mintFindingId),
+    reviewState,
+  )
+
+// A finding's identity is opaque and unrelated to its text, so re-wording a
+// title can never change what cites it.
+const mintFindingId = () => randomUUID()
 
 // Recording the run and flushing the trace are best-effort: they must never
 // fail the consultant's stage (coding-standards.md §7).

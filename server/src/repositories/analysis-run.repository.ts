@@ -6,7 +6,7 @@ import { prisma } from "../lib/prisma.js"
 // Which methodology stage an AI-assisted step supported. Recording it keeps one
 // shared run mechanism while letting runs be filtered by stage (architecture.md
 // §8). `analysis` is the pre-existing whole-engagement analysis endpoint.
-export type AnalysisRunStage = "analysis" | "assessment"
+export type AnalysisRunStage = "analysis" | "assessment" | "prioritization"
 
 export type CreateAnalysisRunInput = {
   workspaceId: string

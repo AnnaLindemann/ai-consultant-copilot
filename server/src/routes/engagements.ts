@@ -54,6 +54,19 @@ import {
   generateAssessment,
   saveAssessment,
 } from "../services/assessment.service.js"
+import {
+  prioritizeOpportunitiesSchema,
+  saveOpportunitiesSchema,
+} from "../schemas/opportunities.schema.js"
+import {
+  getOpportunityVersionState,
+  listOpportunityVersions,
+  prioritizeOpportunities,
+  saveOpportunities,
+  type PrioritizeOpportunitiesFailure,
+  type SaveOpportunitiesFailure,
+} from "../services/opportunities.service.js"
+import { getOpportunityVersionById } from "../repositories/opportunity-version.repository.js"
 import { failureIdentity } from "../lib/failure-identity.js"
 
 const router = Router()
@@ -73,6 +86,39 @@ const assessmentFailureStatus = {
   ai_output_invalid: 422,
   ai_step_failed: 502,
 } as const
+
+// How a refused or failed prioritization is reported at the boundary: the
+// consultant is missing a precondition (422), a second regeneration got there
+// first (409), the AI provider itself failed (502), or the validated version
+// could not be stored (500). Output that cites findings the Assessment does not
+// contain is unusable output, reported like any other (422).
+const opportunitiesFailureStatus: Record<
+  PrioritizeOpportunitiesFailure,
+  number
+> = {
+  assessment_not_ready: 422,
+  consultant_edits_protected: 409,
+  ai_output_invalid: 422,
+  ai_output_ungrounded: 422,
+  ai_step_failed: 502,
+  version_conflict: 409,
+  persistence_failed: 500,
+}
+
+// How a refused save is reported. A save aimed at a version the caller cannot
+// reach is refused exactly as one aimed at a version that does not exist (404,
+// architecture.md §7A.4); a save that lost a race or aimed at a preserved
+// version is a conflict (409), because the caller's own next step differs in
+// each case.
+const saveOpportunitiesFailureStatus: Record<SaveOpportunitiesFailure, number> =
+  {
+    assessment_not_ready: 422,
+    ai_output_ungrounded: 422,
+    success_criteria_placeholder: 422,
+    version_not_found: 404,
+    historical_version_readonly: 409,
+    stale_update: 409,
+  }
 
 // How a refused Discovery review transition is reported at the boundary: the
 // actor does not hold that authority (403), the workflow is not in a state that
@@ -125,11 +171,29 @@ router.get("/:id", async (req, res) => {
   )
   if (!authorized.permitted) return denyRequest(res, authorized)
 
-  return res.json({
-    status: true,
-    message: "Engagement loaded",
-    data: withDiscoveryState(authorized.resource),
-  })
+  try {
+    // The Opportunity stage answers with the version being worked on and
+    // whether the Assessment has moved on beneath it, so a consultant resuming
+    // an engagement sees at once that regenerating is worth considering
+    // (agent-rules.md §15).
+    const opportunities = await getOpportunityVersionState(
+      authorized.resource,
+      authorized.scope,
+    )
+
+    return res.json({
+      status: true,
+      message: "Engagement loaded",
+      data: { ...withDiscoveryState(authorized.resource), opportunities },
+    })
+  } catch (error) {
+    console.error("LOAD_ENGAGEMENT_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "Internal server error",
+    })
+  }
 })
 
 router.post("/", async (req, res) => {
@@ -476,6 +540,220 @@ router.patch("/:id/assessment", async (req, res) => {
     return res.status(500).json({
       status: false,
       message: "Internal server error",
+    })
+  }
+})
+
+// Derive, qualify, and prioritize the Opportunities from the persisted
+// Assessment (roadmap Phase 4). Re-runnable after the Assessment changes,
+// without restarting the engagement.
+router.post("/:id/opportunities", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  // Triggering a generation is itself an authorized action, so no AI step can
+  // be the route by which data crosses a boundary (architecture.md §5). The
+  // stage inherits the existing access decision point; it adds no rule of its
+  // own (coding-standards.md §15).
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "engagement.generate",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  const parseResult = prioritizeOpportunitiesSchema.safeParse(req.body ?? {})
+  if (!parseResult.success) {
+    return res.status(400).json({
+      status: false,
+      message: "opportunity.error.invalid_input",
+      errors: parseResult.error.flatten(),
+    })
+  }
+
+  try {
+    const result = await prioritizeOpportunities(
+      authorized.resource,
+      authorized.scope,
+      {
+        replaceConsultantEdits:
+          parseResult.data.replaceConsultantEdits ?? false,
+      },
+    )
+
+    if (!result.success) {
+      // The consultant sees why no new version was produced, as an identifier
+      // the frontend renders in their language. In every failure case the
+      // version they were working on is untouched (architecture.md §13;
+      // coding-standards.md §12A).
+      return res.status(opportunitiesFailureStatus[result.failure]).json({
+        status: false,
+        message: result.messageId,
+        data: {
+          failure: result.failure,
+          evaluation: result.evaluation,
+          unknownFindingIds: result.unknownFindingIds,
+        },
+      })
+    }
+
+    return res.status(201).json({
+      status: true,
+      message: "opportunity.message.prioritized",
+      data: {
+        version: result.version,
+        evaluation: result.evaluation,
+      },
+    })
+  } catch (error) {
+    console.error("PRIORITIZE_OPPORTUNITIES_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "opportunity.error.internal",
+    })
+  }
+})
+
+// Save the consultant's reviewed Opportunities into the version they are
+// working on — the AI draft is theirs to edit, re-order, override, or accept
+// (agent-rules.md §10). This is the autosave path; it changes the active
+// version and never creates one.
+router.patch("/:id/opportunities", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "engagement.update",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  const parseResult = saveOpportunitiesSchema.safeParse(req.body)
+  if (!parseResult.success) {
+    return res.status(400).json({
+      status: false,
+      message: "opportunity.error.invalid_input",
+      errors: parseResult.error.flatten(),
+    })
+  }
+
+  try {
+    const result = await saveOpportunities(
+      authorized.resource,
+      authorized.scope,
+      {
+        versionId: parseResult.data.versionId,
+        expectedRevision: parseResult.data.expectedRevision,
+        prioritization: parseResult.data.prioritization,
+        reviewState: parseResult.data.reviewState ?? "consultant_edited",
+      },
+    )
+
+    if (!result.success) {
+      return res.status(saveOpportunitiesFailureStatus[result.failure]).json({
+        status: false,
+        message: result.messageId,
+        data: {
+          failure: result.failure,
+          unknownFindingIds: result.unknownFindingIds,
+          currentRevision: result.currentRevision,
+        },
+      })
+    }
+
+    return res.json({
+      status: true,
+      message:
+        result.version.reviewState === "accepted"
+          ? "opportunity.message.accepted"
+          : "opportunity.message.saved",
+      data: { version: result.version },
+    })
+  } catch (error) {
+    console.error("SAVE_OPPORTUNITIES_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "opportunity.error.internal",
+    })
+  }
+})
+
+// The engagement's Opportunity version history. Preserved versions are read
+// through the same authorization and the same workspace scope as the active
+// one: keeping a version never widens who may see it (coding-standards.md §6A).
+router.get("/:id/opportunities/versions", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "engagement.read",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  try {
+    const versions = await listOpportunityVersions(
+      req.params.id,
+      authorized.scope,
+    )
+
+    return res.json({
+      status: true,
+      message: "Opportunity versions loaded",
+      data: { versions },
+    })
+  } catch (error) {
+    console.error("LOAD_OPPORTUNITY_VERSIONS_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "opportunity.error.internal",
+    })
+  }
+})
+
+// One version, with its content, for reading. A version outside the caller's
+// reach is refused exactly as one that does not exist (architecture.md §7A.4).
+router.get("/:id/opportunities/versions/:versionId", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "engagement.read",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  try {
+    const version = await getOpportunityVersionById(
+      req.params.versionId,
+      req.params.id,
+      authorized.scope,
+    )
+
+    if (!version) {
+      return res.status(404).json({
+        status: false,
+        message: "opportunity.error.version_not_found",
+      })
+    }
+
+    return res.json({
+      status: true,
+      message: "Opportunity version loaded",
+      data: { version },
+    })
+  } catch (error) {
+    console.error("LOAD_OPPORTUNITY_VERSION_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "opportunity.error.internal",
     })
   }
 })

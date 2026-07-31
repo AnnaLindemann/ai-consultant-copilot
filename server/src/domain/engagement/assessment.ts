@@ -1,5 +1,11 @@
 import type { DiscoveryProfile } from "../../../../shared/discovery-profile.schema.js"
-import type { AssessmentReviewState } from "../../../../shared/assessment.schema.js"
+import type {
+  Assessment,
+  AssessmentDimensionKey,
+  AssessmentFindingId,
+  AssessmentReviewState,
+  AssessmentSubmission,
+} from "../../../../shared/assessment.schema.js"
 
 // Business rules of the Assessment stage. Pure and framework-free: no HTTP, no
 // persistence, no prompts, no provider calls (architecture.md §4; coding-
@@ -38,3 +44,77 @@ export const canReplaceAssessment = (
   currentReviewState === null ||
   currentReviewState === "ai_draft" ||
   replaceConsultantEdits
+
+// Give every finding an identity, keeping the ones it already has.
+//
+// A finding's identity is what later stages cite, so it must not be derived
+// from the finding's own text: re-wording a title has to leave every citation
+// pointing at the same finding. Neither the model nor the browser mints one —
+// the model writes findings, the consultant edits them, and identity is added
+// here, on the server, at the moment the finding is first persisted.
+//
+// `mintId` is a parameter rather than a call to a random source so this rule
+// stays pure and deterministically testable (coding-standards.md §6, §9).
+export const identifyAssessmentFindings = (
+  submitted: AssessmentSubmission,
+  mintId: () => string,
+): Assessment => ({
+  ...submitted,
+  dimensions: Object.fromEntries(
+    Object.entries(submitted.dimensions).map(([dimension, content]) => [
+      dimension,
+      {
+        ...content,
+        findings: content.findings.map((finding) => ({
+          ...finding,
+          id: finding.id ?? mintId(),
+        })),
+      },
+    ]),
+  ) as Assessment["dimensions"],
+})
+
+// Every finding the Assessment holds, by identity — the set a citation is
+// checked against, and the source of the dimension/title snapshot a citation
+// carries for later reading.
+export const assessmentFindingsById = (
+  assessment: Assessment,
+): Map<AssessmentFindingId, { dimension: AssessmentDimensionKey; title: string }> =>
+  new Map(
+    Object.entries(assessment.dimensions).flatMap(([dimension, content]) =>
+      content.findings.map(
+        (finding) =>
+          [
+            finding.id,
+            { dimension: dimension as AssessmentDimensionKey, title: finding.title },
+          ] as const,
+      ),
+    ),
+  )
+
+// The Assessment's content in a stable, order-independent form, so hashing it
+// gives the same answer for the same content however the object was built.
+// Downstream stages record the hash of this to detect that the Assessment they
+// were derived from has since moved on (agent-rules.md §15).
+export const canonicalAssessmentContent = (assessment: Assessment): string =>
+  stableJson(assessment)
+
+// Object keys are emitted in sorted order; arrays keep theirs, because the
+// order of findings and gaps is content. Only the plain data the Assessment
+// schema admits reaches this — strings, numbers, booleans, arrays, objects.
+const stableJson = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(",")}]`
+  }
+
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, nested]) => nested !== undefined)
+      .sort(([one], [other]) => (one < other ? -1 : one > other ? 1 : 0))
+      .map(([key, nested]) => `${JSON.stringify(key)}:${stableJson(nested)}`)
+
+    return `{${entries.join(",")}}`
+  }
+
+  return JSON.stringify(value) ?? "null"
+}

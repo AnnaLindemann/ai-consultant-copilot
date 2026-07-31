@@ -168,6 +168,7 @@ mock.module("../lib/auth/authentication-provider.js", {
 
 mock.module("../repositories/engagement.repository.js", {
   namedExports: {
+    engagementScopeWhere: () => ({}),
     getEngagementById: async (id: string, scope: { userId: string }) => {
       assert.ok(scope, "getEngagementById was called without a workspace scope")
       const row = ENGAGEMENTS.find((engagement) => engagement.id === id)
@@ -268,6 +269,26 @@ mock.module("../services/assessment.service.js", {
       evaluation: {},
     }),
     saveAssessment: async () => ownedByOwner,
+  },
+})
+
+mock.module("../services/opportunities.service.js", {
+  namedExports: {
+    prioritizeOpportunities: async () => ({
+      success: true,
+      prioritization: { summary: "", opportunities: [], gaps: [] },
+      reviewState: "ai_draft",
+      evaluation: {},
+    }),
+    saveOpportunities: async () => ownedByOwner,
+    getOpportunityVersionState: async () => ({
+      activeVersion: null,
+      stale: false,
+      currentAssessmentRevision: 0,
+      currentAssessmentFingerprint: null,
+    }),
+    listOpportunityVersions: async () => [],
+    getOpportunityVersionById: async () => null,
   },
 })
 
@@ -373,6 +394,20 @@ const engagementRoutes = (id: string): [string, Call][] => [
   [`/engagements/${id}/analysis-runs`, {}],
   [`/engagements/${id}/analyze`, { method: "POST" }],
   [`/engagements/${id}/assessment`, { method: "POST", body: {} }],
+  [`/engagements/${id}/opportunities`, { method: "POST", body: {} }],
+  [
+    `/engagements/${id}/opportunities`,
+    {
+      method: "PATCH",
+      body: {
+        prioritization: {
+          summary: "Nothing prioritized yet.",
+          opportunities: [],
+          gaps: [],
+        },
+      },
+    },
+  ],
   [
     `/engagements/${id}/discovery`,
     { method: "PATCH", body: { profile: {}, contributor: "consultant" } },

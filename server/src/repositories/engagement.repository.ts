@@ -50,7 +50,11 @@ export type { EngagementScope }
 // Translate the domain's reach into a Prisma filter. A Client's reach is their
 // own active, unexpired Discovery Access, so revocation and expiry end their
 // reach in the query itself and not only in the policy check above it.
-const engagementScopeWhere = (
+//
+// Exported so a repository for something an engagement *owns* — the Opportunity
+// versions — scopes its rows through the owning engagement with this same
+// filter, rather than writing a second, drifting version of the reach rule.
+export const engagementScopeWhere = (
   scope: EngagementScope,
   now: Date = new Date(),
 ): Prisma.EngagementWhereInput => {
@@ -231,7 +235,9 @@ export const updateEngagementDiscoveryWorkflow = async (
 }
 
 // Persist the Assessment together with where it stands in review. Both fields
-// move as one so a stored Assessment is never left without its review state.
+// move as one so a stored Assessment is never left without its review state,
+// and the revision counter moves with them so a reader can say which Assessment
+// a derived stage was prioritized from.
 export const updateEngagementAssessment = async (
   id: string,
   scope: EngagementScope,
@@ -244,6 +250,7 @@ export const updateEngagementAssessment = async (
     data: {
       assessment: assessment as Prisma.InputJsonValue,
       assessmentReviewState: reviewState,
+      assessmentRevision: { increment: 1 },
     },
     include: { organization: true },
   })
@@ -317,6 +324,14 @@ export const toDiscoveryWorkflowState = (
     (engagement.discoveryContentProvenance as DiscoveryContentProvenance | null) ??
     emptyDiscoveryContentProvenance(),
 })
+
+// Translate the persisted Assessment into its domain type. The column was
+// written from validated content, and an engagement that has not reached the
+// stage yet reads back as "nothing produced yet" rather than as an empty shell
+// that would have to be told apart from a real one.
+export const toAssessment = (
+  engagement: EngagementWithOrganization,
+): Assessment | null => (engagement.assessment as Assessment | null) ?? null
 
 const toStringList = (value: Prisma.JsonValue | null): string[] =>
   (value ?? []) as string[]

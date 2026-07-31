@@ -49,6 +49,7 @@ let transitionResult:
 
 mock.module("../repositories/engagement.repository.js", {
   namedExports: {
+    engagementScopeWhere: () => ({}),
     createEngagement: async () => engagement,
     getEngagementById: async (id: string) =>
       id === engagement.id ? engagement : null,
@@ -115,6 +116,26 @@ mock.module("../services/assessment.service.js", {
       evaluation: {},
     }),
     saveAssessment: async () => engagement,
+  },
+})
+
+mock.module("../services/opportunities.service.js", {
+  namedExports: {
+    prioritizeOpportunities: async () => ({
+      success: true,
+      prioritization: { summary: "", opportunities: [], gaps: [] },
+      reviewState: "ai_draft",
+      evaluation: {},
+    }),
+    saveOpportunities: async () => engagement,
+    getOpportunityVersionState: async () => ({
+      activeVersion: null,
+      stale: false,
+      currentAssessmentRevision: 0,
+      currentAssessmentFingerprint: null,
+    }),
+    listOpportunityVersions: async () => [],
+    getOpportunityVersionById: async () => null,
   },
 })
 

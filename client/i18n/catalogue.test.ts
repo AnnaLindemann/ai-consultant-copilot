@@ -6,6 +6,7 @@ import { test } from "node:test"
 
 import { de } from "./de.ts"
 import { discoveryMessageIds } from "../../shared/discovery-messages.ts"
+import { opportunityMessageIds } from "../../shared/opportunity-messages.ts"
 import {
   businessImpactCategorySchema,
   dataSourceKindSchema,
@@ -63,6 +64,31 @@ const labelledIdentifiers: [string, readonly string[]][] = [
   ["common.currency", ["eur", "usd", "gbp", "other"] as const],
   ["discovery.gap_subject", measurementGapSubjectSchema.options],
   ["discovery.gap_reason", measurementGapReasonSchema.options],
+  // The Opportunity surface's identifiers. Listed literally, as the enums above
+  // it are: this suite runs on Node's plain type stripping, which resolves a
+  // `.ts` file but not the `.js` specifier a shared schema uses to reach
+  // another one. A value missing from the schema's own contract would fail the
+  // server's schema tests instead.
+  [
+    "assessment.dimension",
+    [
+      "businessProcess",
+      "data",
+      "technology",
+      "aiReadiness",
+      "risks",
+      "opportunities",
+    ] as const,
+  ],
+  ["opportunity.level", ["low", "medium", "high"] as const],
+  [
+    "opportunity.ai_readiness",
+    ["ready", "conditional", "not_ready"] as const,
+  ],
+  [
+    "opportunity.review_state",
+    ["ai_draft", "consultant_edited", "accepted"] as const,
+  ],
 ]
 
 test("every Discovery outcome the server reports has a German message", () => {
@@ -103,6 +129,35 @@ test("every key the Discovery components look up exists in the catalogue", () =>
   }
 
   assert.deepEqual(missing, [], "keys are looked up but not translated")
+})
+
+test("every Opportunity outcome the server reports has a German message", () => {
+  for (const messageId of opportunityMessageIds) {
+    assert.equal(has(messageId), true, `${messageId} has no German message`)
+  }
+})
+
+test("the Opportunity surface is looked up by key and carries no literal", () => {
+  // The prioritization surface (Phase 4) is held to the same rule as the
+  // Discovery and access surfaces: every string looked up by key, no German
+  // literal in the component (coding-standards.md §12A).
+  const file = path.join(componentsDir, "OpportunityPanel.tsx")
+  const source = readFileSync(file, "utf8")
+
+  const missing: string[] = []
+  for (const [, key] of source.matchAll(/\bt\(\s*"([^"]+)"/g)) {
+    if (!has(key)) missing.push(`OpportunityPanel.tsx: ${key}`)
+  }
+  assert.deepEqual(missing, [], "keys are looked up but not translated")
+
+  const offenders: string[] = []
+  for (const [lineNumber, line] of source.split("\n").entries()) {
+    const isComment = /^\s*(\/\/|\*|\/\*)/.test(line)
+    if (!isComment && /[äöüßÄÖÜ]/.test(line)) {
+      offenders.push(`OpportunityPanel.tsx:${lineNumber + 1}`)
+    }
+  }
+  assert.deepEqual(offenders, [], "a user-facing literal was written inline")
 })
 
 test("every key the access surfaces look up exists in the catalogue", () => {

@@ -2,6 +2,7 @@ import EngagementAnalysisPanel from "../../../components/EngagementAnalysisPanel
 import EngagementStageControl from "../../../components/EngagementStageControl"
 import DiscoveryProfileEditor from "../../../components/DiscoveryProfileEditor"
 import AssessmentPanel from "../../../components/AssessmentPanel"
+import OpportunityPanel from "../../../components/OpportunityPanel"
 import { cookies } from "next/headers"
 import { STAGE_LABELS, type EngagementStage } from "../../../lib/engagement-stage"
 import type { DiscoveryProfile } from "../../../../shared/discovery-profile.schema"
@@ -10,6 +11,7 @@ import type {
   Assessment,
   AssessmentReviewState,
 } from "../../../../shared/assessment.schema"
+import type { OpportunityVersionState } from "../../../../shared/opportunity.schema"
 
 type EngagementDetails = {
   id: string
@@ -26,6 +28,7 @@ type EngagementDetails = {
   discoveryWorkflow: DiscoveryWorkflowState
   assessment: Assessment | null
   assessmentReviewState: AssessmentReviewState | null
+  opportunities: OpportunityVersionState
   createdAt: string
   updatedAt: string
   organization: {
@@ -144,6 +147,12 @@ export default async function EngagementDetailsPage({
         engagementId={engagement.id}
         initialAssessment={engagement.assessment}
         initialReviewState={engagement.assessmentReviewState}
+      />
+      <OpportunityPanel
+        key={`${engagement.opportunities.activeVersion?.id ?? "none"}:${engagement.opportunities.activeVersion?.revision ?? "0"}:${engagement.opportunities.currentAssessmentRevision}:${engagement.opportunities.stale ? "1" : "0"}`}
+        engagementId={engagement.id}
+        assessment={engagement.assessment}
+        initialVersionState={engagement.opportunities}
       />
       <EngagementAnalysisPanel
         engagementId={engagement.id}

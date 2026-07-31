@@ -47,7 +47,7 @@ const BASIS_LABELS: Record<(typeof basisOptions)[number], string> = {
   assumption: "Rests on an assumption",
 }
 
-const emptyFinding: AssessmentFinding = {
+const emptyFinding: Omit<AssessmentFinding, "id"> = {
   title: "",
   detail: "",
   basis: "assumption",
@@ -107,7 +107,7 @@ export default function AssessmentPanel({
   function addFinding(key: AssessmentDimensionKey) {
     updateDimension(key, (dimension) => ({
       ...dimension,
-      findings: [...dimension.findings, { ...emptyFinding }],
+      findings: [...dimension.findings, { ...emptyFinding } as AssessmentFinding],
     }))
   }
 
