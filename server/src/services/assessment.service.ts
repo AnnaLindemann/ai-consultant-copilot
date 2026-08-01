@@ -115,7 +115,7 @@ export const generateAssessment = async (
   const knowledgePackage = await retrieveKnowledgePackage(
     engagement,
     "assessment",
-    engagement.assessment ? toAssessment(engagement) : null,
+    { assessment: engagement.assessment ? toAssessment(engagement) : null },
   )
 
   const prompt = buildAssessmentPrompt({

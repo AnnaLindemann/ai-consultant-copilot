@@ -1,9 +1,12 @@
+import { randomUUID } from "node:crypto"
+
 import { calculateLlmCost } from "../evaluation/calculate-llm-cost.js"
 import { evaluateAnalysisOutput } from "../evaluation/evaluate-analysis-output.js"
 import { canonicalAssessmentContent } from "../domain/engagement/assessment.js"
 import {
   canReplaceOpportunityVersion,
   hasAssessmentToPrioritize,
+  identifyOpportunities,
   inPriorityOrder,
   isOpportunityVersionStale,
   resolveCitations,
@@ -271,11 +274,17 @@ export const prioritizeOpportunities = async (
   // can carry the *whole* outcome — a lost race or a storage failure belongs on
   // it as much as a provider failure does — and so the version it produced can
   // be linked back to it (architecture.md §8).
+  // Identity is added here, on the server: the model writes opportunities, and
+  // each one gets a stable id that a Recommendation cites and that survives
+  // every later re-wording of its title and re-ordering of its rank.
   const persisted =
     citations?.resolved === true
-      ? await persistVersion(engagement, scope, assessedState, {
-          ...citations.prioritization,
-        })
+      ? await persistVersion(
+          engagement,
+          scope,
+          assessedState,
+          identifyOpportunities(citations.prioritization, mintOpportunityId),
+        )
       : null
 
   const runErrorMessage = generationError(parsedResult, citations, persisted)
@@ -392,11 +401,17 @@ export const saveOpportunities = async (
     }
   }
 
+  // Opportunities the consultant kept carry the id they already had; ones they
+  // added get one here. Nothing that cites an opportunity loses its citation
+  // because a title was re-worded, and nothing the browser sent decides an
+  // identity.
   const saved = await saveOpportunityVersion(scope, {
     versionId: input.versionId,
     engagementId: engagement.id,
     expectedRevision: input.expectedRevision,
-    prioritization: inPriorityOrder(citations.prioritization),
+    prioritization: inPriorityOrder(
+      identifyOpportunities(citations.prioritization, mintOpportunityId),
+    ),
     reviewState: input.reviewState,
     modifiedByUserId: scope.userId,
   })
@@ -447,6 +462,11 @@ export const listOpportunityVersions = async (
 // look stale, and any real edit does.
 export const assessmentFingerprint = (assessment: Assessment): string =>
   createSha256Hash(canonicalAssessmentContent(assessment))
+
+// An opportunity's identity is opaque and unrelated to its text or its rank, so
+// re-wording a title or re-ordering the prioritization can never change what
+// cites it.
+const mintOpportunityId = () => randomUUID()
 
 type PersistOutcome =
   | { stored: true; version: OpportunityVersionDetail }

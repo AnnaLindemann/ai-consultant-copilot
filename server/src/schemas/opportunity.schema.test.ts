@@ -12,6 +12,10 @@ import {
 // uncertainty is explained, and the ranking is a real ordering.
 
 const opportunity = (overrides: Record<string, unknown> = {}) => ({
+  // A stored Opportunity carries the identity the server minted for it — the
+  // thing a Recommendation cites, and the reason a title or a rank may change
+  // freely (roadmap Phase 6).
+  id: "opportunity_triage",
   title: "Automate first-line triage",
   problem: "Manual triage delays first response.",
   improvement: "Route incoming requests by intent before an agent sees them.",
@@ -148,7 +152,7 @@ test("a prioritization with a hole in its ordering is refused", () => {
 test("a contiguous ranking is accepted in any array order", () => {
   const result = opportunityPrioritizationSchema.safeParse(
     prioritization([
-      opportunity({ title: "Second", priorityRank: 2 }),
+      opportunity({ id: "opportunity_data", title: "Second", priorityRank: 2 }),
       opportunity({ priorityRank: 1 }),
     ]),
   )

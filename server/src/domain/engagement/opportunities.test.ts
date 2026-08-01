@@ -4,10 +4,13 @@ import { test } from "node:test"
 import type { Assessment } from "../../../../shared/assessment.schema.js"
 import type { OpportunitySubmission } from "../../../../shared/opportunity.schema.js"
 import {
+  canonicalOpportunityContent,
   hasAssessmentToPrioritize,
+  identifyOpportunities,
   inPriorityOrder,
   isOpportunityVersionStale,
   nextVersionNumber,
+  opportunitiesById,
   resolveCitations,
 } from "./opportunities.js"
 import { canonicalAssessmentContent, identifyAssessmentFindings } from "./assessment.js"
@@ -99,6 +102,26 @@ const submission = (opportunities: OpportunitySubmission[]) => ({
   gaps: [],
 })
 
+// A deterministic minting source, so identity is testable without a random one
+// (coding-standards.md §9 "determinism in tests").
+const mintingIds = () => {
+  let minted = 0
+  return () => `minted_${(minted += 1)}`
+}
+
+// The two server steps a stored prioritization goes through, as the service
+// applies them: citations resolved, then identity given.
+const identified = (opportunities: OpportunitySubmission[]) => {
+  const resolution = resolveCitations(
+    submission(opportunities),
+    assessedTriage(),
+  )
+  assert.equal(resolution.resolved, true)
+  if (!resolution.resolved) throw new Error("the fixture failed to resolve")
+
+  return identifyOpportunities(resolution.prioritization, mintingIds())
+}
+
 test("an Assessment with no findings cannot be prioritized", () => {
   assert.equal(hasAssessmentToPrioritize(null), false)
   assert.equal(hasAssessmentToPrioritize(assessment()), false)
@@ -186,42 +209,101 @@ test("the snapshot on a citation is read from the Assessment, not from the calle
 })
 
 test("the prioritization is ordered by rank, whatever order it arrived in", () => {
-  const resolution = resolveCitations(
-    submission([
-      opportunity({ title: "Second", priorityRank: 2 }),
-      opportunity({ title: "First", priorityRank: 1 }),
-    ]),
-    assessedTriage(),
-  )
-  assert.equal(resolution.resolved, true)
+  const prioritization = identified([
+    opportunity({ title: "Second", priorityRank: 2 }),
+    opportunity({ title: "First", priorityRank: 1 }),
+  ])
 
   assert.deepEqual(
-    resolution.resolved
-      ? inPriorityOrder(resolution.prioritization).opportunities.map(
-          (one) => one.title,
-        )
-      : [],
+    inPriorityOrder(prioritization).opportunities.map((one) => one.title),
     ["First", "Second"],
   )
 })
 
 test("ordering copies rather than mutates what it was given", () => {
+  const prioritization = identified([
+    opportunity({ title: "Second", priorityRank: 2 }),
+    opportunity({ title: "First", priorityRank: 1 }),
+  ])
+
+  inPriorityOrder(prioritization)
+
+  assert.deepEqual(
+    prioritization.opportunities.map((one) => one.title),
+    ["Second", "First"],
+  )
+})
+
+// --- Identity ---------------------------------------------------------------
+
+test("an opportunity the AI wrote is given an identity on the server", () => {
+  const prioritization = identified([opportunity()])
+
+  assert.deepEqual(
+    prioritization.opportunities.map((one) => one.id),
+    ["minted_1"],
+  )
+})
+
+test("an opportunity the consultant kept keeps the identity it already had", () => {
+  const resolution = resolveCitations(
+    submission([opportunity({ id: "opportunity_from_an_earlier_save" })]),
+    assessedTriage(),
+  )
+  assert.equal(resolution.resolved, true)
+  if (!resolution.resolved) return
+
+  assert.deepEqual(
+    identifyOpportunities(
+      resolution.prioritization,
+      mintingIds(),
+    ).opportunities.map((one) => one.id),
+    ["opportunity_from_an_earlier_save"],
+  )
+})
+
+test("identity does not depend on a title or a rank, so both may change freely", () => {
   const resolution = resolveCitations(
     submission([
-      opportunity({ title: "Second", priorityRank: 2 }),
-      opportunity({ title: "First", priorityRank: 1 }),
+      opportunity({ id: "opportunity_1", title: "Re-worded", priorityRank: 2 }),
+      opportunity({ id: "opportunity_2", title: "Promoted", priorityRank: 1 }),
     ]),
     assessedTriage(),
   )
   assert.equal(resolution.resolved, true)
   if (!resolution.resolved) return
 
-  const { prioritization } = resolution
-  inPriorityOrder(prioritization)
+  const reordered = inPriorityOrder(
+    identifyOpportunities(resolution.prioritization, mintingIds()),
+  )
 
+  // A Recommendation citing "opportunity_1" still finds it after the re-wording
+  // and the re-ordering that moved it to second place.
+  assert.equal(
+    opportunitiesById(reordered).get("opportunity_1")?.title,
+    "Re-worded",
+  )
   assert.deepEqual(
-    prioritization.opportunities.map((one) => one.title),
-    ["Second", "First"],
+    reordered.opportunities.map((one) => one.id),
+    ["opportunity_2", "opportunity_1"],
+  )
+})
+
+test("the canonical content is stable across key order and changes with content", () => {
+  const one = identified([opportunity({ id: "opportunity_1" })])
+  const other = identified([
+    { ...opportunity({ id: "opportunity_1" }), title: "Automate first-line triage" },
+  ])
+
+  assert.equal(
+    canonicalOpportunityContent(one),
+    canonicalOpportunityContent(other),
+  )
+  assert.notEqual(
+    canonicalOpportunityContent(one),
+    canonicalOpportunityContent(
+      identified([opportunity({ id: "opportunity_1", title: "Something else" })]),
+    ),
   )
 })
 

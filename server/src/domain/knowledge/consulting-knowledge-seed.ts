@@ -441,7 +441,7 @@ const solutionPatterns: GenericSeed[] = [
     "Die KI erklärt den aktuellen Fallstand, fragt fehlende Informationen ab und ordnet den Vorgang ein.",
     ["status", "triage", "support"],
     ["customer-inbound-support", "case-management-and-triage"],
-    ["discovery", "assessment", "prioritization"],
+    ["discovery", "assessment", "prioritization", "solution_matching", "roadmap"],
     {
       objective: "Wiederkehrende Anfragen schneller einordnen und beantworten.",
       applicability: ["Statusabfragen", "Help Desk", "Ticket-Triage", "Guest Communication"],
@@ -510,7 +510,7 @@ const solutionPatterns: GenericSeed[] = [
     "Die KI baut aus einem unstrukturierten Ereignis einen prüfbaren Fallbericht für den Menschen.",
     ["dossier", "incident", "structured-intake"],
     ["case-management-and-triage", "customer-inbound-support"],
-    ["discovery", "assessment"],
+    ["discovery", "assessment", "solution_matching", "roadmap"],
     {
       objective: "Aus einem Ereignis ein belastbares, strukturiertes Dossier machen.",
       applicability: ["FNOL", "Ticket-Intake", "Beschwerde", "Supportfall"],

@@ -1,3 +1,5 @@
+import { canonicalStageContent } from "./canonical-content.js"
+
 import type { DiscoveryProfile } from "../../../../shared/discovery-profile.schema.js"
 import type {
   Assessment,
@@ -92,29 +94,10 @@ export const assessmentFindingsById = (
     ),
   )
 
-// The Assessment's content in a stable, order-independent form, so hashing it
-// gives the same answer for the same content however the object was built.
-// Downstream stages record the hash of this to detect that the Assessment they
-// were derived from has since moved on (agent-rules.md §15).
+// The Assessment's content in a stable, order-independent form. Downstream
+// stages record the hash of this to detect that the Assessment they were derived
+// from has since moved on (agent-rules.md §15). The rendering itself is shared
+// with the other stages that do the same (`canonical-content.ts`), so two stages
+// can never disagree about what "unchanged content" means.
 export const canonicalAssessmentContent = (assessment: Assessment): string =>
-  stableJson(assessment)
-
-// Object keys are emitted in sorted order; arrays keep theirs, because the
-// order of findings and gaps is content. Only the plain data the Assessment
-// schema admits reaches this — strings, numbers, booleans, arrays, objects.
-const stableJson = (value: unknown): string => {
-  if (Array.isArray(value)) {
-    return `[${value.map(stableJson).join(",")}]`
-  }
-
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, nested]) => nested !== undefined)
-      .sort(([one], [other]) => (one < other ? -1 : one > other ? 1 : 0))
-      .map(([key, nested]) => `${JSON.stringify(key)}:${stableJson(nested)}`)
-
-    return `{${entries.join(",")}}`
-  }
-
-  return JSON.stringify(value) ?? "null"
-}
+  canonicalStageContent(assessment)

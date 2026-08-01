@@ -70,6 +70,19 @@ import {
   type SaveOpportunitiesFailure,
 } from "../services/opportunities.service.js"
 import { getOpportunityVersionById } from "../repositories/opportunity-version.repository.js"
+import {
+  generateRecommendationsSchema,
+  saveRecommendationsSchema,
+} from "../schemas/recommendations.schema.js"
+import {
+  generateRecommendations,
+  getRecommendationStageState,
+  listRecommendationVersions,
+  saveRecommendations,
+  type GenerateRecommendationsFailure,
+  type SaveRecommendationsFailure,
+} from "../services/recommendations.service.js"
+import { getRecommendationVersionById } from "../repositories/recommendation-version.repository.js"
 import { retrieveKnowledgePackage } from "../services/consulting-knowledge.service.js"
 import { failureIdentity } from "../lib/failure-identity.js"
 
@@ -138,6 +151,35 @@ const saveOpportunitiesFailureStatus: Record<SaveOpportunitiesFailure, number> =
     stale_update: 409,
   }
 
+// How a refused or failed solution matching is reported at the boundary. It
+// mirrors the prioritization mapping above, with two preconditions of its own:
+// nothing prioritized to match, and no curated knowledge to ground a proposal in
+// — both are things the consultant can put right (422).
+const recommendationsFailureStatus: Record<
+  GenerateRecommendationsFailure,
+  number
+> = {
+  opportunities_not_ready: 422,
+  knowledge_unavailable: 422,
+  consultant_edits_protected: 409,
+  ai_output_invalid: 422,
+  ai_output_ungrounded: 422,
+  ai_step_failed: 502,
+  version_conflict: 409,
+  persistence_failed: 500,
+}
+
+const saveRecommendationsFailureStatus: Record<
+  SaveRecommendationsFailure,
+  number
+> = {
+  opportunities_not_ready: 422,
+  ai_output_ungrounded: 422,
+  version_not_found: 404,
+  historical_version_readonly: 409,
+  stale_update: 409,
+}
+
 // How a refused Discovery review transition is reported at the boundary: the
 // actor does not hold that authority (403), the workflow is not in a state that
 // allows it (409), or discovery is not yet complete enough to submit (422).
@@ -204,7 +246,16 @@ router.get("/:id", async (req, res) => {
     const knowledgePackage = await retrieveKnowledgePackage(
       authorized.resource,
       "assessment",
-      toAssessment(authorized.resource),
+      { assessment: toAssessment(authorized.resource) },
+    )
+    // The Recommendation stage answers with the version being worked on,
+    // whether the prioritization has moved on beneath it, and the curated
+    // grounding this engagement's recommendations may draw on — so the
+    // consultant reviews the draft against the same material the model was
+    // given (roadmap Phase 6).
+    const recommendations = await getRecommendationStageState(
+      authorized.resource,
+      authorized.scope,
     )
 
     return res.json({
@@ -213,6 +264,7 @@ router.get("/:id", async (req, res) => {
       data: {
         ...withDiscoveryState(authorized.resource),
         opportunities,
+        recommendations,
         knowledgePackage,
       },
     })
@@ -791,6 +843,227 @@ router.get("/:id/opportunities/versions/:versionId", async (req, res) => {
     return res.status(500).json({
       status: false,
       message: "opportunity.error.internal",
+    })
+  }
+})
+
+// Match the prioritized Opportunities against curated knowledge to produce
+// grounded Recommendations (roadmap Phase 6). Re-runnable after the
+// prioritization changes, without restarting the engagement.
+router.post("/:id/recommendations", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  // Triggering a generation is itself an authorized action, so no AI step can be
+  // the route by which data crosses a boundary (architecture.md §5). The stage
+  // inherits the existing access decision point; it adds no rule of its own
+  // (coding-standards.md §15).
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "engagement.generate",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  const parseResult = generateRecommendationsSchema.safeParse(req.body ?? {})
+  if (!parseResult.success) {
+    return res.status(400).json({
+      status: false,
+      message: "recommendation.error.invalid_input",
+      errors: parseResult.error.flatten(),
+    })
+  }
+
+  try {
+    const result = await generateRecommendations(
+      authorized.resource,
+      authorized.scope,
+      {
+        replaceConsultantEdits:
+          parseResult.data.replaceConsultantEdits ?? false,
+      },
+    )
+
+    if (!result.success) {
+      // The consultant sees why no new version was produced, as an identifier
+      // the frontend renders in their language, together with what the model
+      // claimed that does not exist. In every failure case the version they were
+      // working on is untouched (architecture.md §13; coding-standards.md §12A).
+      return res.status(recommendationsFailureStatus[result.failure]).json({
+        status: false,
+        message: result.messageId,
+        data: {
+          failure: result.failure,
+          evaluation: result.evaluation,
+          unknownOpportunityIds: result.unknownOpportunityIds,
+          unknownKnowledgeCodes: result.unknownKnowledgeCodes,
+          unknownTechnologyCodes: result.unknownTechnologyCodes,
+          ungroundedRecommendationTitles: result.ungroundedRecommendationTitles,
+        },
+      })
+    }
+
+    return res.status(201).json({
+      status: true,
+      message: "recommendation.message.matched",
+      data: {
+        version: result.version,
+        evaluation: result.evaluation,
+      },
+    })
+  } catch (error) {
+    console.error("GENERATE_RECOMMENDATIONS_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "recommendation.error.internal",
+    })
+  }
+})
+
+// Save the consultant's reviewed Recommendations into the version they are
+// working on — the AI draft is theirs to edit, re-ground, override, or accept
+// (agent-rules.md §10). This is the autosave path; it changes the active version
+// and never creates one.
+router.patch("/:id/recommendations", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "engagement.update",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  const parseResult = saveRecommendationsSchema.safeParse(req.body)
+  if (!parseResult.success) {
+    return res.status(400).json({
+      status: false,
+      message: "recommendation.error.invalid_input",
+      errors: parseResult.error.flatten(),
+    })
+  }
+
+  try {
+    const result = await saveRecommendations(
+      authorized.resource,
+      authorized.scope,
+      {
+        versionId: parseResult.data.versionId,
+        expectedRevision: parseResult.data.expectedRevision,
+        recommendationSet: parseResult.data.recommendationSet,
+        reviewState: parseResult.data.reviewState ?? "consultant_edited",
+      },
+    )
+
+    if (!result.success) {
+      return res.status(saveRecommendationsFailureStatus[result.failure]).json({
+        status: false,
+        message: result.messageId,
+        data: {
+          failure: result.failure,
+          currentRevision: result.currentRevision,
+          unknownOpportunityIds: result.unknownOpportunityIds,
+          unknownKnowledgeCodes: result.unknownKnowledgeCodes,
+          unknownTechnologyCodes: result.unknownTechnologyCodes,
+          ungroundedRecommendationTitles: result.ungroundedRecommendationTitles,
+        },
+      })
+    }
+
+    return res.json({
+      status: true,
+      message:
+        result.version.reviewState === "accepted"
+          ? "recommendation.message.accepted"
+          : "recommendation.message.saved",
+      data: { version: result.version },
+    })
+  } catch (error) {
+    console.error("SAVE_RECOMMENDATIONS_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "recommendation.error.internal",
+    })
+  }
+})
+
+// The engagement's Recommendation version history. Preserved versions are read
+// through the same authorization and the same workspace scope as the active one:
+// keeping a version never widens who may see it (coding-standards.md §6A).
+router.get("/:id/recommendations/versions", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "engagement.read",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  try {
+    const versions = await listRecommendationVersions(
+      req.params.id,
+      authorized.scope,
+    )
+
+    return res.json({
+      status: true,
+      message: "recommendation.message.versions_loaded",
+      data: { versions },
+    })
+  } catch (error) {
+    console.error("LOAD_RECOMMENDATION_VERSIONS_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "recommendation.error.internal",
+    })
+  }
+})
+
+// One version, with its content and its grounding, for reading. A version
+// outside the caller's reach is refused exactly as one that does not exist
+// (architecture.md §7A.4).
+router.get("/:id/recommendations/versions/:versionId", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "engagement.read",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  try {
+    const version = await getRecommendationVersionById(
+      req.params.versionId,
+      req.params.id,
+      authorized.scope,
+    )
+
+    if (!version) {
+      return res.status(404).json({
+        status: false,
+        message: "recommendation.error.version_not_found",
+      })
+    }
+
+    return res.json({
+      status: true,
+      message: "recommendation.message.version_loaded",
+      data: { version },
+    })
+  } catch (error) {
+    console.error("LOAD_RECOMMENDATION_VERSION_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "recommendation.error.internal",
     })
   }
 })

@@ -55,10 +55,10 @@ import type {
 // later stage can show *where a recommended technology's information came
 // from* (decision D5).
 //
-// This is the contract Phase 6 will consume. It is **not** wired into any
-// recommendation path here, and deliberately knows nothing about opportunities,
-// recommendations, or engagements: it takes categories and free text, and
-// returns stable profile codes.
+// This is the contract the Recommendation stage consumes (roadmap Phase 6). It
+// deliberately knows nothing about opportunities, recommendations, or
+// engagements: it takes categories and free text, and returns stable profile
+// codes — the engagement side assembles the context and reads the answer.
 export const retrieveTechnologyPackage = async (
   context: TechnologyRetrievalContext,
 ): Promise<TechnologyPackage> => {
@@ -68,6 +68,30 @@ export const retrieveTechnologyPackage = async (
   ])
 
   return buildTechnologyPackage(profiles, provenance, context)
+}
+
+// Every Technology Profile a *consultant* may ground a recommendation's
+// technology suggestion in, by code (roadmap Phase 6).
+//
+// Deprecated profiles are excluded, for the same reason retrieval never selects
+// one: a recommendation must not be newly grounded in knowledge the curator has
+// retired. A profile that a stored recommendation already cites stays readable
+// there — the citation carries its own title snapshot.
+//
+// This is a **read**, exactly like retrieval, and it writes nothing: the only
+// write path to a Technology Profile remains the Technology Curator applying an
+// approved proposal (architecture.md §9.3).
+export const listCitableTechnology = async (): Promise<
+  Map<string, { categoryCode: string; title: string }>
+> => {
+  const profiles = await listTechnologyProfiles({ status: "active" })
+
+  return new Map(
+    profiles.map((profile) => [
+      profile.code,
+      { categoryCode: profile.categoryCode, title: profile.title },
+    ]),
+  )
 }
 
 // --- The browse boundary ---------------------------------------------------

@@ -193,6 +193,40 @@ ordering without restarting the engagement. Like the Assessment, the AI draft is
 the consultant's to edit or accept, and re-running over their edits requires
 explicit confirmation.
 
+**Recommendations** (Phase 6) connect the prioritized Opportunities to curated
+knowledge. Each one carries its **approach, rationale, assumptions, confidence,
+and expected value**, and its grounding is structural rather than asserted:
+
+- **backward**, to the Opportunity it addresses — by the Opportunity's stable
+  id, never by its title or its rank — and through that Opportunity's cited
+  Assessment findings to the **Discovery Profile facts** behind them, resolved by
+  the server from persisted state so nothing in the trace can be invented;
+- **outward**, to the **Consulting Knowledge Base** entries that justify the
+  approach, of which at least one must be an **AI Use Case** or a **Solution
+  Pattern**, each carrying the reasoning copied into the engagement's own
+  content;
+- **outward**, to the **Technology Knowledge Base** for any implementation
+  technology or AI model named — technologies are modelled as coded citations
+  with an explanation of *why they fit*, so a recommendation cannot name one
+  without a Technology Profile behind it. Naming none is valid; naming an
+  uncurated one is not.
+
+A citation that resolves to nothing is fabricated grounding: the draft is
+refused, the fabricated ids and codes are named back to the consultant, the run
+is recorded as invalid, and no version is created. The model may cite only what
+was **retrieved for it**; the consultant, reviewing that draft, may re-ground a
+proposal in any active curated entry. The AI never supplies a figure — baselines
+and targets belong to the Opportunity's success criteria and the client's own
+numbers. Expected value is qualitative.
+
+Like the Opportunities, Recommendations are **versioned**: a new run supersedes
+rather than overwrites, edits are autosaved into the active version under an
+optimistic-concurrency revision, and re-prioritizing marks the active version
+**stale** — a recommendation to re-run, never an automatic rewrite. Each matching
+run is recorded as an Analysis Run carrying the codes from **both** knowledge
+bases (`knowledgeEntryCodes` and `technologyProfileCodes`, kept separate because
+the two subsystems are independent).
+
 ## Curated Consulting Knowledge Base (Phase 5)
 
 The **Consulting Knowledge Base** is the reusable, engagement-independent
@@ -231,7 +265,11 @@ engagement context
 Identical inputs against an unchanged knowledge base always produce identical,
 identically ordered results. The LLM never searches the knowledge base — it
 receives only the selected package, and the codes it was grounded in are
-recorded on the Analysis Run as `knowledgeEntryCodes`. **Tags are a weak
+recorded on the Analysis Run as `knowledgeEntryCodes`. Three stages retrieve
+today: **Discovery** (questions, taxonomy, processes, problems, follow-up
+templates), **Assessment** (frameworks, AI-readiness criteria, problems, use
+cases, risk models, best practices), and **Solution Matching** (AI Use Cases and
+Solution Patterns — exactly what Phase 6 grounds a recommendation in). **Tags are a weak
 additional signal and can never select an entry on their own**; stable codes,
 the taxonomy, and explicit relationships are what retrieval runs on. Embeddings,
 vector search, and RAG remain out of scope until Phase 10.
@@ -328,11 +366,15 @@ of truth and the two can never disagree. **The seed writes no history entry.**
 
 Retrieval is deterministic and category-scoped, excludes deprecated profiles,
 returns stable profile codes with their provenance, and is exercised through an
-Administrator preview endpoint. It is not wired into any recommendation path —
-that is Phase 6.
+Administrator preview endpoint. From Phase 6 it also grounds the technologies and
+models a **Recommendation** names.
 
-**Administrator-only.** A Manager and a Client are refused every technology
-route by deny-by-default, and every denial is audited.
+**The registry itself is Administrator-only.** A Manager and a Client are refused
+every `/technology` route by deny-by-default, and every denial is audited. What a
+Manager does meet is the small package deterministically retrieved *for their own
+engagement*, carried inside the recommendation stage's state and authorized as a
+read of that engagement — the curated grounding behind a proposal they are
+reviewing, not the registry to browse.
 
 ## Access control (Phase 3A)
 
@@ -437,6 +479,12 @@ account-lifecycle endpoints requires an authenticated session cookie.
 | PATCH  | `/engagements/:id/assessment`     | Save the consultant's reviewed Assessment.     |
 | POST   | `/engagements/:id/opportunities`  | Derive and prioritize the Opportunities from the Assessment. |
 | PATCH  | `/engagements/:id/opportunities`  | Save the consultant's reviewed, re-ordered Opportunities. |
+| GET    | `/engagements/:id/opportunities/versions` | The engagement's Opportunity version history. |
+| GET    | `/engagements/:id/opportunities/versions/:versionId` | One preserved Opportunity version. |
+| POST   | `/engagements/:id/recommendations`| Match the prioritized Opportunities against both knowledge bases. |
+| PATCH  | `/engagements/:id/recommendations`| Save the consultant's reviewed, re-grounded Recommendations. |
+| GET    | `/engagements/:id/recommendations/versions` | The engagement's Recommendation version history. |
+| GET    | `/engagements/:id/recommendations/versions/:versionId` | One preserved Recommendation version. |
 | POST   | `/engagements/:id/analyze`        | Run the AI analysis for an engagement.         |
 | GET    | `/engagements/:id/analysis-runs`  | List the engagement's Analysis Runs.           |
 | GET    | `/knowledge`                      | Browse the curated Consulting Knowledge Base (`ADMIN`, `MANAGER`). |
@@ -483,8 +531,12 @@ kind), the Opportunity contract and
 the prioritization stage (an opportunity must cite a finding the Assessment
 actually contains, a qualification short of "ready" must name a blocker, a
 ranking must be a real ordering, and output citing an invented finding is
-refused without mutating state), validating engagement input, and cost
-calculation.
+refused without mutating state), the solution-matching stage's grounding
+invariant (a recommendation must address an Opportunity that exists, cite
+curated knowledge that was actually retrieved, name only curated Technology
+Profiles, and rest on at least one AI Use Case or Solution Pattern — each
+failure named separately and none of them mutating state), validating engagement
+input, and cost calculation.
 
 From Phase 3A they also cover **access control, tested negatively** — the
 denials, not only the permitted paths: unauthenticated access, cross-workspace
@@ -505,12 +557,16 @@ npm test --prefix server
 ```
 
 Replacing the infrastructure at its seams is right for proving the rules, but it
-leaves the seams themselves unproven. Three suites therefore use the real thing
+leaves the seams themselves unproven. Four suites therefore use the real thing
 end to end — a real Better Auth session → the real `AuthenticationProvider` →
 the domain `User` → the `AccessPolicy` → the Prisma repositories → the Express
 routes; the prioritization stage's own storage path (a prioritization survives
 the Json round-trip with its citations and ranks intact, and the new routes are
-workspace-scoped like every other engagement route); and the Consulting
+workspace-scoped like every other engagement route); the solution-matching stage
+(the seeded knowledge bases really do ground a Customer Operations engagement,
+retrieval repeats identically, a recommendation's whole grounding survives the
+round-trip, the database itself refuses two active versions, and a preserved
+version is never rewritten); and the Consulting
 Knowledge Base (an Administrator curates and a Manager cannot, a Client reaches
 nothing, the portal leaks nothing, repeated retrieval is identical, a
 deactivated entry disappears, an invalid relationship is refused, and a restart

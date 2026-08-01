@@ -1,4 +1,5 @@
 import { assessmentFindingsById } from "./assessment.js"
+import { canonicalStageContent } from "./canonical-content.js"
 
 import type {
   Assessment,
@@ -7,9 +8,12 @@ import type {
 import type {
   AssessmentFindingCitation,
   Opportunity,
+  OpportunityId,
   OpportunityPrioritization,
   OpportunityPrioritizationSubmission,
   OpportunityReviewState,
+  ResolvedOpportunity,
+  ResolvedOpportunityPrioritization,
 } from "../../../../shared/opportunity.schema.js"
 
 // Business rules of the Problem Prioritization & Opportunities stage. Pure and
@@ -30,7 +34,7 @@ export const hasAssessmentToPrioritize = (
   )
 
 export type CitationResolution =
-  | { resolved: true; prioritization: OpportunityPrioritization }
+  | { resolved: true; prioritization: ResolvedOpportunityPrioritization }
   | { resolved: false; unknownFindingIds: AssessmentFindingId[] }
 
 // Resolve cited finding ids into the citations a version stores.
@@ -68,7 +72,7 @@ export const resolveCitations = (
     prioritization: {
       ...submission,
       opportunities: submission.opportunities.map(
-        ({ sourceFindingIds, ...content }): Opportunity => ({
+        ({ sourceFindingIds, ...content }): ResolvedOpportunity => ({
           ...content,
           sourceFindings: sourceFindingIds.map((findingId) =>
             citationOf(findingId, findings),
@@ -78,6 +82,48 @@ export const resolveCitations = (
     },
   }
 }
+
+// Give every opportunity an identity, keeping the ones it already has.
+//
+// An opportunity's identity is what a Recommendation cites, so it must not be
+// derived from its own text or from its rank: re-wording a title and re-ordering
+// the prioritization both have to leave every citation pointing at the same
+// opportunity. Neither the model nor the browser mints one — the model writes
+// opportunities, the consultant edits them, and identity is added here, on the
+// server, at the moment the opportunity is first persisted.
+//
+// `mintId` is a parameter rather than a call to a random source so this rule
+// stays pure and deterministically testable (coding-standards.md §6, §9).
+export const identifyOpportunities = (
+  resolved: ResolvedOpportunityPrioritization,
+  mintId: () => string,
+): OpportunityPrioritization => ({
+  ...resolved,
+  opportunities: resolved.opportunities.map((opportunity) => ({
+    ...opportunity,
+    id: opportunity.id ?? mintId(),
+  })),
+})
+
+// Every opportunity the prioritization holds, by identity — the set a
+// Recommendation's citation is checked against, and the source of the
+// title/rank/finding snapshot that citation carries for later reading.
+export const opportunitiesById = (
+  prioritization: OpportunityPrioritization,
+): Map<OpportunityId, Opportunity> =>
+  new Map(
+    prioritization.opportunities.map((opportunity) => [
+      opportunity.id,
+      opportunity,
+    ]),
+  )
+
+// The prioritization's content in a stable, order-independent form. A derived
+// stage records the hash of this to recognize that the Opportunities it was
+// matched against have since moved on (agent-rules.md §15).
+export const canonicalOpportunityContent = (
+  prioritization: OpportunityPrioritization,
+): string => canonicalStageContent(prioritization)
 
 // The prioritization in priority order. Rank is the prioritization; the stored
 // order follows it, so every reader — the consultant's screen, a later stage,

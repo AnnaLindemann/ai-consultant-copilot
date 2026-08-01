@@ -15,6 +15,7 @@ import {
 } from "./surface-scan.ts"
 import { discoveryMessageIds } from "../../shared/discovery-messages.ts"
 import { opportunityMessageIds } from "../../shared/opportunity-messages.ts"
+import { recommendationMessageIds } from "../../shared/recommendation-messages.ts"
 import { workbenchMessageIds } from "../../shared/workbench-messages.ts"
 import { consultingKnowledgeMessageIds } from "../../shared/consulting-knowledge-messages.ts"
 import { technologyKnowledgeMessageIds } from "../../shared/technology-knowledge-messages.ts"
@@ -161,6 +162,17 @@ const labelledIdentifiers: [string, readonly string[]][] = [
     "opportunity.review_state",
     ["ai_draft", "consultant_edited", "accepted"] as const,
   ],
+  // The Recommendation surface's identifiers, listed literally for the same
+  // reason the Opportunity ones are: this suite runs on Node's plain type
+  // stripping, which resolves a `.ts` file but not the `.js` specifier a shared
+  // schema uses to reach another one. A value missing from the schema's own
+  // contract would fail the server's schema tests instead.
+  ["recommendation.confidence", ["low", "medium", "high"] as const],
+  ["recommendation.effort", ["low", "medium", "high"] as const],
+  [
+    "recommendation.review_state",
+    ["ai_draft", "consultant_edited", "accepted"] as const,
+  ],
   ["knowledge.kind", consultingKnowledgeKindSchema.options],
   ["knowledge.stage", consultingKnowledgeStageSchema.options],
 ]
@@ -300,6 +312,35 @@ test("every Opportunity outcome the server reports has a German message", () => 
   for (const messageId of opportunityMessageIds) {
     assert.equal(has(messageId), true, `${messageId} has no German message`)
   }
+})
+
+test("every Recommendation outcome the server reports has a German message", () => {
+  for (const messageId of recommendationMessageIds) {
+    assert.equal(has(messageId), true, `${messageId} has no German message`)
+  }
+})
+
+test("the Recommendation surface is looked up by key and carries no literal", () => {
+  // The solution-matching surface (Phase 6) is held to the same rule as the
+  // Discovery, Opportunity, and access surfaces: every string looked up by key,
+  // no German literal in the component (coding-standards.md §12A).
+  const file = path.join(componentsDir, "RecommendationPanel.tsx")
+  const source = readFileSync(file, "utf8")
+
+  const missing: string[] = []
+  for (const [, key] of source.matchAll(/\bt\(\s*"([^"]+)"/g)) {
+    if (!has(key)) missing.push(`RecommendationPanel.tsx: ${key}`)
+  }
+  assert.deepEqual(missing, [], "keys are looked up but not translated")
+
+  const offenders: string[] = []
+  for (const [lineNumber, line] of source.split("\n").entries()) {
+    const isComment = /^\s*(\/\/|\*|\/\*)/.test(line)
+    if (!isComment && /[äöüßÄÖÜ]/.test(line)) {
+      offenders.push(`RecommendationPanel.tsx:${lineNumber + 1}`)
+    }
+  }
+  assert.deepEqual(offenders, [], "a user-facing literal was written inline")
 })
 
 test("the Opportunity surface is looked up by key and carries no literal", () => {

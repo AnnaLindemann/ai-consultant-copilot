@@ -23,6 +23,13 @@ export const aiReadinessQualificationSchema = z.enum([
   "not_ready",
 ])
 
+// An Opportunity's identity. It is minted by the server when the opportunity is
+// first persisted and never derived from its own text or its rank, so
+// re-wording a title and re-ordering the prioritization both leave everything
+// that cites the opportunity still pointing at it (architecture.md §4.3
+// traceability). Recommendations cite this identifier, never a title or a rank.
+export const opportunityIdSchema = nonEmptyString
+
 // An Opportunity originates from the Assessment (domain-model.md §2), so it
 // names the findings it was carried forward from.
 //
@@ -158,6 +165,15 @@ const CONFIDENCE_MESSAGE = {
 // citation itself.
 const citedFindingIdsSchema = z.array(assessmentFindingIdSchema).min(1)
 
+// The three shapes an opportunity travels in differ only in who owns the
+// identifier, which is deliberately never the model's and never the browser's —
+// exactly as an Assessment finding's does:
+//
+// - `draft`      — what the AI returns. It writes opportunities, not identities.
+// - `submission` — what the consultant saves. Opportunities they kept carry the
+//                  id they already had; ones they added carry none yet.
+// - persisted    — what is stored and read back. Every opportunity has an id.
+
 // What the AI returns: finding ids, and success criteria without figures.
 export const opportunityDraftSchema = opportunityContentSchema
   .extend({
@@ -170,14 +186,17 @@ export const opportunityDraftSchema = opportunityContentSchema
 // filled in from the client's own figures.
 export const opportunitySubmissionSchema = opportunityContentSchema
   .extend({
+    id: opportunityIdSchema.optional(),
     sourceFindingIds: citedFindingIdsSchema,
     successCriteria: z.array(successCriterionSchema).min(1),
   })
   .refine(lowConfidenceStatesItsAssumptions, CONFIDENCE_MESSAGE)
 
-// What is stored and read back: resolved citations carrying their snapshot.
+// What is stored and read back: an identity, and resolved citations carrying
+// their snapshot.
 export const opportunitySchema = opportunityContentSchema
   .extend({
+    id: opportunityIdSchema,
     sourceFindings: z.array(assessmentFindingCitationSchema).min(1),
     successCriteria: z.array(successCriterionSchema).min(1),
   })
@@ -242,6 +261,7 @@ const hasContiguousRanks = (opportunities: { priorityRank: number }[]) => {
 }
 
 export type Opportunity = z.infer<typeof opportunitySchema>
+export type OpportunityId = z.infer<typeof opportunityIdSchema>
 export type OpportunityDraft = z.infer<typeof opportunityDraftSchema>
 export type OpportunitySubmission = z.infer<typeof opportunitySubmissionSchema>
 export type OpportunityLevel = z.infer<typeof opportunityLevelSchema>
@@ -267,6 +287,17 @@ export type OpportunityReviewState = z.infer<typeof opportunityReviewStateSchema
 export type OpportunityVersionStatus = z.infer<
   typeof opportunityVersionStatusSchema
 >
+
+// The shape between the two server steps: citations resolved, identity not yet
+// given. It is a type rather than a schema because nothing crosses a boundary
+// in it — it exists only between `resolveCitations` and `identifyOpportunities`,
+// and what is validated is what enters (draft/submission) and what is stored
+// (persisted).
+export type ResolvedOpportunity = Omit<Opportunity, "id"> & { id?: string }
+export type ResolvedOpportunityPrioritization = Omit<
+  OpportunityPrioritization,
+  "opportunities"
+> & { opportunities: ResolvedOpportunity[] }
 
 // What a reader is told *about* one version, as opposed to what the version
 // says: which number it is, whether it is the one being worked on, what

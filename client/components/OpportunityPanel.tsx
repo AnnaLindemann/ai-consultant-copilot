@@ -50,12 +50,12 @@ import type {
 } from "../../shared/assessment.schema"
 import type {
   AssessmentFindingCitation,
-  Opportunity,
   OpportunityLevel,
-  OpportunityPrioritization,
   OpportunityPrioritizationSubmission,
   OpportunityReviewState,
   OpportunityVersionState,
+  ResolvedOpportunity,
+  ResolvedOpportunityPrioritization,
   SuccessCriterion,
   SuccessCriterionValue,
 } from "../../shared/opportunity.schema"
@@ -85,7 +85,10 @@ const levelLabel = (level: OpportunityLevel) => t(`opportunity.level.${level}`)
 const dimensionLabel = (dimension: AssessmentDimensionKey) =>
   t(`assessment.dimension.${dimension}`)
 
-const emptyOpportunity = (rank: number): Opportunity => ({
+// An opportunity the consultant adds. It carries no identity: the server mints
+// one when it is first stored, so nothing the browser sent decides what a
+// Recommendation will later cite.
+const emptyOpportunity = (rank: number): ResolvedOpportunity => ({
   title: "",
   problem: "",
   improvement: "",
@@ -128,7 +131,7 @@ const emptySuccessCriterion = (): SuccessCriterion => ({
 })
 
 const toSubmission = (
-  prioritization: OpportunityPrioritization,
+  prioritization: ResolvedOpportunityPrioritization,
 ): OpportunityPrioritizationSubmission => ({
   ...prioritization,
   opportunities: prioritization.opportunities.map(
@@ -142,7 +145,7 @@ const toSubmission = (
 const DRAFT_SUCCESS_CRITERION_PLACEHOLDER = "Zu definieren"
 
 const hasPlaceholderSuccessCriteria = (
-  prioritization: OpportunityPrioritization,
+  prioritization: ResolvedOpportunityPrioritization,
 ): boolean =>
   prioritization.opportunities.some((opportunity) =>
     opportunity.successCriteria.some((criterion) =>
@@ -199,7 +202,7 @@ const successCriterionIsComplete = (criterion: SuccessCriterion): boolean =>
   !successCriterionValueHasIssue(criterion.target) &&
   !successCriterionValueHasIssue(criterion.timeframe)
 
-const opportunityHasContent = (opportunity: Opportunity): boolean =>
+const opportunityHasContent = (opportunity: ResolvedOpportunity): boolean =>
   hasAnyText([
     opportunity.title,
     opportunity.problem,
@@ -214,7 +217,7 @@ const opportunityHasContent = (opportunity: Opportunity): boolean =>
   opportunity.successCriteria.some(successCriterionHasContent)
 
 const opportunityHasActionRequiredIssue = (
-  opportunity: Opportunity,
+  opportunity: ResolvedOpportunity,
 ): boolean =>
   !hasMeaningfulText(opportunity.title) ||
   !hasMeaningfulText(opportunity.problem) ||
@@ -231,7 +234,7 @@ const opportunityHasActionRequiredIssue = (
   )
 
 const getOpportunitySectionStatus = (
-  opportunity: Opportunity,
+  opportunity: ResolvedOpportunity,
 ): WorkflowSectionStatus => {
   if (!opportunityHasContent(opportunity)) {
     return "not_started"
@@ -260,9 +263,12 @@ export default function OpportunityPanel({
 }: OpportunityPanelProps) {
   const router = useRouter()
   const [versionState, setVersionState] = useState(initialVersionState)
-  const [prioritization, setPrioritization] = useState(
-    initialVersionState?.activeVersion?.prioritization ?? null,
-  )
+  // The editing state may hold an opportunity the consultant has just added,
+  // which has no identity until the server mints one.
+  const [prioritization, setPrioritization] =
+    useState<ResolvedOpportunityPrioritization | null>(
+      initialVersionState?.activeVersion?.prioritization ?? null,
+    )
   const [reviewState, setReviewState] = useState(
     initialVersionState?.activeVersion?.reviewState ?? null,
   )
@@ -292,13 +298,18 @@ export default function OpportunityPanel({
     : []
 
   function update(
-    change: (current: OpportunityPrioritization) => OpportunityPrioritization,
+    change: (
+      current: ResolvedOpportunityPrioritization,
+    ) => ResolvedOpportunityPrioritization,
   ) {
     setPrioritization((current) => (current ? change(current) : current))
     setMessage("")
   }
 
-  function updateOpportunity(index: number, patch: Partial<Opportunity>) {
+  function updateOpportunity(
+    index: number,
+    patch: Partial<ResolvedOpportunity>,
+  ) {
     update((current) => ({
       ...current,
       opportunities: current.opportunities.map((opportunity, position) =>
@@ -577,7 +588,7 @@ export default function OpportunityPanel({
   }
 
   function buildOpportunitySections(
-    current: OpportunityPrioritization,
+    current: ResolvedOpportunityPrioritization,
   ): WorkflowSectionItem[] {
     return [
       {
@@ -759,7 +770,7 @@ export default function OpportunityPanel({
                         aiReadiness: {
                           ...opportunity.aiReadiness,
                           qualification: event.target
-                            .value as Opportunity["aiReadiness"]["qualification"],
+                            .value as ResolvedOpportunity["aiReadiness"]["qualification"],
                         },
                       })
                     }
@@ -1313,7 +1324,9 @@ function SuccessCriterionValueField({
 
 // The rank is the prioritization, so it follows the order on screen rather than
 // being maintained separately.
-function renumber(opportunities: Opportunity[]): Opportunity[] {
+function renumber(
+  opportunities: ResolvedOpportunity[],
+): ResolvedOpportunity[] {
   return opportunities.map((opportunity, index) => ({
     ...opportunity,
     priorityRank: index + 1,

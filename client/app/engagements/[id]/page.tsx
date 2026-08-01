@@ -4,6 +4,7 @@ import EngagementAnalysisPanel from "../../../components/EngagementAnalysisPanel
 import EngagementStageControl from "../../../components/EngagementStageControl"
 import AssessmentPanel from "../../../components/AssessmentPanel"
 import OpportunityPanel from "../../../components/OpportunityPanel"
+import RecommendationPanel from "../../../components/RecommendationPanel"
 import ManagerShell from "../../../components/ManagerShell"
 import {
   stageEyebrowStyle,
@@ -30,6 +31,7 @@ import type {
   AssessmentReviewState,
 } from "../../../../shared/assessment.schema"
 import type { OpportunityVersionState } from "../../../../shared/opportunity.schema"
+import type { RecommendationStageState } from "../../../../shared/recommendation.schema"
 
 type EngagementDetails = {
   id: string
@@ -47,6 +49,7 @@ type EngagementDetails = {
   assessment: Assessment | null
   assessmentReviewState: AssessmentReviewState | null
   opportunities: OpportunityVersionState
+  recommendations: RecommendationStageState
   createdAt: string
   updatedAt: string
   organization: {
@@ -233,6 +236,12 @@ export default async function EngagementDetailsPage({
           engagementId={engagement.id}
           assessment={engagement.assessment}
           initialVersionState={engagement.opportunities}
+        />
+        <RecommendationPanel
+          key={`${engagement.recommendations.activeVersion?.id ?? "none"}:${engagement.recommendations.activeVersion?.revision ?? "0"}:${engagement.recommendations.currentOpportunityVersionId ?? "none"}:${engagement.recommendations.stale ? "1" : "0"}`}
+          engagementId={engagement.id}
+          initialStageState={engagement.recommendations}
+          opportunities={engagement.opportunities}
         />
         <EngagementAnalysisPanel
           engagementId={engagement.id}

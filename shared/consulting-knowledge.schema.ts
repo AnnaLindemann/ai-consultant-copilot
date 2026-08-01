@@ -46,10 +46,15 @@ export const consultingKnowledgeStageSchema = z.enum([
   "report",
 ])
 
-// The stages Phase 5 feeds: discovery questions shape Discovery, frameworks and
-// AI-readiness criteria shape Assessment (roadmap Phase 5 scope). Prioritization
-// onwards retrieves from a later phase, not this one.
-export const knowledgeRetrievalStageSchema = z.enum(["discovery", "assessment"])
+// The stages that retrieve today: discovery questions shape Discovery,
+// frameworks and AI-readiness criteria shape Assessment (roadmap Phase 5), and
+// AI Use Cases and Solution Patterns ground Recommendations (roadmap Phase 6).
+// Prioritization, roadmap, and report retrieve from a later phase, not these.
+export const knowledgeRetrievalStageSchema = z.enum([
+  "discovery",
+  "assessment",
+  "solution_matching",
+])
 
 export const consultingKnowledgeDetailsSchema = z.object({
   objective: z.string().trim().nullable(),

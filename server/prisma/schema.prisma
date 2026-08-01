@@ -179,6 +179,23 @@ enum OpportunityVersionStatus {
   superseded
 }
 
+// Where the grounded Recommendations stand in the human-in-the-loop cycle
+// (roadmap Phase 6). It mirrors the two stages before it deliberately: each
+// stage carries its own review marker, so neither stage's stored contract moves
+// when another's does.
+enum RecommendationReviewState {
+  ai_draft
+  consultant_edited
+  accepted
+}
+
+// Whether a Recommendation version is the one being worked on or the preserved
+// record of what was recommended earlier (roadmap Phase 6).
+enum RecommendationVersionStatus {
+  active
+  superseded
+}
+
 // Where an engagement currently stands in the consulting methodology
 // (domain-model.md §3). Phase 1 only tracks the stage marker; later phases
 // add the content each stage produces. `discovery` is the first stage, so a
@@ -330,6 +347,10 @@ model Engagement {
   // immutable version in its own table rather than a column here: regeneration
   // must add a version, never overwrite one (architecture.md §4.3).
   opportunityVersions OpportunityVersion[]
+
+  // Grounded Recommendations (roadmap Phase 6), versioned for the same reason
+  // the Opportunities are.
+  recommendationVersions RecommendationVersion[]
 
   invitations       ClientInvitation[]
   discoveryAccesses DiscoveryAccess[]
@@ -676,9 +697,18 @@ model AnalysisRun {
   // existed, empty for a stage that retrieves nothing.
   knowledgeEntryCodes Json?
 
+  // Which curated Technology Knowledge Base profiles grounded this run, by their
+  // stable codes, in the order the retrieval selected them (roadmap Phase 6).
+  // Kept in its own column rather than folded into `knowledgeEntryCodes`: the
+  // two knowledge bases are independent subsystems and are named specifically,
+  // never as an undifferentiated "knowledge base" (coding-standards.md §12).
+  // Null on runs from a stage that does not retrieve technology knowledge.
+  technologyProfileCodes Json?
+
   createdAt DateTime @default(now())
 
-  opportunityVersions OpportunityVersion[]
+  opportunityVersions    OpportunityVersion[]
+  recommendationVersions RecommendationVersion[]
 
   @@index([engagementId])
   @@index([workspaceId])
@@ -739,6 +769,8 @@ model OpportunityVersion {
   // same version cannot silently overwrite each other (architecture.md §13).
   revision Int @default(0)
 
+  recommendationVersions RecommendationVersion[]
+
   // Version numbers are unique per engagement, which is also what makes two
   // regenerations racing each other fail loudly instead of both "winning". The
   // migration adds a partial unique index enforcing at most one *active*
@@ -750,6 +782,82 @@ model OpportunityVersion {
   @@index([createdAt])
 }
 
+// One immutable, versioned snapshot of the engagement's grounded
+// Recommendations (roadmap Phase 6).
+//
+// It follows the Opportunity version's shape deliberately rather than
+// abstracting over it: the two stages share a lifecycle — generate, review,
+// edit, accept, regenerate — and a stage that stored its output differently
+// would have to be reasoned about differently. Regeneration supersedes rather
+// than overwrites, so what the consultant reviewed at each iteration stays
+// recoverable; edits are autosaved *within* the active version, so editing does
+// not multiply versions (architecture.md §4.3).
+//
+// The version records what produced it and what it was derived from: the
+// Analysis Run behind the generation (architecture.md §8), the Opportunity
+// version it was matched against, and a fingerprint of that version's content,
+// which is what lets the active version be recognized as stale after the
+// prioritization changes.
+//
+// The grounding itself — which Consulting Knowledge Base entries justify each
+// recommendation, and which Technology Profiles are behind the technologies it
+// names — lives inside `content`, as *codes plus copied reasoning*. There is
+// deliberately no foreign key into either knowledge base: the reference
+// direction is engagement → knowledge, and the record must stay faithful to the
+// knowledge as it stood even if an entry is later re-worded or retired
+// (architecture.md §9.4).
+model RecommendationVersion {
+  id String @id @default(cuid())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  versionNumber Int
+  status        RecommendationVersionStatus @default(active)
+
+  // The validated recommendation set. Still-stabilizing stage output is stored
+  // as Json paired with a Zod schema in `shared/` (architecture.md §6).
+  content     Json
+  reviewState RecommendationReviewState @default(ai_draft)
+
+  // The prioritized Opportunities this version was matched against.
+  sourceOpportunityVersionId     String
+  sourceOpportunityVersion       OpportunityVersion @relation(fields: [sourceOpportunityVersionId], references: [id], onDelete: Cascade)
+  sourceOpportunityVersionNumber Int
+  sourceOpportunityFingerprint   String
+
+  // The Analysis Run behind the generation. Nullable only because recording a
+  // run is best-effort and must never fail the consultant's stage
+  // (coding-standards.md §7); the generation path always attempts the link.
+  analysisRunId String?
+  analysisRun   AnalysisRun? @relation(fields: [analysisRunId], references: [id], onDelete: SetNull)
+
+  createdAt       DateTime @default(now())
+  createdByUserId String?
+  createdBy       User?    @relation("RecommendationVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  lastModifiedAt       DateTime @default(now())
+  lastModifiedByUserId String?
+  lastModifiedBy       User?    @relation("RecommendationVersionLastModifiedBy", fields: [lastModifiedByUserId], references: [id], onDelete: SetNull)
+
+  // The optimistic-concurrency token. An autosave carries the revision it read
+  // and is refused if the version has moved on since (architecture.md §13).
+  revision Int @default(0)
+
+  // As with the Opportunity versions, the migration adds a partial unique index
+  // enforcing at most one *active* version per engagement — a guarantee Prisma's
+  // schema language cannot yet express, so it lives in the migration alongside
+  // this note.
+  @@unique([engagementId, versionNumber])
+  @@index([engagementId, status])
+  @@index([workspaceId])
+  @@index([sourceOpportunityVersionId])
+  @@index([createdAt])
+}
+
 model Workspace {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
@@ -757,15 +865,16 @@ model Workspace {
 
   name String
 
-  users               User[]
-  organizations       Organization[]
-  engagements         Engagement[]
-  analysisRuns        AnalysisRun[]
-  opportunityVersions OpportunityVersion[]
-  invitations         ClientInvitation[]
-  discoveryAccesses   DiscoveryAccess[]
-  notifications       Notification[]
-  auditTrails         AuditTrail[]
+  users                  User[]
+  organizations          Organization[]
+  engagements            Engagement[]
+  analysisRuns           AnalysisRun[]
+  opportunityVersions    OpportunityVersion[]
+  recommendationVersions RecommendationVersion[]
+  invitations            ClientInvitation[]
+  discoveryAccesses      DiscoveryAccess[]
+  notifications          Notification[]
+  auditTrails            AuditTrail[]
 
   @@index([name])
   @@index([createdAt])
@@ -794,16 +903,18 @@ model User {
   authUserId String?   @unique
   authUser   AuthUser? @relation(fields: [authUserId], references: [id], onDelete: SetNull)
 
-  issuedInvitations           ClientInvitation[]         @relation("InvitationIssuer")
-  acceptedInvitations         ClientInvitation[]         @relation("InvitationAcceptedBy")
-  discoveryAccessGranted      DiscoveryAccess[]          @relation("DiscoveryAccessGrantor")
-  discoveryAccesses           DiscoveryAccess[]          @relation("DiscoveryAccessRecipient")
-  ownedEngagements            Engagement[]               @relation("EngagementOwnedBy")
-  createdOpportunityVersions  OpportunityVersion[]       @relation("OpportunityVersionCreatedBy")
-  modifiedOpportunityVersions OpportunityVersion[]       @relation("OpportunityVersionLastModifiedBy")
-  notifications               Notification[]
-  auditTrails                 AuditTrail[]
-  curatedKnowledgeEntries     ConsultingKnowledgeEntry[] @relation("ConsultingKnowledgeCuratedBy")
+  issuedInvitations              ClientInvitation[]         @relation("InvitationIssuer")
+  acceptedInvitations            ClientInvitation[]         @relation("InvitationAcceptedBy")
+  discoveryAccessGranted         DiscoveryAccess[]          @relation("DiscoveryAccessGrantor")
+  discoveryAccesses              DiscoveryAccess[]          @relation("DiscoveryAccessRecipient")
+  ownedEngagements               Engagement[]               @relation("EngagementOwnedBy")
+  createdOpportunityVersions     OpportunityVersion[]       @relation("OpportunityVersionCreatedBy")
+  modifiedOpportunityVersions    OpportunityVersion[]       @relation("OpportunityVersionLastModifiedBy")
+  createdRecommendationVersions  RecommendationVersion[]    @relation("RecommendationVersionCreatedBy")
+  modifiedRecommendationVersions RecommendationVersion[]    @relation("RecommendationVersionLastModifiedBy")
+  notifications                  Notification[]
+  auditTrails                    AuditTrail[]
+  curatedKnowledgeEntries        ConsultingKnowledgeEntry[] @relation("ConsultingKnowledgeCuratedBy")
 
   // The Technology Knowledge Base's curation trail (roadmap Phase 5A). A user
   // is referenced by what they curated, proposed, decided, and approved; every

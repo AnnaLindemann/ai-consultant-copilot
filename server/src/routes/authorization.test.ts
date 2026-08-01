@@ -311,6 +311,26 @@ mock.module("../services/opportunities.service.js", {
   },
 })
 
+mock.module("../services/recommendations.service.js", {
+  namedExports: {
+    generateRecommendations: async () => ({
+      success: true,
+      version: null,
+      evaluation: {},
+    }),
+    saveRecommendations: async () => ({ success: true, version: null }),
+    getRecommendationStageState: async () => ({
+      activeVersion: null,
+      stale: false,
+      currentOpportunityVersionId: null,
+      currentOpportunityVersionNumber: null,
+      currentOpportunityFingerprint: null,
+      groundingOptions: { knowledge: [], technology: [] },
+    }),
+    listRecommendationVersions: async () => [],
+  },
+})
+
 mock.module("../services/access.service.js", {
   namedExports: {
     listWorkspaceUsers: async () => [],
@@ -427,6 +447,26 @@ const engagementRoutes = (id: string): [string, Call][] => [
       },
     },
   ],
+  [`/engagements/${id}/opportunities/versions`, {}],
+  [`/engagements/${id}/opportunities/versions/version_1`, {}],
+  [`/engagements/${id}/recommendations`, { method: "POST", body: {} }],
+  [
+    `/engagements/${id}/recommendations`,
+    {
+      method: "PATCH",
+      body: {
+        versionId: "version_1",
+        expectedRevision: 0,
+        recommendationSet: {
+          summary: "Nothing recommended yet.",
+          recommendations: [],
+          gaps: [],
+        },
+      },
+    },
+  ],
+  [`/engagements/${id}/recommendations/versions`, {}],
+  [`/engagements/${id}/recommendations/versions/version_1`, {}],
   [
     `/engagements/${id}/discovery`,
     { method: "PATCH", body: { profile: {}, contributor: "consultant" } },

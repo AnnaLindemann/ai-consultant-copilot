@@ -39,10 +39,11 @@ import {
 
 // --- Stage → required kinds ------------------------------------------------
 //
-// Phase 5 feeds the two stages that already exist: discovery questions and the
-// domain's process/problem vocabulary shape Discovery; frameworks and
-// AI-readiness criteria shape the Assessment (roadmap Phase 5 scope). Nothing
-// is retrieved for a stage that does not consume knowledge yet.
+// Discovery questions and the domain's process/problem vocabulary shape
+// Discovery; frameworks and AI-readiness criteria shape the Assessment (roadmap
+// Phase 5 scope); AI Use Cases and Solution Patterns ground Recommendations
+// (roadmap Phase 6 scope). Nothing is retrieved for a stage that does not
+// consume knowledge yet.
 export const REQUIRED_KINDS: Record<
   KnowledgeRetrievalStage,
   readonly ConsultingKnowledgeKind[]
@@ -62,6 +63,12 @@ export const REQUIRED_KINDS: Record<
     "risk_model",
     "best_practice",
   ],
+  // Exactly the two kinds Phase 6 names — "match Opportunities against the
+  // Consulting Knowledge Base (**AI Use Cases**, **Solution Patterns**)". The
+  // Implementation Patterns that inform sequencing are Phase 7's, and the
+  // follow-up templates are Phase 8's; retrieving them here would be building
+  // ahead of the phase in front of us (architecture.md §1.6).
+  solution_matching: ["ai_use_case", "solution_pattern"],
 }
 
 // How much each *typed* relationship to an anchor is worth. The weights are

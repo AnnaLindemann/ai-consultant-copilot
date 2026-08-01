@@ -207,10 +207,14 @@ for (const [segment, stage] of Object.entries(RETRIEVAL_STAGE)) {
     if (!authorized.permitted) return denyRequest(res, authorized)
 
     try {
+      // Discovery is retrieved from the engagement's own situation alone; the
+      // Assessment narrows retrieval only for the stages that come after it.
       const knowledgePackage = await retrieveKnowledgePackage(
         authorized.resource,
         stage,
-        stage === "assessment" ? toAssessment(authorized.resource) : null,
+        stage === "discovery"
+          ? {}
+          : { assessment: toAssessment(authorized.resource) },
       )
 
       return res.json({

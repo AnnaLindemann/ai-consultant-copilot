@@ -23,6 +23,7 @@ import type {
 import type { ActingUser } from "../domain/access/access.js"
 import type { EngagementWithOrganization } from "../repositories/engagement.repository.js"
 import type { Assessment } from "../../../shared/assessment.schema.js"
+import type { OpportunityPrioritization } from "../../../shared/opportunity.schema.js"
 
 // The **only** boundary through which an engagement stage reaches curated
 // knowledge (roadmap Phase 5; architecture.md §9.4). Two things live here and
@@ -41,6 +42,17 @@ const DOMAIN_CODE = "customer-operations"
 
 // --- The retrieval boundary ------------------------------------------------
 
+// The persisted engagement state a stage may narrow its retrieval with, beyond
+// the engagement row itself. Each is optional because each belongs to a stage
+// that may not have run yet, and an engagement with neither is a real, working
+// state that still gets the curated per-stage baseline.
+export type KnowledgeRetrievalSources = {
+  assessment?: Assessment | null
+  // The prioritized Opportunities, for solution matching: what the consultant
+  // decided to work on is what the recommendations should be grounded against.
+  opportunities?: OpportunityPrioritization | null
+}
+
 // Retrieve the curated knowledge package for one engagement at one consulting
 // stage. Deterministic by construction: the same engagement against an
 // unchanged knowledge base always yields the same entries in the same order,
@@ -49,14 +61,14 @@ const DOMAIN_CODE = "customer-operations"
 export const retrieveKnowledgePackage = async (
   engagement: EngagementWithOrganization,
   stage: KnowledgeRetrievalStage,
-  assessment: Assessment | null = null,
+  sources: KnowledgeRetrievalSources = {},
 ): Promise<KnowledgePackage> => {
   const entries = await listConsultingKnowledgeEntries({ domainCode: DOMAIN_CODE })
 
   return buildKnowledgePackage(
     entries,
     stage,
-    engagementKnowledgeContext(engagement, assessment),
+    engagementKnowledgeContext(engagement, sources),
   )
 }
 
@@ -67,7 +79,7 @@ export const retrieveKnowledgePackage = async (
 // works on codes.
 const engagementKnowledgeContext = (
   engagement: EngagementWithOrganization,
-  assessment: Assessment | null,
+  sources: KnowledgeRetrievalSources,
 ): EngagementKnowledgeContext => ({
   domainCode: DOMAIN_CODE,
   situationText: [
@@ -87,12 +99,31 @@ const engagementKnowledgeContext = (
     // What the Assessment already established narrows retrieval the same way
     // discovery does — through the same curated vocabulary, never by matching
     // finding text against entry text.
-    ...assessmentText(assessment),
+    ...assessmentText(sources.assessment ?? null),
+    // And what the consultant prioritized narrows it further, so solution
+    // matching is grounded against the problems the engagement actually chose
+    // to pursue rather than against everything discovery ever mentioned.
+    ...opportunityText(sources.opportunities ?? null),
   ].filter(
     (value): value is string =>
       typeof value === "string" && value.trim().length > 0,
   ),
 })
+
+const opportunityText = (
+  prioritization: OpportunityPrioritization | null,
+): string[] => {
+  if (prioritization === null) return []
+
+  return [
+    prioritization.summary,
+    ...prioritization.opportunities.flatMap((opportunity) => [
+      opportunity.title,
+      opportunity.problem,
+      opportunity.improvement,
+    ]),
+  ]
+}
 
 const assessmentText = (assessment: Assessment | null): string[] => {
   if (assessment === null) return []
@@ -115,6 +146,26 @@ const textList = (value: unknown): string[] =>
   Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : []
+
+// Every curated entry a *consultant* may ground a recommendation in, by code.
+//
+// It is deliberately wider than what a retrieval returns. The model may cite
+// only what was retrieved for it — it "must not invent entries in either
+// knowledge base, cite knowledge that was not retrieved…" (agent-rules.md §4).
+// The consultant is the expert reviewing that draft, and may ground a proposal
+// in a curated entry the deterministic retrieval did not surface; what they may
+// not do is cite something that is not curated at all. Inactive entries are
+// excluded: a retired entry stays citable by whatever already referenced it, but
+// is never chosen anew.
+export const listCitableKnowledge = async (): Promise<
+  Map<string, { kind: ConsultingKnowledgeKind; title: string }>
+> => {
+  const entries = await listConsultingKnowledgeEntries({ domainCode: DOMAIN_CODE })
+
+  return new Map(
+    entries.map((entry) => [entry.code, { kind: entry.kind, title: entry.title }]),
+  )
+}
 
 // --- The curation boundary -------------------------------------------------
 

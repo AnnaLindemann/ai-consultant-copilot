@@ -1,5 +1,6 @@
 import type { DiscoveryMessageId } from "../../shared/discovery-messages"
 import type { OpportunityMessageId } from "../../shared/opportunity-messages"
+import type { RecommendationMessageId } from "../../shared/recommendation-messages"
 import type { WorkbenchMessageId } from "../../shared/workbench-messages"
 
 // The German string catalogue — the MVP's single active locale
@@ -71,6 +72,44 @@ const opportunityServerMessages: Record<OpportunityMessageId, string> = {
     "Unerwarteter Serverfehler. Die Opportunities wurden nicht verändert. Bitte erneut versuchen.",
   "opportunity.message.versions_loaded": "Opportunity-Versionen geladen",
   "opportunity.message.version_loaded": "Opportunity-Version geladen",
+}
+
+// The outcomes the Recommendation endpoints report (roadmap Phase 6). Typed
+// against the shared contract for the same reason as above: the compiler refuses
+// a catalogue that cannot render something the server can send.
+const recommendationServerMessages: Record<RecommendationMessageId, string> = {
+  "recommendation.message.matched":
+    "Entwurf der belegten Empfehlungen erstellt. Bitte prüfen, anpassen und speichern.",
+  "recommendation.message.saved": "Empfehlungen gespeichert",
+  "recommendation.message.accepted": "Empfehlungen angenommen",
+  "recommendation.message.versions_loaded": "Empfehlungsfassungen geladen",
+  "recommendation.message.version_loaded": "Empfehlungsfassung geladen",
+  "recommendation.error.invalid_input":
+    "Die Empfehlungen sind unvollständig oder ungültig. Jede Empfehlung braucht eine zugeordnete Opportunity, mindestens einen Wissensbeleg, eine Begründung und einen erwarteten Nutzen.",
+  "recommendation.error.opportunities_not_ready":
+    "Es sind noch keine Opportunities priorisiert. Priorisieren Sie zuerst, bevor Sie Empfehlungen erstellen.",
+  "recommendation.error.knowledge_unavailable":
+    "Für dieses Engagement liefert die Consulting Knowledge Base derzeit keinen passenden Eintrag. Ohne kuratierten Beleg wird kein Entwurf erstellt.",
+  "recommendation.error.consultant_edits_protected":
+    "Diese Empfehlungen enthalten Ihre eigenen Änderungen. Ein erneuter Lauf würde sie ersetzen und braucht deshalb Ihre ausdrückliche Bestätigung.",
+  "recommendation.error.ai_step_failed":
+    "Der KI-Anbieter war nicht erreichbar. Es wurde nichts verändert – bitte erneut versuchen.",
+  "recommendation.error.ai_output_invalid":
+    "Die KI-Antwort war unbrauchbar. Es wurde kein Entwurf erstellt und nichts verändert.",
+  "recommendation.error.ai_output_ungrounded":
+    "Die Empfehlungen berufen sich auf Opportunities oder Wissenseinträge, die es nicht gibt. Der Entwurf wurde verworfen und nichts verändert.",
+  "recommendation.error.stale_update":
+    "Diese Fassung ist veraltet. Laden Sie die aktuelle Version erneut, bevor Sie weiter speichern.",
+  "recommendation.error.historical_version_readonly":
+    "Diese frühere Fassung ist nur lesbar. Öffnen Sie die aktive Fassung, um weiterzubearbeiten.",
+  "recommendation.error.version_not_found":
+    "Diese Empfehlungsfassung wurde nicht gefunden.",
+  "recommendation.error.version_conflict":
+    "Ein anderer Lauf wurde gerade gespeichert. Laden Sie die aktuelle Fassung neu und versuchen Sie es erneut.",
+  "recommendation.error.persistence_failed":
+    "Die Empfehlungsfassung konnte nicht gespeichert werden. Bitte erneut versuchen.",
+  "recommendation.error.internal":
+    "Unerwarteter Serverfehler. Die Empfehlungen wurden nicht verändert. Bitte erneut versuchen.",
 }
 
 // The outcomes the Organization, Engagement, Assessment and Analysis endpoints
@@ -154,6 +193,7 @@ const uiMessages = {
   "workflow.nav.discovery_title": "Discovery-Abschnitte",
   "workflow.nav.assessment_title": "Assessment-Abschnitte",
   "workflow.nav.opportunities_title": "Opportunity-Abschnitte",
+  "workflow.nav.recommendations_title": "Empfehlungsabschnitte",
   "workflow.nav.knowledge_title": "Wissensabschnitte",
   "workflow.status.not_started": "Noch nicht begonnen",
   "workflow.status.in_progress": "Teilweise ausgefüllt",
@@ -1095,6 +1135,112 @@ const uiMessages = {
     "Was müsste bekannt sein, um die Reihenfolge sicher zu beurteilen?",
   "opportunity.gaps.add": "Offene Frage hinzufügen",
 
+  // --- Solution Matching & Grounded Recommendations (roadmap Phase 6) ------
+
+  "recommendation.confidence.low": "gering",
+  "recommendation.confidence.medium": "mittel",
+  "recommendation.confidence.high": "hoch",
+  "recommendation.effort.low": "gering",
+  "recommendation.effort.medium": "mittel",
+  "recommendation.effort.high": "hoch",
+
+  "recommendation.review_state.ai_draft": "KI-Entwurf – noch nicht geprüft",
+  "recommendation.review_state.consultant_edited": "Von Ihnen bearbeitet",
+  "recommendation.review_state.accepted": "Von Ihnen angenommen",
+
+  "recommendation.eyebrow": "Lösungszuordnung",
+  "recommendation.title": "Empfehlungen",
+  "recommendation.intro":
+    "Zu den priorisierten Opportunities passende Lösungsvorschläge, belegt durch die Consulting Knowledge Base und – wo Technologien oder Modelle genannt werden – durch die Technology Knowledge Base. Der Entwurf gehört Ihnen: bearbeiten, neu belegen, verwerfen oder annehmen.",
+  "recommendation.empty":
+    "Noch keine Empfehlungen. Erstellen Sie einen Entwurf aus den priorisierten Opportunities.",
+  "recommendation.no_opportunities":
+    "Für dieses Engagement sind noch keine Opportunities priorisiert. Die Lösungszuordnung setzt darauf auf.",
+  "recommendation.none_found":
+    "Diese Fassung enthält keine Empfehlung. Fügen Sie eine hinzu oder erstellen Sie den Entwurf erneut.",
+
+  "recommendation.action.generate": "Empfehlungen erstellen",
+  "recommendation.action.regenerate": "Aus Opportunities neu erstellen",
+  "recommendation.action.generating": "Wird erstellt …",
+  "recommendation.action.save": "Empfehlungen speichern",
+  "recommendation.action.saving": "Wird gespeichert …",
+  "recommendation.action.accept": "Empfehlungen annehmen",
+  "recommendation.action.add": "Empfehlung hinzufügen",
+  "recommendation.action.replace_edits":
+    "Meine Änderungen ersetzen und neu erstellen",
+  "recommendation.warning.replace_edits":
+    "Ein neuer Lauf ersetzt die von Ihnen bearbeiteten Empfehlungen. Die gespeicherte Fassung lässt sich danach nicht wiederherstellen.",
+  "recommendation.warning.stale":
+    "Die Priorisierung hat sich seit diesen Empfehlungen geändert. Ein neuer Lauf wird empfohlen.",
+  "recommendation.warning.ungrounded_opportunities":
+    "Nicht vorhandene Opportunities zitiert: {items}",
+  "recommendation.warning.ungrounded_knowledge":
+    "Nicht vorhandene Einträge der Consulting Knowledge Base zitiert: {items}",
+  "recommendation.warning.ungrounded_technology":
+    "Nicht vorhandene Technologieprofile genannt: {items}",
+  "recommendation.warning.ungrounded_approach":
+    "Ohne belegenden AI Use Case oder Solution Pattern: {items}",
+  "recommendation.error.incomplete":
+    "Mindestens eine Empfehlung ist unvollständig. Titel, Ansatz, Begründung, erwarteter Nutzen mit mindestens einem Werttreiber, eine zugeordnete Opportunity und mindestens ein Wissensbeleg sind erforderlich.",
+
+  "recommendation.field.summary": "Gesamtbild der Lösungszuordnung",
+  "recommendation.field.title": "Empfehlung",
+  "recommendation.field.approach": "Lösungsansatz",
+  "recommendation.field.rationale": "Warum der Ansatz passt",
+  "recommendation.field.confidence": "Zuversicht",
+  "recommendation.field.effort_level": "Aufwand",
+  "recommendation.field.effort_rationale": "Warum dieser Aufwand",
+  "recommendation.confidence_badge": "Zuversicht: {level}",
+  "recommendation.field.assumptions": "Annahmen",
+  "recommendation.field.opportunity": "Adressierte Opportunity",
+  "recommendation.field.expected_value": "Erwarteter Nutzen",
+  "recommendation.field.expected_value_summary": "Nutzen in Worten",
+  "recommendation.field.expected_value_drivers": "Werttreiber",
+  "recommendation.hint.pipe": "Mehrere Einträge mit | trennen",
+  "recommendation.hint.no_figures":
+    "Ohne Zahlen: Ausgangs- und Zielwerte gehören zu den Erfolgskriterien der Opportunity und stammen von der Kundenseite.",
+  "recommendation.hint.effort":
+    "Qualitativ bleiben: keine Laufzeiten, Budgets, Phasen oder detaillierten Schätzungen.",
+  "recommendation.hint.requirements":
+    "Jede Empfehlung braucht eine zugeordnete Opportunity, einen qualitativen Aufwand mit Begründung und mindestens einen Beleg aus der Consulting Knowledge Base – darunter mindestens einen AI Use Case oder ein Solution Pattern. Technologien und Modelle dürfen nur aus der Technology Knowledge Base genannt werden.",
+
+  "recommendation.opportunity.select": "Opportunity zuordnen",
+  "recommendation.opportunity.none": "Noch keine Opportunity zugeordnet.",
+  "recommendation.opportunity.unavailable":
+    "Es sind keine Opportunities priorisiert, die zugeordnet werden könnten.",
+  "recommendation.opportunity.rank": "Rang {rank}",
+
+  "recommendation.trace.title": "Belege aus Assessment und Discovery",
+  "recommendation.trace.empty":
+    "Diese Opportunity nennt keine belegenden Discovery-Fakten.",
+
+  "recommendation.knowledge.title": "Belege aus der Consulting Knowledge Base",
+  "recommendation.knowledge.add": "Wissenseintrag belegen",
+  "recommendation.knowledge.none":
+    "Noch kein Eintrag belegt. Jede Empfehlung braucht mindestens einen.",
+  "recommendation.knowledge.unavailable":
+    "Für dieses Engagement wurde kein Wissenseintrag abgerufen.",
+  "recommendation.knowledge.rationale": "Was der Eintrag begründet",
+  "recommendation.knowledge.why_retrieved": "Warum abgerufen: {reasons}",
+
+  "recommendation.technology.title": "Technologien und Modelle",
+  "recommendation.technology.intro":
+    "Nur kuratierte Technologieprofile – genannt mit Begründung, nie erfunden.",
+  "recommendation.technology.add": "Technologie belegen",
+  "recommendation.technology.none":
+    "Keine Technologie genannt. Das ist zulässig: eine Empfehlung muss keine nennen.",
+  "recommendation.technology.unavailable":
+    "Für dieses Engagement wurde kein Technologieprofil abgerufen.",
+  "recommendation.technology.fit_rationale": "Warum diese Technologie passt",
+
+  "recommendation.gaps.title": "Offene Fragen",
+  "recommendation.gaps.intro":
+    "Was die Lösungszuordnung nicht klären konnte – festgehalten statt geraten.",
+  "recommendation.gaps.empty": "Keine offenen Fragen festgehalten.",
+  "recommendation.gaps.placeholder":
+    "Was fehlt, um diese Opportunity belegbar zu lösen?",
+  "recommendation.gaps.add": "Offene Frage hinzufügen",
+
   // --- the document itself ------------------------------------------------
   // The browser tab and the description a link preview shows are read like any
   // other string, so they are looked up like any other string.
@@ -1561,6 +1707,7 @@ const uiMessages = {
 export const de = {
   ...serverMessages,
   ...opportunityServerMessages,
+  ...recommendationServerMessages,
   ...workbenchServerMessages,
   ...uiMessages,
 }
