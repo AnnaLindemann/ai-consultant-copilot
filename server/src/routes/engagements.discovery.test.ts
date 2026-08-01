@@ -56,9 +56,28 @@ mock.module("../repositories/engagement.repository.js", {
     getEngagements: async () => [],
     toDiscoveryProfile: () => ({}),
     toDiscoveryWorkflowState: () => ({}),
+    toAssessment: () => null,
     updateEngagement: async () => engagement,
   },
 })
+
+// The curated knowledge the engagement routes now retrieve. Mocked at the
+// repository seam so the real deterministic retrieval still runs, without a
+// database (coding-standards.md §9).
+mock.module("../repositories/consulting-knowledge.repository.js", {
+  namedExports: {
+    ensureConsultingKnowledgeSeeded: async () => {},
+    listConsultingKnowledgeEntries: async () => [],
+    getConsultingKnowledgeEntryByCode: async () => null,
+    createConsultingKnowledgeEntry: async () => {
+      throw new Error("an engagement route must never write to the knowledge base")
+    },
+    updateConsultingKnowledgeEntry: async () => {
+      throw new Error("an engagement route must never write to the knowledge base")
+    },
+  },
+})
+
 
 mock.module("../lib/prisma.js", {
   namedExports: {

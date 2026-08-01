@@ -5,6 +5,7 @@ import { toNodeHandler } from "better-auth/node"
 import { auth } from "./lib/auth/better-auth.js"
 import authRouter from "./routes/auth.js"
 import engagementsRouter from "./routes/engagements.js"
+import knowledgeRouter from "./routes/knowledge.js"
 import organizationsRouter from "./routes/organizations.js"
 import portalRouter from "./routes/portal.js"
 
@@ -32,6 +33,7 @@ app.get("/health", (req, res) => {
 app.use("/auth", authRouter)
 app.use("/organizations", organizationsRouter)
 app.use("/engagements", engagementsRouter)
+app.use("/knowledge", knowledgeRouter)
 app.use("/portal", portalRouter)
 
 export default app

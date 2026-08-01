@@ -1,26 +1,443 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f7f8fa;
+  --foreground: #172033;
+  --surface: #ffffff;
+  --subtle: #f1f3f6;
+  --border: #e4e7ec;
+  --border-strong: #d0d5dd;
+  --primary: #8a6714;
+  --primary-hover: #6e520f;
+  --primary-tint: #fff7e0;
+  --success: #16845b;
+  --success-tint: #ecfdf3;
+  --warning: #b54708;
+  --warning-tint: #fffaeb;
+  --danger: #d92d20;
+  --danger-tint: #fef3f2;
+  --info: #175cd3;
+  --info-tint: #eff8ff;
+  --text-secondary: #667085;
+  --text-muted: #98a2b3;
+  --font-family-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+
+  /* Layout dimensions from the UI kit's layout tokens. They live here as well
+     as in `design-tokens.json` because the responsive rules below are media
+     queries, which an inline style cannot express. */
+  --sidebar-width: 248px;
+  --page-padding: 32px;
+
+  /* The two bounded measures the UI kit defines: a form column and the Client
+     Portal's reading width. Neither is ever applied to a workbench page — the
+     workbench uses the width it is given. */
+  --form-max: 760px;
+  --portal-max: 960px;
+
+  /* The one offset every sticky column in the workspace is anchored to. A
+     sticky area is bounded by it on both ends, so it can never grow past the
+     viewport and hide what sits below it. */
+  --sticky-offset: 24px;
+  --sticky-bottom-gap: 24px;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-family-sans);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-family-sans);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+/* Keyboard focus is always visible (UI-KIT §3.8, §16). */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- application shell --------------------------------------------------- */
+/* Sidebar plus one main column that takes whatever width is left. There is no
+   centred content card and no arbitrary maximum: the workspace is as wide as
+   the viewport allows, minus the page padding. */
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.app-sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 20px 16px;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.app-sidebar__nav {
+  display: grid;
+  gap: 20px;
+}
+
+.app-sidebar__user {
+  margin-top: auto;
+}
+
+.app-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: var(--page-padding);
+}
+
+.app-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px 24px;
+}
+
+@media (max-width: 1279px) {
+  :root {
+    --page-padding: 24px;
+  }
+}
+
+@media (max-width: 767px) {
+  :root {
+    --page-padding: 16px;
+  }
+}
+
+/* Below the desktop breakpoint the sidebar becomes a top bar: the navigation
+   stays reachable without a drawer, and the workspace gets the full width. */
+@media (max-width: 1023px) {
+  .app-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-sidebar {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    padding: 12px var(--page-padding);
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .app-sidebar__nav {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+  }
+
+  .app-sidebar__group-label {
+    display: none;
+  }
+
+  .app-sidebar__list {
+    display: flex;
+    gap: 4px;
+  }
+
+  .app-sidebar__user {
+    margin-top: 0;
+  }
+
+  .app-sidebar__user-detail {
+    display: none;
+  }
+}
+
+/* --- Client Portal shell ------------------------------------------------- */
+/* The client's surface: a simple header, a bounded readable column, and no
+   workbench chrome (UI-KIT §6.2). Mobile is the primary target here, so the
+   column is fluid and only capped on wider screens. */
+
+.portal-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.portal-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.portal-header__inner,
+.portal-main {
+  width: 100%;
+  max-width: var(--portal-max);
+  margin-inline: auto;
+  padding-inline: var(--page-padding);
+}
+
+.portal-header__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  min-height: 56px;
+  padding-block: 8px;
+}
+
+.portal-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-block: 24px 40px;
+}
+
+/* --- public shell (sign-in, registration, invitation) -------------------- */
+
+.public-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.public-shell__bar {
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+  padding-inline: var(--page-padding);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.public-shell__main {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  padding: 40px var(--page-padding);
+}
+
+/* A form column, not a floating card: the same readable measure the workbench
+   uses for its forms, with no oversized shadow and no decorative gradient. */
+.public-shell__column {
+  width: 100%;
+  max-width: var(--form-max);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+@media (max-width: 767px) {
+  .public-shell__main {
+    padding-block: 24px;
+  }
+}
+
+/* --- Discovery workspace ------------------------------------------------- */
+/* Section navigation, the accordion, and the contextual rail are three columns
+   of one grid, so they share a baseline and gutters instead of reading as three
+   unrelated blocks. */
+
+.discovery-grid {
+  display: grid;
+  grid-template-columns: minmax(200px, 220px) minmax(0, 1fr) minmax(260px, 288px);
+  gap: 20px;
+  align-items: start;
+}
+
+.discovery-section {
+  /* Selecting a section scrolls it here; the gap keeps its header off the
+     viewport edge. */
+  scroll-margin-top: 16px;
+}
+
+/* A bounded sticky column: an explicit offset, an explicit maximum height, and
+   its own scrollbar once it outgrows the viewport. It therefore cannot extend
+   past the screen, cover the items below it, or hide a button underneath. */
+.discovery-sticky {
+  position: sticky;
+  top: var(--sticky-offset);
+  max-height: calc(100vh - var(--sticky-offset) - var(--sticky-bottom-gap));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.discovery-rail {
+  display: grid;
+  gap: 16px;
+}
+
+.discovery-chevron {
+  transition: transform 180ms ease;
+}
+
+.discovery-gap-form {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.4fr) minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+@media (max-width: 767px) {
+  .discovery-gap-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1279px) {
+  /* Tablet: navigation and workspace stay side by side, the rail moves under
+     both and lays its cards out in a row. */
+  .discovery-grid {
+    grid-template-columns: minmax(180px, 200px) minmax(0, 1fr);
+  }
+
+  .discovery-rail-column {
+    grid-column: 1 / -1;
+  }
+
+  .discovery-rail {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+}
+
+/* The compact selector replaces the navigation column below the desktop
+   breakpoint, so the sections stay reachable without a screenful of rows. */
+.discovery-mobile-selector {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .discovery-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .discovery-nav-column {
+    display: none;
+  }
+
+  .discovery-mobile-selector {
+    display: block;
+  }
+
+  .discovery-sticky {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+/* --- workflow shell (Assessment, Opportunities, Knowledge) ---------------- */
+
+.workflow-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.workflow-shell--three {
+  grid-template-columns: minmax(0, 240px) minmax(0, 1fr) minmax(280px, 320px);
+}
+
+.workflow-shell--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 1023px) {
+  .workflow-shell,
+  .workflow-shell--three {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.workflow-sticky {
+  position: sticky;
+  top: var(--sticky-offset);
+}
+
+.workflow-mobile-stack {
+  display: grid;
+  gap: 16px;
+}
+
+/* --- Consulting Knowledge Base ------------------------------------------- */
+/* The result list and the entry it opens are two columns of one grid, so the
+   selected entry sits beside the list it came from rather than below it. */
+
+.knowledge-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 1023px) {
+  .knowledge-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The result list is bounded and scrolls itself, so a long catalogue cannot
+   push the editor beside it off the bottom of the page. */
+.knowledge-results {
+  max-height: 60vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* --- motion -------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

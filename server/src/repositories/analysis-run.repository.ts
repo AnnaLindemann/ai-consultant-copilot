@@ -24,6 +24,12 @@ export type CreateAnalysisRunInput = {
   jsonParseSuccess: boolean
   schemaValid: boolean
   errorMessage?: string
+  // The curated Consulting Knowledge Base entries that grounded the run, by
+  // their stable codes, in the order the retrieval selected them (roadmap
+  // Phase 5). Omitted by a stage that retrieves no knowledge; recorded even on
+  // a failed run, because what the model was *given* is part of the audit trail
+  // whether or not it answered (coding-standards.md §7).
+  knowledgeEntryCodes?: readonly string[]
 }
 
 export const createAnalysisRun = async (input: CreateAnalysisRunInput) => {
@@ -44,6 +50,10 @@ export const createAnalysisRun = async (input: CreateAnalysisRunInput) => {
       jsonParseSuccess: input.jsonParseSuccess,
       schemaValid: input.schemaValid,
       errorMessage: input.errorMessage,
+      knowledgeEntryCodes:
+        input.knowledgeEntryCodes === undefined
+          ? undefined
+          : [...input.knowledgeEntryCodes],
     },
   })
 }

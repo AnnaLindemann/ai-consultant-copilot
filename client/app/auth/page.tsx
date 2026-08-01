@@ -3,8 +3,25 @@
 import { useState } from "react"
 import Link from "next/link"
 
+import PublicShell from "../../components/PublicShell"
+import {
+  InlineAlert,
+  buttonStyle,
+  cardStyle,
+  fieldStyle,
+  hintStyle,
+  inputStyle,
+  mutedTextStyle,
+  sectionTitleStyle,
+} from "../../components/UiKit"
+import {
+  HOME_PATH,
+  RETURN_PARAM,
+  safeReturnPath,
+} from "../../lib/auth-redirect"
 import { t, translateServerMessage } from "../../i18n"
 import type { MessageKey } from "../../i18n/de"
+import { uiColors, uiRadius, uiSpace } from "../../lib/design-tokens"
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8787"
@@ -29,6 +46,19 @@ type Field = {
   hintKey?: MessageKey
 }
 
+// What the access routes answer with: an identifier for the outcome and, where
+// the route establishes one, the acting user (`routes/auth.ts`).
+type AuthResponse = {
+  message?: string
+  data?: { user?: { role?: string } | null }
+}
+
+// The page the visitor was trying to reach, as `proxy.ts` and the protected
+// pages recorded it. Read when the form is submitted rather than during render,
+// so this page needs no Suspense boundary to stay prerenderable.
+const returnPath = () =>
+  new URLSearchParams(window.location.search).get(RETURN_PARAM)
+
 const MODES: { value: Mode; labelKey: MessageKey }[] = [
   { value: "login", labelKey: "auth.tab.login" },
   { value: "register", labelKey: "auth.tab.register" },
@@ -48,17 +78,26 @@ export default function AuthPage() {
   }
 
   return (
-    <main style={pageStyle}>
+    <PublicShell
+      title={t("auth.page.title")}
+      description={t("auth.page.subtitle")}
+      footer={
+        <Link href="/" style={footerLinkStyle}>
+          {t("auth.page.back_home")}
+        </Link>
+      }
+    >
       <section style={cardStyle}>
-        <p style={eyebrowStyle}>{t("auth.page.eyebrow")}</p>
-        <h1 style={titleStyle}>{t("auth.page.title")}</h1>
-        <p style={subtitleStyle}>{t("auth.page.subtitle")}</p>
-
-        <div style={tabsStyle}>
+        {/* One card, four entry points. The tabs are a segmented control rather
+            than four differently-styled pills, so which one is active is
+            carried by the same selected-state language the sidebar uses. */}
+        <div style={tabsStyle} role="tablist" aria-label={t("auth.page.eyebrow")}>
           {MODES.map(({ value, labelKey }) => (
             <button
               key={value}
               type="button"
+              role="tab"
+              aria-selected={mode === value}
               onClick={() => switchMode(value)}
               style={{ ...tabStyle, ...(mode === value ? activeTabStyle : null) }}
             >
@@ -81,8 +120,15 @@ export default function AuthPage() {
                 type: "password",
               },
             ]}
-            onSuccess={() => {
-              window.location.href = "/"
+            onSuccess={(result) => {
+              // Back to the page that sent them here — but only once there is
+              // somewhere to go back *to*. A confirmed identity with no
+              // workspace membership (a self-registered client awaiting
+              // association) is signed in and reaches no consultant surface, so
+              // returning them to one would bounce them straight back here.
+              window.location.href = result.data?.user
+                ? safeReturnPath(returnPath())
+                : HOME_PATH
             }}
             setError={setError}
             setMessage={setMessage}
@@ -185,14 +231,10 @@ export default function AuthPage() {
           />
         )}
 
-        {message && <p style={successStyle}>{message}</p>}
-        {error && <p style={errorStyle}>{error}</p>}
-
-        <p style={footnoteStyle}>
-          <Link href="/">{t("auth.page.back_home")}</Link>
-        </p>
+        {message && <InlineAlert tone="success">{message}</InlineAlert>}
+        {error && <InlineAlert tone="danger">{error}</InlineAlert>}
       </section>
-    </main>
+    </PublicShell>
   )
 }
 
@@ -211,7 +253,7 @@ function AuthForm({
   submitKey: MessageKey
   path: string
   fields: Field[]
-  onSuccess?: () => void
+  onSuccess?: (result: AuthResponse) => void
   setError: (value: string) => void
   setMessage: (value: string) => void
 }) {
@@ -222,7 +264,7 @@ function AuthForm({
 
   return (
     <form
-      style={{ display: "grid", gap: 16, marginTop: 24 }}
+      style={formStyle}
       onSubmit={async (event) => {
         event.preventDefault()
         setIsSubmitting(true)
@@ -237,7 +279,7 @@ function AuthForm({
             body: JSON.stringify(form),
           })
 
-          const result = (await response.json()) as { message?: string }
+          const result = (await response.json()) as AuthResponse
 
           if (!response.ok) {
             // The server sends an identifier; the wording is ours.
@@ -246,7 +288,7 @@ function AuthForm({
           }
 
           setMessage(translateServerMessage(result.message))
-          onSuccess?.()
+          onSuccess?.(result)
         } catch {
           setError(t("common.error.unexpected"))
         } finally {
@@ -254,11 +296,11 @@ function AuthForm({
         }
       }}
     >
-      <h2 style={{ margin: 0, fontSize: 22 }}>{t(titleKey)}</h2>
-      {hintKey && <p style={formHintStyle}>{t(hintKey)}</p>}
+      <h2 style={sectionTitleStyle}>{t(titleKey)}</h2>
+      {hintKey && <p style={mutedTextStyle}>{t(hintKey)}</p>}
 
       {fields.map((field) => (
-        <label key={field.id} style={fieldLabelStyle}>
+        <label key={field.id} style={fieldStyle}>
           <span>{t(field.labelKey)}</span>
           <input
             type={field.type}
@@ -271,132 +313,61 @@ function AuthForm({
             }
             style={inputStyle}
           />
-          {field.hintKey && (
-            <span style={fieldHintStyle}>{t(field.hintKey)}</span>
-          )}
+          {field.hintKey && <span style={hintStyle}>{t(field.hintKey)}</span>}
         </label>
       ))}
 
-      <button type="submit" disabled={isSubmitting} style={buttonStyle}>
+      <button
+        type="submit"
+        disabled={isSubmitting}
+        style={{ ...buttonStyle("primary", isSubmitting), justifySelf: "start" }}
+      >
         {isSubmitting ? t("auth.form.submitting") : t(submitKey)}
       </button>
     </form>
   )
 }
 
-const pageStyle: React.CSSProperties = {
-  minHeight: "100vh",
-  background:
-    "radial-gradient(circle at top left, #eff6ff 0%, #f8fafc 42%, #eef2ff 100%)",
-  padding: "48px 24px",
-  color: "#111827",
-  fontFamily:
-    'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+const formStyle: React.CSSProperties = {
+  display: "grid",
+  gap: uiSpace.md,
+  minWidth: 0,
 }
 
-const cardStyle: React.CSSProperties = {
-  maxWidth: 760,
-  margin: "0 auto",
-  padding: 32,
-  borderRadius: 28,
-  background: "#ffffff",
-  border: "1px solid #e5e7eb",
-  boxShadow: "0 24px 60px rgba(15, 23, 42, 0.12)",
-}
-
-const eyebrowStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#4f46e5",
-  fontWeight: 800,
-  fontSize: 12,
-  textTransform: "uppercase",
-  letterSpacing: 1,
-}
-
-const titleStyle: React.CSSProperties = {
-  margin: "8px 0 12px",
-  fontSize: 38,
-  lineHeight: 1.1,
-}
-
-const subtitleStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#6b7280",
-  fontSize: 17,
-  lineHeight: 1.5,
-}
-
+// A segmented control: one bounded strip, one selected item, no four-pill
+// rainbow. The selected state uses the same tint the sidebar's active entry
+// does, so "selected" means one thing across the product.
 const tabsStyle: React.CSSProperties = {
   display: "flex",
-  gap: 8,
-  marginTop: 24,
   flexWrap: "wrap",
+  gap: 2,
+  padding: 2,
+  borderRadius: uiRadius.control,
+  border: `1px solid ${uiColors.border}`,
+  background: uiColors.subtle,
 }
 
 const tabStyle: React.CSSProperties = {
-  border: "1px solid #cbd5e1",
-  background: "#fff",
-  color: "#334155",
-  borderRadius: 999,
-  padding: "10px 14px",
-  fontWeight: 700,
+  flex: "1 1 auto",
+  minHeight: 36,
+  padding: `0 ${uiSpace.sm}`,
+  borderRadius: 6,
+  border: "1px solid transparent",
+  background: "transparent",
+  color: uiColors.textSecondary,
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: "pointer",
 }
 
 const activeTabStyle: React.CSSProperties = {
-  background: "#111827",
-  color: "#fff",
-  borderColor: "#111827",
+  borderColor: uiColors.border,
+  background: uiColors.surface,
+  color: uiColors.primary,
 }
 
-const formHintStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#6b7280",
-  fontSize: 14,
-  lineHeight: 1.5,
-}
-
-const fieldLabelStyle: React.CSSProperties = {
-  display: "grid",
-  gap: 6,
-  fontWeight: 700,
-  fontSize: 14,
-}
-
-const fieldHintStyle: React.CSSProperties = {
-  color: "#6b7280",
-  fontWeight: 400,
-  fontSize: 13,
-}
-
-const inputStyle: React.CSSProperties = {
-  borderRadius: 14,
-  border: "1px solid #d1d5db",
-  padding: "12px 14px",
-  fontSize: 15,
-}
-
-const buttonStyle: React.CSSProperties = {
-  border: 0,
-  borderRadius: 14,
-  padding: "12px 16px",
-  background: "#111827",
-  color: "#fff",
-  fontWeight: 800,
-}
-
-const successStyle: React.CSSProperties = {
-  marginTop: 20,
-  color: "#065f46",
-  fontWeight: 700,
-}
-
-const errorStyle: React.CSSProperties = {
-  marginTop: 20,
-  color: "#991b1b",
-  fontWeight: 700,
-}
-
-const footnoteStyle: React.CSSProperties = {
-  marginTop: 16,
-  color: "#64748b",
+const footerLinkStyle: React.CSSProperties = {
+  color: uiColors.primary,
+  fontWeight: 600,
+  textDecoration: "none",
 }

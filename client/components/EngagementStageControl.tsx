@@ -3,9 +3,12 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 
+import { inputStyle, rowStyle } from "./UiKit"
+import { t, translateServerMessage } from "../i18n"
+import { uiColors } from "../lib/design-tokens"
 import {
-  STAGE_LABELS,
   STAGE_ORDER,
+  stageLabel,
   type EngagementStage,
 } from "../lib/engagement-stage"
 
@@ -47,14 +50,23 @@ export default function EngagementStageControl({
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.message ?? "Failed to save stage")
+        // The server names the outcome; the wording is ours. Its identifier is
+        // never what the consultant reads.
+        setError(
+          translateServerMessage(
+            result.message,
+            undefined,
+            "engagement.stage.save_failed",
+          ),
+        )
+        return
       }
 
       setSaved(true)
       // Re-fetch the server component so the resumed state reflects the save.
       router.refresh()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error")
+    } catch {
+      setError(t("common.error.unexpected"))
     } finally {
       setIsSaving(false)
     }
@@ -63,7 +75,7 @@ export default function EngagementStageControl({
   return (
     <div style={wrapperStyle}>
       <label style={labelStyle} htmlFor="engagement-stage">
-        Current stage
+        {t("engagement.stage.label")}
       </label>
       <select
         id="engagement-stage"
@@ -74,56 +86,49 @@ export default function EngagementStageControl({
       >
         {STAGE_ORDER.map((value) => (
           <option key={value} value={value}>
-            {STAGE_LABELS[value]}
+            {stageLabel(value)}
           </option>
         ))}
       </select>
 
-      {isSaving && <span style={mutedStyle}>Saving…</span>}
-      {saved && !isSaving && <span style={savedStyle}>Saved</span>}
+      {isSaving && <span style={mutedStyle}>{t("common.state.saving")}</span>}
+      {saved && !isSaving && (
+        <span style={savedStyle}>{t("common.state.saved")}</span>
+      )}
       {error && <span style={errorStyle}>{error}</span>}
     </div>
   )
 }
 
-const wrapperStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 12,
-  flexWrap: "wrap",
-  marginTop: 20,
-}
+// The stage selector sits in the page header's action area, so it uses the
+// shared control geometry rather than a height of its own.
+const wrapperStyle: React.CSSProperties = rowStyle
 
 const labelStyle: React.CSSProperties = {
-  color: "#6b7280",
+  color: uiColors.textSecondary,
   fontSize: 12,
-  fontWeight: 800,
-  textTransform: "uppercase",
-  letterSpacing: 0.5,
+  fontWeight: 600,
 }
 
 const selectStyle: React.CSSProperties = {
-  borderRadius: 12,
-  border: "1px solid #d1d5db",
-  padding: "10px 12px",
-  fontSize: 15,
-  fontWeight: 700,
-  background: "#ffffff",
+  ...inputStyle,
+  width: "auto",
+  fontWeight: 600,
 }
 
 const mutedStyle: React.CSSProperties = {
-  color: "#6b7280",
-  fontSize: 14,
+  color: uiColors.textSecondary,
+  fontSize: 13,
 }
 
 const savedStyle: React.CSSProperties = {
-  color: "#065f46",
-  fontSize: 14,
-  fontWeight: 700,
+  color: uiColors.success,
+  fontSize: 13,
+  fontWeight: 600,
 }
 
 const errorStyle: React.CSSProperties = {
-  color: "#991b1b",
-  fontSize: 14,
-  fontWeight: 700,
+  color: uiColors.danger,
+  fontSize: 13,
+  fontWeight: 600,
 }

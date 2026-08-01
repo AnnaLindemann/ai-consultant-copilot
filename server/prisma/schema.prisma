@@ -63,6 +63,23 @@ enum UserRole {
   CLIENT
 }
 
+enum ConsultingKnowledgeKind {
+  business_domain
+  business_process
+  business_problem
+  customer_operations_taxonomy
+  discovery_question
+  assessment_framework
+  ai_readiness_criterion
+  ai_use_case
+  solution_pattern
+  implementation_pattern
+  roi_model
+  risk_model
+  best_practice
+  follow_up_template
+}
+
 enum InvitationStatus {
   pending
   accepted
@@ -185,7 +202,7 @@ model Engagement {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   owningManagerId String
-  owningManager   User @relation("EngagementOwnedBy", fields: [owningManagerId], references: [id], onDelete: Restrict)
+  owningManager   User   @relation("EngagementOwnedBy", fields: [owningManagerId], references: [id], onDelete: Restrict)
 
   // A short label distinguishing engagements within one organization.
   title String?
@@ -278,7 +295,7 @@ model Engagement {
   opportunityVersions OpportunityVersion[]
 
   invitations       ClientInvitation[]
-  discoveryAccesses  DiscoveryAccess[]
+  discoveryAccesses DiscoveryAccess[]
   notifications     Notification[]
   auditTrails       AuditTrail[]
 
@@ -290,6 +307,64 @@ model Engagement {
   @@index([createdAt])
   @@index([sensitiveData])
   @@index([gdprConcerns])
+}
+
+// The curated Consulting Knowledge Base (roadmap Phase 5). It is its own table
+// group, holds no client-specific content, and carries no workspace: both
+// knowledge bases are product-level assets shared across workspaces, outside
+// the Phase 3A isolation boundary (architecture.md §9; domain-model.md §3A.1).
+// There is no foreign key from here into an engagement, and none from an
+// engagement into here — engagements reference an entry by its stable `code`.
+model ConsultingKnowledgeEntry {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // The stable curated identifier every reference uses — retrieval results,
+  // curated relationships, and the codes an Analysis Run records.
+  code       String                  @unique
+  kind       ConsultingKnowledgeKind
+  domainCode String
+  title      String
+  summary    String
+
+  // A weak, additional retrieval signal. Retrieval is driven by the typed
+  // relationships below, never by tags alone.
+  tags Json
+
+  // The curated vocabulary that resolves an engagement's own words into this
+  // entry's code. It seeds the anchor set; it never ranks.
+  matchTerms Json
+
+  stageScopes Json
+
+  // The explicit curated relationships retrieval traverses. Each slot holds
+  // codes of exactly one kind; `relatedCodes` is the untyped slot for
+  // cross-links that fit none of them.
+  taxonomyCodes Json
+  processCodes  Json
+  problemCodes  Json
+  useCaseCodes  Json
+  relatedCodes  Json
+
+  details Json
+
+  // The curator's stable ordering within a kind — the first tie-breaker, and
+  // what makes an equal-scoring result set reproducible.
+  sortOrder Int     @default(0)
+  active    Boolean @default(true)
+
+  // Bumped on every curated write. A write against a stale revision is refused
+  // rather than silently overwriting another curator's change.
+  revision Int @default(0)
+
+  updatedByUserId String?
+  updatedBy       User?   @relation("ConsultingKnowledgeCuratedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([kind])
+  @@index([domainCode])
+  @@index([active])
+  @@index([domainCode, kind, active])
 }
 
 model AnalysisRun {
@@ -309,9 +384,9 @@ model AnalysisRun {
   provider String
   model    String
 
-  promptVersion String?
+  promptVersion     String?
   promptFingerprint String?
-  latencyMs Int?
+  latencyMs         Int?
 
   promptTokens     Int?
   completionTokens Int?
@@ -320,8 +395,8 @@ model AnalysisRun {
   costEstimateUsd Decimal? @db.Decimal(10, 6)
 
   // Objective quality signals recorded on every run.
-  jsonParseSuccess  Boolean
-  schemaValid       Boolean
+  jsonParseSuccess Boolean
+  schemaValid      Boolean
 
   // Subjective quality signals are reserved for a genuine evaluator and are
   // left unpopulated until one exists — no placeholder scores are written
@@ -333,6 +408,16 @@ model AnalysisRun {
   actionability     String?
 
   errorMessage String?
+
+  // Which curated Consulting Knowledge Base entries grounded this run, by their
+  // stable codes, in the order the retrieval selected them (roadmap Phase 5;
+  // architecture.md §5 "grounding references are captured alongside the
+  // generated content"). Codes, not foreign keys: the reference direction is
+  // engagement → knowledge, and the record must stay faithful to the knowledge
+  // as it stood even if an entry is later renamed or deactivated
+  // (architecture.md §4.3, §9.4). Null on runs from before the knowledge base
+  // existed, empty for a stage that retrieves nothing.
+  knowledgeEntryCodes Json?
 
   createdAt DateTime @default(now())
 
@@ -415,15 +500,15 @@ model Workspace {
 
   name String
 
-  users        User[]
-  organizations Organization[]
-  engagements  Engagement[]
-  analysisRuns  AnalysisRun[]
+  users               User[]
+  organizations       Organization[]
+  engagements         Engagement[]
+  analysisRuns        AnalysisRun[]
   opportunityVersions OpportunityVersion[]
-  invitations  ClientInvitation[]
-  discoveryAccesses DiscoveryAccess[]
-  notifications Notification[]
-  auditTrails  AuditTrail[]
+  invitations         ClientInvitation[]
+  discoveryAccesses   DiscoveryAccess[]
+  notifications       Notification[]
+  auditTrails         AuditTrail[]
 
   @@index([name])
   @@index([createdAt])
@@ -437,9 +522,9 @@ model User {
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  email String
-  displayName String?
-  role UserRole
+  email           String
+  displayName     String?
+  role            UserRole
   emailVerifiedAt DateTime?
 
   // The authentication identity behind this workspace membership. The
@@ -449,18 +534,19 @@ model User {
   // placeholder owner exists before anyone can sign in, and because a
   // self-registered client has an authentication identity before a consultant
   // associates them with a workspace.
-  authUserId String? @unique
+  authUserId String?   @unique
   authUser   AuthUser? @relation(fields: [authUserId], references: [id], onDelete: SetNull)
 
-  issuedInvitations ClientInvitation[] @relation("InvitationIssuer")
-  acceptedInvitations ClientInvitation[] @relation("InvitationAcceptedBy")
-  discoveryAccessGranted DiscoveryAccess[] @relation("DiscoveryAccessGrantor")
-  discoveryAccesses DiscoveryAccess[] @relation("DiscoveryAccessRecipient")
-  ownedEngagements Engagement[] @relation("EngagementOwnedBy")
-  createdOpportunityVersions OpportunityVersion[] @relation("OpportunityVersionCreatedBy")
-  modifiedOpportunityVersions OpportunityVersion[] @relation("OpportunityVersionLastModifiedBy")
-  notifications Notification[]
-  auditTrails AuditTrail[]
+  issuedInvitations           ClientInvitation[]         @relation("InvitationIssuer")
+  acceptedInvitations         ClientInvitation[]         @relation("InvitationAcceptedBy")
+  discoveryAccessGranted      DiscoveryAccess[]          @relation("DiscoveryAccessGrantor")
+  discoveryAccesses           DiscoveryAccess[]          @relation("DiscoveryAccessRecipient")
+  ownedEngagements            Engagement[]               @relation("EngagementOwnedBy")
+  createdOpportunityVersions  OpportunityVersion[]       @relation("OpportunityVersionCreatedBy")
+  modifiedOpportunityVersions OpportunityVersion[]       @relation("OpportunityVersionLastModifiedBy")
+  notifications               Notification[]
+  auditTrails                 AuditTrail[]
+  curatedKnowledgeEntries     ConsultingKnowledgeEntry[] @relation("ConsultingKnowledgeCuratedBy")
 
   @@unique([workspaceId, email])
   @@index([workspaceId])
@@ -561,20 +647,20 @@ model ClientInvitation {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   createdByUserId String
-  createdByUser User @relation("InvitationIssuer", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdByUser   User   @relation("InvitationIssuer", fields: [createdByUserId], references: [id], onDelete: Restrict)
 
-  email String
-  role UserRole
+  email        String
+  role         UserRole
   engagementId String?
-  engagement Engagement? @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  engagement   Engagement? @relation(fields: [engagementId], references: [id], onDelete: Cascade)
 
-  tokenHash String @unique
-  status InvitationStatus @default(pending)
-  expiresAt DateTime
-  acceptedAt DateTime?
-  revokedAt DateTime?
+  tokenHash        String           @unique
+  status           InvitationStatus @default(pending)
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  revokedAt        DateTime?
   acceptedByUserId String?
-  acceptedByUser User? @relation("InvitationAcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+  acceptedByUser   User?            @relation("InvitationAcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
   @@index([email])
@@ -591,18 +677,18 @@ model DiscoveryAccess {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   engagementId String
-  engagement Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
 
   userId String
-  user   User @relation("DiscoveryAccessRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation("DiscoveryAccessRecipient", fields: [userId], references: [id], onDelete: Cascade)
 
   grantedByUserId String
-  grantedByUser User @relation("DiscoveryAccessGrantor", fields: [grantedByUserId], references: [id], onDelete: Restrict)
+  grantedByUser   User   @relation("DiscoveryAccessGrantor", fields: [grantedByUserId], references: [id], onDelete: Restrict)
 
-  status DiscoveryAccessStatus @default(active)
-  expiresAt DateTime?
+  status     DiscoveryAccessStatus @default(active)
+  expiresAt  DateTime?
   acceptedAt DateTime?
-  revokedAt DateTime?
+  revokedAt  DateTime?
 
   @@unique([engagementId, userId])
   @@index([workspaceId])
@@ -620,14 +706,14 @@ model Notification {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   userId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   engagementId String?
-  engagement Engagement? @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  engagement   Engagement? @relation(fields: [engagementId], references: [id], onDelete: Cascade)
 
-  kind String
+  kind    String
   payload Json
-  readAt DateTime?
+  readAt  DateTime?
 
   @@index([workspaceId])
   @@index([userId])
@@ -643,13 +729,13 @@ model AuditTrail {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   userId String?
-  user   User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   engagementId String?
-  engagement Engagement? @relation(fields: [engagementId], references: [id], onDelete: SetNull)
+  engagement   Engagement? @relation(fields: [engagementId], references: [id], onDelete: SetNull)
 
   eventType String
-  payload Json
+  payload   Json
 
   @@index([workspaceId])
   @@index([userId])

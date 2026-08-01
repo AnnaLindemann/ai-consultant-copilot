@@ -13,11 +13,13 @@ import { parseAssessment } from "../lib/parse-assessment.js"
 import { langfuse } from "../observability/langfuse.js"
 import { ASSESSMENT_PROMPT } from "../prompts/assessment-prompt.js"
 import { buildAssessmentPrompt } from "../prompts/build-assessment-prompt.js"
+import { retrieveKnowledgePackage } from "./consulting-knowledge.service.js"
 import {
   createAnalysisRun,
   type CreateAnalysisRunInput,
 } from "../repositories/analysis-run.repository.js"
 import {
+  toAssessment,
   toDiscoveryProfile,
   type EngagementScope,
   updateEngagementAssessment,
@@ -106,6 +108,16 @@ export const generateAssessment = async (
     },
   })
 
+  // Deterministic grounding first: the knowledge is retrieved and passed *into*
+  // the prompt, so the model reasons over supplied knowledge rather than
+  // inventing it, and the codes it was grounded in are recorded on the run
+  // (architecture.md §5; roadmap Phase 5).
+  const knowledgePackage = await retrieveKnowledgePackage(
+    engagement,
+    "assessment",
+    engagement.assessment ? toAssessment(engagement) : null,
+  )
+
   const prompt = buildAssessmentPrompt({
     organization: {
       name: engagement.organization.name,
@@ -118,6 +130,7 @@ export const generateAssessment = async (
       department: engagement.department,
     },
     discoveryProfile,
+    knowledgePackage,
   })
 
   // Resolved up front so a provider failure can still be attributed to the
@@ -155,6 +168,7 @@ export const generateAssessment = async (
       jsonParseSuccess: false,
       schemaValid: false,
       errorMessage,
+      knowledgeEntryCodes: knowledgePackage.codes,
     })
 
     return {
@@ -217,6 +231,7 @@ export const generateAssessment = async (
     jsonParseSuccess: parsedResult.jsonParseSuccess,
     schemaValid: parsedResult.schemaValid,
     errorMessage: parsedResult.success ? undefined : parsedResult.error,
+    knowledgeEntryCodes: knowledgePackage.codes,
   })
 
   trace?.update({

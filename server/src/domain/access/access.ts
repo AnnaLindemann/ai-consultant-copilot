@@ -96,6 +96,8 @@ export type AccessAction =
   | "analysis_run.read"
   | "organization.read"
   | "organization.create"
+  | "knowledge.read"
+  | "knowledge.curate"
   // Workspace administration.
   | "workspace.manage"
   | "invitation.issue"
@@ -179,6 +181,8 @@ const ROLES_PERMITTED: Record<AccessAction, readonly UserRole[]> = {
   "analysis_run.read": ["ADMIN", "MANAGER"],
   "organization.read": ["ADMIN", "MANAGER"],
   "organization.create": ["ADMIN", "MANAGER"],
+  "knowledge.read": ["ADMIN", "MANAGER"],
+  "knowledge.curate": ["ADMIN"],
 
   // Workspace administration is the Administrator's, without exception — a
   // Manager cannot widen their own reach (domain-model.md §3A.2).

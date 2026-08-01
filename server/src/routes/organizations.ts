@@ -36,7 +36,7 @@ router.get("/", async (req, res) => {
 
     return res.json({
       status: true,
-      message: "Organizations loaded",
+      message: "organization.message.list_loaded",
       data: organizations,
     })
   } catch (error) {
@@ -44,7 +44,7 @@ router.get("/", async (req, res) => {
 
     return res.status(500).json({
       status: false,
-      message: "Internal server error",
+      message: "organization.error.internal",
     })
   }
 })
@@ -63,7 +63,7 @@ router.post("/", async (req, res) => {
   if (!parseResult.success) {
     return res.status(400).json({
       status: false,
-      message: "invalid input",
+      message: "organization.error.invalid_input",
       errors: parseResult.error.flatten(),
     })
   }
@@ -76,7 +76,7 @@ router.post("/", async (req, res) => {
 
     return res.status(201).json({
       status: true,
-      message: "Organization created",
+      message: "organization.message.created",
       data: organization,
     })
   } catch (error) {
@@ -84,7 +84,7 @@ router.post("/", async (req, res) => {
 
     return res.status(500).json({
       status: false,
-      message: "Internal server error",
+      message: "organization.error.internal",
     })
   }
 })
@@ -116,7 +116,7 @@ router.get("/:id", async (req, res) => {
 
     return res.json({
       status: true,
-      message: "Organization loaded",
+      message: "organization.message.loaded",
       data: organization,
     })
   } catch (error) {
@@ -124,7 +124,7 @@ router.get("/:id", async (req, res) => {
 
     return res.status(500).json({
       status: false,
-      message: "Internal server error",
+      message: "organization.error.internal",
     })
   }
 })
@@ -161,7 +161,7 @@ router.get("/:id/engagements", async (req, res) => {
 
     return res.json({
       status: true,
-      message: "Engagements loaded",
+      message: "engagement.message.list_loaded",
       data: engagements,
     })
   } catch (error) {
@@ -169,7 +169,7 @@ router.get("/:id/engagements", async (req, res) => {
 
     return res.status(500).json({
       status: false,
-      message: "Internal server error",
+      message: "engagement.error.internal",
     })
   }
 })

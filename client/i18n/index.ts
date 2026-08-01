@@ -1,4 +1,8 @@
-import { de, type MessageKey } from "./de"
+// The `.ts` specifier is deliberate and matches `allowImportingTsExtensions` in
+// `tsconfig.json`: it lets the catalogue tests execute this module on Node's
+// built-in runner, so the server-message seam below is covered by a test that
+// runs it rather than one that reads it.
+import { de, type MessageKey } from "./de.ts"
 
 // The localization seam (architecture.md §7.1). One locale ships — German —
 // behind a key-based lookup, so adding a language later is a second catalogue

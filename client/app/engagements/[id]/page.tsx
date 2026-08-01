@@ -1,10 +1,28 @@
+import Link from "next/link"
+
 import EngagementAnalysisPanel from "../../../components/EngagementAnalysisPanel"
 import EngagementStageControl from "../../../components/EngagementStageControl"
-import DiscoveryProfileEditor from "../../../components/DiscoveryProfileEditor"
 import AssessmentPanel from "../../../components/AssessmentPanel"
 import OpportunityPanel from "../../../components/OpportunityPanel"
+import ManagerShell from "../../../components/ManagerShell"
+import {
+  stageEyebrowStyle,
+  stageHeadingStyle,
+  stageSurfaceStyle,
+} from "../../../components/StagePanel"
+import {
+  Badge,
+  InlineAlert,
+  buttonStyle,
+  pageStackStyle,
+} from "../../../components/UiKit"
 import { cookies } from "next/headers"
-import { STAGE_LABELS, type EngagementStage } from "../../../lib/engagement-stage"
+import { redirect } from "next/navigation"
+import { formatDateTime, t, translateServerMessage } from "../../../i18n"
+import type { MessageKey } from "../../../i18n/de"
+import { signInPath } from "../../../lib/auth-redirect"
+import { uiColors, uiRadius, uiSpace } from "../../../lib/design-tokens"
+import { stageLabel, type EngagementStage } from "../../../lib/engagement-stage"
 import type { DiscoveryProfile } from "../../../../shared/discovery-profile.schema"
 import type { DiscoveryWorkflowState } from "../../../../shared/discovery-workflow.schema"
 import type {
@@ -85,18 +103,34 @@ export default async function EngagementDetailsPage({
     headers: cookieHeader ? { cookie: cookieHeader } : undefined,
   })
 
+  // Not signed in — or signed in with a session the server no longer accepts,
+  // which the cookie-only check in `proxy.ts` cannot see. A refusal that is
+  // *about the engagement* (403, 404) is left alone: it is a real answer, and
+  // sending an authenticated consultant to sign in again would not help them.
+  if (response.status === 401) redirect(signInPath(`/engagements/${id}`))
+
   const result = (await response.json()) as EngagementDetailsResponse
 
+  // A refusal about the engagement (403, 404) is a real answer and is shown in
+  // the shell, so the consultant keeps their navigation and is not stranded.
   if (!response.ok || !result.status || !result.data) {
     return (
-      <main style={pageStyle}>
-        <section style={cardStyle}>
-          <h1>Engagement Details</h1>
-          <p style={{ color: "#991b1b" }}>
-            Failed to load engagement: {result.message}
-          </p>
-        </section>
-      </main>
+      <ManagerShell
+        breadcrumbs={[{ label: t("engagements.title"), href: "/engagements" }]}
+        title={t("engagement.detail.load_failed_title")}
+      >
+        <div style={pageStackStyle}>
+          <InlineAlert tone="danger">
+            {/* The refusal the server named, rendered. Its identifier is for
+                this page to act on, never for the consultant to read. */}
+            {translateServerMessage(
+              result.message,
+              undefined,
+              "engagement.detail.load_failed",
+            )}
+          </InlineAlert>
+        </div>
+      </ManagerShell>
     )
   }
 
@@ -104,61 +138,108 @@ export default async function EngagementDetailsPage({
   const analysisRuns = await loadAnalysisRuns(id)
 
   return (
-    <main style={pageStyle}>
-      <section style={cardStyle}>
-        <p style={eyebrowStyle}>AI Consultant Copilot · {STAGE_LABELS[engagement.stage]}</p>
-        <h1 style={titleStyle}>{engagement.organization.name}</h1>
-        <p style={subtitleStyle}>
-          {engagement.title ?? "Untitled engagement"}
-          {engagement.organization.industry
-            ? ` · ${engagement.organization.industry}`
-            : ""}
-        </p>
-
+    <ManagerShell
+      breadcrumbs={[
+        { label: t("engagements.title"), href: "/engagements" },
+        { label: engagement.organization.name },
+      ]}
+      title={engagement.organization.name}
+      description={
+        engagement.title ?? engagement.organization.industry ?? t("engagement.untitled")
+      }
+      actions={
         <EngagementStageControl
           engagementId={engagement.id}
           stage={engagement.stage}
         />
+      }
+    >
+      {/* One container for every stage, so they share an edge, a width and a
+          vertical rhythm instead of each carrying its own. The order is the
+          consulting order: overview and Discovery, then Assessment, then the
+          prioritized Opportunities, then the engagement's AI run history. */}
+      <div style={stagesStyle}>
+        <section style={cardStyle}>
+          <div style={overviewHeaderStyle}>
+            <div>
+              <p style={eyebrowStyle}>{t("engagement.detail.overview")}</p>
+              <h2 style={titleStyle}>
+                {engagement.title ?? t("engagement.untitled")}
+              </h2>
+              {engagement.organization.industry && (
+                <p style={subtitleStyle}>{engagement.organization.industry}</p>
+              )}
+            </div>
+            <Badge tone="neutral" label={stageLabel(engagement.stage)} />
+          </div>
 
-        <div style={gridStyle}>
-          <InfoBlock title="Stated Problem" value={engagement.statedProblem} />
-          <InfoBlock title="Current Process" value={engagement.currentProcess} />
-          <InfoBlock title="Desired Outcome" value={engagement.desiredOutcome} />
-          <InfoBlock
-            title="Sensitive Data"
-            value={formatBoolean(engagement.sensitiveData)}
-          />
-          <InfoBlock
-            title="GDPR Concerns"
-            value={formatBoolean(engagement.gdprConcerns)}
-          />
-          <InfoBlock
-            title="Created"
-            value={new Date(engagement.createdAt).toLocaleString()}
-          />
-        </div>
-      </section>
-      <DiscoveryProfileEditor
-        engagementId={engagement.id}
-        initialProfile={engagement.discoveryProfile}
-        workflow={engagement.discoveryWorkflow}
-      />
-      <AssessmentPanel
-        engagementId={engagement.id}
-        initialAssessment={engagement.assessment}
-        initialReviewState={engagement.assessmentReviewState}
-      />
-      <OpportunityPanel
-        key={`${engagement.opportunities.activeVersion?.id ?? "none"}:${engagement.opportunities.activeVersion?.revision ?? "0"}:${engagement.opportunities.currentAssessmentRevision}:${engagement.opportunities.stale ? "1" : "0"}`}
-        engagementId={engagement.id}
-        assessment={engagement.assessment}
-        initialVersionState={engagement.opportunities}
-      />
-      <EngagementAnalysisPanel
-        engagementId={engagement.id}
-        initialRuns={analysisRuns}
-      />
-    </main>
+          {/* Discovery is captured on its own screen, where the stage owns the
+              page header and the workspace has the full width. */}
+          <div style={discoveryLinkStyle}>
+            <div>
+              <p style={discoveryLinkTitleStyle}>
+                {t("engagement.discovery.card.title")}
+              </p>
+              <p style={discoveryLinkHintStyle}>
+                {t("engagement.discovery.card.hint")}
+              </p>
+            </div>
+            <Link
+              href={`/engagements/${engagement.id}/discovery`}
+              style={discoveryLinkActionStyle}
+            >
+              {t("engagement.discovery.card.open")}
+            </Link>
+          </div>
+
+          <div style={gridStyle}>
+            <InfoBlock
+              titleKey="engagement.info.stated_problem"
+              value={engagement.statedProblem}
+            />
+            <InfoBlock
+              titleKey="engagement.info.current_process"
+              value={engagement.currentProcess}
+            />
+            <InfoBlock
+              titleKey="engagement.info.desired_outcome"
+              value={engagement.desiredOutcome}
+            />
+            <InfoBlock
+              titleKey="engagement.info.sensitive_data"
+              value={formatBoolean(engagement.sensitiveData)}
+            />
+            <InfoBlock
+              titleKey="engagement.info.gdpr_concerns"
+              value={formatBoolean(engagement.gdprConcerns)}
+            />
+            <InfoBlock
+              titleKey="engagement.info.created"
+              value={formatDateTime(engagement.createdAt)}
+            />
+          </div>
+        </section>
+        {/* The Consulting Knowledge Base is the material the assessment is
+            grounded in, not a stage of the client's engagement. It is reached
+            through its own navigation entry; rendering it here made internal
+            support material read as a step in the customer process. */}
+        <AssessmentPanel
+          engagementId={engagement.id}
+          initialAssessment={engagement.assessment}
+          initialReviewState={engagement.assessmentReviewState}
+        />
+        <OpportunityPanel
+          key={`${engagement.opportunities.activeVersion?.id ?? "none"}:${engagement.opportunities.activeVersion?.revision ?? "0"}:${engagement.opportunities.currentAssessmentRevision}:${engagement.opportunities.stale ? "1" : "0"}`}
+          engagementId={engagement.id}
+          assessment={engagement.assessment}
+          initialVersionState={engagement.opportunities}
+        />
+        <EngagementAnalysisPanel
+          engagementId={engagement.id}
+          initialRuns={analysisRuns}
+        />
+      </div>
+    </ManagerShell>
   )
 }
 
@@ -189,86 +270,106 @@ async function serializeCookies() {
 }
 
 function formatBoolean(value: boolean | null): string {
-  if (value === null) return "Not captured"
-  return value ? "Yes" : "No"
+  if (value === null) return t("common.field.not_captured")
+  return value ? t("common.field.yes") : t("common.field.no")
 }
 
 // Discovery content is optional in Phase 1, so a not-yet-captured field is shown
 // explicitly rather than as a blank.
-function InfoBlock({ title, value }: { title: string; value: string | null }) {
+function InfoBlock({
+  titleKey,
+  value,
+}: {
+  titleKey: MessageKey
+  value: string | null
+}) {
   return (
     <div style={infoBlockStyle}>
-      <p style={labelStyle}>{title}</p>
-      <p style={valueStyle}>{value ?? "Not captured"}</p>
+      <p style={labelStyle}>{t(titleKey)}</p>
+      <p style={valueStyle}>{value ?? t("common.field.not_captured")}</p>
     </div>
   )
 }
 
-const pageStyle: React.CSSProperties = {
-  minHeight: "100vh",
-  background: "#f6f7fb",
-  color: "#111827",
-  padding: "40px 24px",
-  fontFamily:
-    'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+const stagesStyle: React.CSSProperties = {
+  display: "grid",
+  gap: uiSpace.md,
+  alignContent: "start",
 }
 
-const cardStyle: React.CSSProperties = {
-  maxWidth: 1000,
-  margin: "0 auto",
-  background: "#ffffff",
-  borderRadius: 24,
-  padding: 32,
-  boxShadow: "0 20px 50px rgba(15, 23, 42, 0.08)",
-  border: "1px solid #e5e7eb",
+const cardStyle: React.CSSProperties = stageSurfaceStyle
+
+const overviewHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: uiSpace.sm,
 }
 
-const eyebrowStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#4f46e5",
-  fontWeight: 700,
-  fontSize: 14,
-  textTransform: "uppercase",
-  letterSpacing: 1,
-}
+const eyebrowStyle: React.CSSProperties = stageEyebrowStyle
 
-const titleStyle: React.CSSProperties = {
-  fontSize: 42,
-  lineHeight: 1.1,
-  margin: "8px 0 8px",
-}
+const titleStyle: React.CSSProperties = stageHeadingStyle
 
 const subtitleStyle: React.CSSProperties = {
-  color: "#6b7280",
-  fontSize: 18,
+  color: uiColors.textSecondary,
+  fontSize: 14,
   margin: 0,
 }
+
+const discoveryLinkStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: uiSpace.md,
+  marginTop: uiSpace.md,
+  padding: uiSpace.md,
+  borderRadius: uiRadius.control,
+  border: `1px solid ${uiColors.border}`,
+  background: uiColors.primaryTint,
+}
+
+const discoveryLinkTitleStyle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 14,
+  fontWeight: 650,
+}
+
+const discoveryLinkHintStyle: React.CSSProperties = {
+  margin: "2px 0 0",
+  color: uiColors.textSecondary,
+  fontSize: 13,
+}
+
+const discoveryLinkActionStyle: React.CSSProperties = buttonStyle("primary")
 
 const gridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-  gap: 16,
-  marginTop: 28,
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  gap: uiSpace.sm,
+  marginTop: uiSpace.md,
 }
 
 const infoBlockStyle: React.CSSProperties = {
-  padding: 16,
-  borderRadius: 14,
-  background: "#f9fafb",
-  border: "1px solid #e5e7eb",
+  padding: uiSpace.sm,
+  borderRadius: uiRadius.control,
+  background: uiColors.subtle,
+  border: `1px solid ${uiColors.border}`,
 }
 
 const labelStyle: React.CSSProperties = {
-  margin: "0 0 6px",
-  color: "#6b7280",
-  fontSize: 12,
-  fontWeight: 800,
+  margin: "0 0 4px",
+  color: uiColors.textSecondary,
+  fontSize: 11,
+  fontWeight: 700,
   textTransform: "uppercase",
-  letterSpacing: 0.5,
+  letterSpacing: "0.06em",
 }
 
 const valueStyle: React.CSSProperties = {
   margin: 0,
-  color: "#111827",
+  color: uiColors.textPrimary,
+  fontSize: 14,
   lineHeight: 1.5,
 }

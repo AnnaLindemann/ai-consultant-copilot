@@ -1,5 +1,6 @@
 import type { DiscoveryMessageId } from "../../shared/discovery-messages"
 import type { OpportunityMessageId } from "../../shared/opportunity-messages"
+import type { WorkbenchMessageId } from "../../shared/workbench-messages"
 
 // The German string catalogue — the MVP's single active locale
 // (architecture.md §7.1). Keys are named after what a string *is* (its surface
@@ -68,6 +69,57 @@ const opportunityServerMessages: Record<OpportunityMessageId, string> = {
     "Die Opportunity-Version konnte nicht gespeichert werden. Bitte erneut versuchen.",
   "opportunity.error.internal":
     "Unerwarteter Serverfehler. Die Opportunities wurden nicht verändert. Bitte erneut versuchen.",
+  "opportunity.message.versions_loaded": "Opportunity-Versionen geladen",
+  "opportunity.message.version_loaded": "Opportunity-Version geladen",
+}
+
+// The outcomes the Organization, Engagement, Assessment and Analysis endpoints
+// report. These endpoints predate the localization seam and answered in English
+// prose, which the workbench then displayed verbatim; the wording lives here
+// now and only the identifier travels.
+const workbenchServerMessages: Record<WorkbenchMessageId, string> = {
+  "organization.message.list_loaded": "Organisationen geladen",
+  "organization.message.loaded": "Organisation geladen",
+  "organization.message.created": "Organisation angelegt",
+  "organization.error.invalid_input":
+    "Die Angaben zur Organisation sind unvollständig oder ungültig. Ein Name wird benötigt.",
+  "organization.error.internal":
+    "Unerwarteter Serverfehler. Die Organisation wurde nicht verändert. Bitte erneut versuchen.",
+
+  "engagement.message.list_loaded": "Engagements geladen",
+  "engagement.message.loaded": "Engagement geladen",
+  "engagement.message.created": "Engagement eröffnet",
+  "engagement.message.saved": "Engagement gespeichert",
+  "engagement.error.invalid_input":
+    "Die Angaben zum Engagement sind unvollständig oder ungültig.",
+  "engagement.error.organization_not_found":
+    "Diese Organisation wurde nicht gefunden. Legen Sie die Organisation an, bevor Sie ein Engagement dafür eröffnen.",
+  "engagement.error.internal":
+    "Unerwarteter Serverfehler. Das Engagement wurde nicht verändert. Bitte erneut versuchen.",
+
+  "assessment.message.draft_generated":
+    "KI-Entwurf erstellt. Bitte prüfen, anpassen und speichern, bevor Sie damit weiterarbeiten.",
+  "assessment.message.saved": "Assessment gespeichert",
+  "assessment.error.invalid_input":
+    "Das Assessment ist unvollständig oder ungültig. Jedes Ergebnis braucht einen Titel, eine Erläuterung, eine Zuversicht und – je nach Grundlage – mindestens eine belegende Tatsache oder eine Annahme.",
+  "assessment.error.discovery_not_ready":
+    "Das Discovery-Profil ist leer. Halten Sie zuerst fest, was über die Kundenseite bekannt ist, bevor Sie ein Assessment erstellen.",
+  "assessment.error.consultant_edits_protected":
+    "Dieses Assessment enthält Ihre eigenen Änderungen. Ein erneuter Lauf würde sie ersetzen und braucht deshalb Ihre ausdrückliche Bestätigung.",
+  "assessment.error.ai_step_failed":
+    "Der KI-Anbieter war nicht erreichbar. Es wurde nichts verändert – bitte erneut versuchen.",
+  "assessment.error.ai_output_invalid":
+    "Die KI-Antwort war unbrauchbar. Es wurde kein Entwurf erstellt und nichts verändert.",
+  "assessment.error.internal":
+    "Unerwarteter Serverfehler. Das Assessment wurde nicht verändert. Bitte erneut versuchen.",
+
+  "analysis.message.completed": "Analyse abgeschlossen",
+  "analysis.error.output_invalid":
+    "Die KI-Antwort hat die Prüfung nicht bestanden. Es wurde kein Bericht erstellt.",
+  "analysis.error.failed":
+    "Die Analyse ist fehlgeschlagen. Es wurde nichts verändert – bitte erneut versuchen.",
+  "analysis.error.runs_not_loaded":
+    "Der Verlauf der KI-Läufe konnte nicht geladen werden.",
 }
 
 const uiMessages = {
@@ -78,10 +130,148 @@ const uiMessages = {
   "common.field.yes": "Ja",
   "common.field.no": "Nein",
   "common.action.remove": "Entfernen",
+  "common.error.label": "Fehler",
+  "common.field.none": "Keine.",
+  "common.field.pipe_hint": "Einträge mit senkrechtem Strich (|) trennen.",
+  "common.state.working": "Bitte warten …",
+  "common.state.saving": "Speichere …",
+  "common.state.saved": "Gespeichert",
+  "common.value.valid": "gültig",
+  "common.value.invalid": "ungültig",
   "common.currency.eur": "Euro",
   "common.currency.usd": "US-Dollar",
   "common.currency.gbp": "Britisches Pfund",
   "common.currency.other": "Andere Währung",
+
+  // --- workflow section chrome ------------------------------------------
+  "workflow.legend.title": "Status der Abschnitte",
+  "workflow.legend.intro":
+    "Die Abschnitte zeigen ihren Bearbeitungsstand mit Text und Symbol. Ein offener Abschnitt bleibt bearbeitbar, ein zurückgegebener Abschnitt fordert Handeln an.",
+  "workflow.nav.eyebrow": "Abschnittsnavigation",
+  "workflow.nav.discovery_title": "Discovery-Abschnitte",
+  "workflow.nav.assessment_title": "Assessment-Abschnitte",
+  "workflow.nav.opportunities_title": "Opportunity-Abschnitte",
+  "workflow.nav.knowledge_title": "Wissensabschnitte",
+  "workflow.status.not_started": "Noch nicht begonnen",
+  "workflow.status.in_progress": "Teilweise ausgefüllt",
+  "workflow.status.complete": "Vollständig",
+  "workflow.status.action_required": "Angaben erforderlich",
+  "workflow.status.action_required.returned": "Korrektur erforderlich",
+  "workflow.status.summary.not_started":
+    "Es wurden noch keine relevanten Angaben erfasst.",
+  "workflow.status.summary.in_progress":
+    "Es sind bereits Angaben vorhanden, der Abschnitt ist aber noch nicht vollständig.",
+  "workflow.status.summary.complete":
+    "Alle für diesen Abschnitt relevanten Angaben sind vorhanden.",
+  "workflow.status.summary.action_required":
+    "Pflichtangaben fehlen, sind ungültig oder wurden mit Anmerkungen zurückgegeben.",
+
+  // --- knowledge base ----------------------------------------------------
+  "knowledge.kind.business_domain": "Geschäftsdomäne",
+  "knowledge.kind.business_process": "Geschäftsprozess",
+  "knowledge.kind.business_problem": "Geschäftsproblem",
+  "knowledge.kind.customer_operations_taxonomy": "Customer-Operations-Taxonomie",
+  "knowledge.kind.discovery_question": "Discovery-Frage",
+  "knowledge.kind.assessment_framework": "Bewertungsrahmen",
+  "knowledge.kind.ai_readiness_criterion": "KI-Reifekriterium",
+  "knowledge.kind.ai_use_case": "KI-Use-Case",
+  "knowledge.kind.solution_pattern": "Lösungsmuster",
+  "knowledge.kind.implementation_pattern": "Implementierungsmuster",
+  "knowledge.kind.roi_model": "ROI-Modell",
+  "knowledge.kind.risk_model": "Risikomodell",
+  "knowledge.kind.best_practice": "Best Practice",
+  "knowledge.kind.follow_up_template": "Follow-up-Vorlage",
+
+  "knowledge.stage.discovery": "Discovery",
+  "knowledge.stage.assessment": "Assessment",
+  "knowledge.stage.prioritization": "Priorisierung",
+  "knowledge.stage.solution_matching": "Solution Matching",
+  "knowledge.stage.roadmap": "Roadmap",
+  "knowledge.stage.report": "Report",
+
+  "knowledge.guidance.eyebrow": "Consulting Knowledge Base",
+  "knowledge.guidance.title": "Kuratiertes Consulting-Wissen",
+  "knowledge.guidance.intro":
+    "Die Workbench blendet an dieser Stelle relevante Fragen, Bewertungsrahmen, Reifekriterien und bewährte Praktiken ein. Die Auswahl ist deterministisch und basiert auf dem aktuellen Engagement-Kontext.",
+  "knowledge.guidance.empty":
+    "Noch keine Wissensgrundlage verfügbar. Sobald der Kontext genügend Signale liefert, erscheinen hier kuratierte Einträge.",
+  "knowledge.guidance.fallback":
+    "Der Engagement-Kontext lieferte noch keinen Anker in der Taxonomie. Angezeigt wird die kuratierte Grundauswahl für diese Phase.",
+  "knowledge.guidance.section.count": "{count} Einträge",
+  "knowledge.guidance.section.empty": "Noch keine Einträge",
+
+  "knowledge.browser.eyebrow": "Kuratierte Consulting Knowledge Base",
+  "knowledge.browser.title": "Wissensbasis durchsuchen und kuratieren",
+  "knowledge.browser.intro":
+    "Durchsuchen Sie die kuratierten Einträge deterministisch oder pflegen Sie als Administrator neue Versionen mit sauberer Revisionierung.",
+  "knowledge.browser.new_entry": "Neuen Eintrag",
+  "knowledge.browser.filter.query": "Suche",
+  "knowledge.browser.filter.query_placeholder": "Titel, Zusammenfassung oder Code",
+  "knowledge.browser.filter.kind": "Typ",
+  "knowledge.browser.filter.stage": "Phase",
+  "knowledge.browser.filter.include_inactive": "Inaktive einbeziehen",
+  "knowledge.browser.filters": "Suche und Filter",
+  "knowledge.browser.search": "Suchen",
+  "knowledge.browser.searching": "Suche …",
+  "knowledge.browser.loading": "Lade Wissenseinträge …",
+  "knowledge.browser.empty": "Keine Einträge gefunden.",
+  "knowledge.browser.error": "Die Wissensbasis konnte nicht geladen werden.",
+  "knowledge.browser.access_denied":
+    "Für diese Wissensbasis ist keine Berechtigung vorhanden.",
+  "knowledge.browser.validation":
+    "Der Eintrag ist unvollständig oder ungültig. Prüfen Sie Code, Titel, Zusammenfassung und die strukturierten Listen.",
+  "knowledge.browser.conflict":
+    "Diese Fassung ist veraltet. Laden Sie die aktuelle Revision und versuchen Sie es erneut.",
+  "knowledge.browser.saved": "Eintrag gespeichert",
+  "knowledge.browser.save": "Speichern",
+  "knowledge.browser.reset": "Zurücksetzen",
+  "knowledge.browser.read_only":
+    "Die Wissensbasis ist hier lesbar. Kuratieren ist der Administratorenrolle vorbehalten.",
+  "knowledge.browser.saving": "Speichere …",
+  "knowledge.browser.results": "Treffer",
+  "knowledge.browser.editor.title": "Eintrag bearbeiten",
+  "knowledge.browser.editor.code": "Code",
+  "knowledge.browser.editor.kind": "Typ",
+  "knowledge.browser.editor.title_field": "Titel",
+  "knowledge.browser.editor.summary": "Zusammenfassung",
+  "knowledge.browser.editor.tags": "Tags (schwaches Zusatzsignal)",
+  "knowledge.browser.editor.match_terms": "Erkennungsbegriffe",
+  "knowledge.browser.editor.taxonomy_codes": "Taxonomie-Codes",
+  "knowledge.browser.editor.process_codes": "Prozess-Codes",
+  "knowledge.browser.editor.problem_codes": "Problem-Codes",
+  "knowledge.browser.editor.use_case_codes": "Use-Case-Codes",
+  "knowledge.browser.editor.related_codes": "Weitere verknüpfte Codes",
+  "knowledge.browser.editor.sort_order": "Sortierung",
+  "knowledge.browser.editor.stage_scopes": "Phasen",
+  "knowledge.browser.editor.revision": "Revision",
+  "knowledge.browser.editor.objective": "Zweck",
+  "knowledge.browser.editor.applicability": "Anwendbarkeit",
+  "knowledge.browser.editor.questions": "Fragen",
+  "knowledge.browser.editor.criteria": "Kriterien",
+  "knowledge.browser.editor.signals": "Signale",
+  "knowledge.browser.editor.steps": "Schritte",
+  "knowledge.browser.editor.risks": "Risiken",
+  "knowledge.browser.editor.mitigations": "Gegenmaßnahmen",
+  "knowledge.browser.editor.roi_drivers": "ROI-Treiber",
+  "knowledge.browser.editor.best_practices": "Best Practices",
+  "knowledge.browser.editor.notes": "Notizen",
+  "knowledge.browser.editor.active": "Aktiv",
+
+  // Outcomes the server reports by identifier (coding-standards.md §12A).
+  "knowledge.message.loaded": "Wissensbasis geladen",
+  "knowledge.message.saved": "Eintrag angelegt",
+  "knowledge.message.updated": "Eintrag aktualisiert",
+  "knowledge.error.invalid_input":
+    "Der Eintrag ist unvollständig oder ungültig. Prüfen Sie Code, Titel, Zusammenfassung und die strukturierten Listen.",
+  "knowledge.error.invalid_relationship":
+    "Mindestens eine Verknüpfung zeigt auf einen unbekannten Code oder auf die falsche Wissensart.",
+  "knowledge.error.duplicate_code": "Dieser Code ist bereits vergeben.",
+  "knowledge.error.not_found": "Der Eintrag wurde nicht gefunden.",
+  "knowledge.error.conflict":
+    "Diese Fassung ist veraltet. Laden Sie die aktuelle Revision und versuchen Sie es erneut.",
+  "knowledge.error.access_denied":
+    "Für diese Wissensbasis ist keine Berechtigung vorhanden.",
+  "knowledge.error.internal": "Die Wissensbasis konnte nicht geladen werden.",
 
   // --- internal identifiers, rendered for reading -------------------------
   "discovery.actor.consultant": "Consultant",
@@ -182,14 +372,329 @@ const uiMessages = {
   "discovery.severity.high": "Hoch",
 
   // --- editor header (Phase 2 Extension) ----------------------------------
-  "discovery.editor.intro":
-    "Halten Sie fest, was über den Kundenbetrieb bekannt ist, beziffern Sie, was das Problem heute kostet und wie Erfolg aussehen würde, und führen Sie jede offene Lücke ausdrücklich auf. Kehren Sie zu diesem Profil zurück, sobald die Kundenseite bessere Informationen liefert.",
-  "discovery.editor.eyebrow": "Phase 2 · Client Discovery",
-  "discovery.editor.title": "Discovery-Profil",
   "discovery.editor.contributor.label": "Erfasst von",
-  "discovery.editor.save": "Discovery-Profil speichern",
   "discovery.editor.saving": "Speichere …",
   "discovery.editor.save_failed": "Das Discovery-Profil konnte nicht gespeichert werden.",
+
+  // --- the consultant's Discovery workspace -------------------------------
+  "discovery.workspace.title": "Discovery – Kundendaten & Situation",
+  "discovery.workspace.intro":
+    "Erfassen Sie die relevanten Informationen über das Unternehmen, die aktuellen Prozesse, die Herausforderungen und die Ziele.",
+  "discovery.workspace.action.save_draft": "Entwurf speichern",
+  "discovery.workspace.contributor.field": "Erfasst von",
+  "discovery.workspace.next_step.title": "Nächster empfohlener Schritt",
+  "discovery.workspace.next_step.hint":
+    "Vervollständigen Sie die offenen Angaben im Abschnitt „{section}“.",
+  "discovery.workspace.next_step.action": "Abschnitt öffnen",
+  "discovery.workspace.next_step.done":
+    "Alle Abschnitte sind vollständig erfasst.",
+
+  // --- field guidance: chrome ---------------------------------------------
+  "discovery.guidance.explain": "Erklärung anzeigen",
+  "discovery.guidance.explain_close": "Erklärung schließen",
+  "discovery.guidance.consultant_context": "Verwendung im weiteren Verlauf",
+  "discovery.guidance.examples.show": "Beispiele anzeigen",
+  "discovery.guidance.examples.title": "Beispiele",
+  "discovery.guidance.suggestions.open": "Vorschlag auswählen",
+  "discovery.guidance.suggestions.close": "Vorschläge schließen",
+  "discovery.guidance.suggestions.metric_open": "Kennzahl auswählen",
+  "discovery.guidance.suggestions.example_open": "Beispiel auswählen",
+  "discovery.guidance.suggestions.custom_label": "Eigene Angabe",
+  "discovery.guidance.suggestions.custom_placeholder":
+    "Eigene Angabe eingeben und hinzufügen",
+  "discovery.guidance.suggestions.custom_add": "Hinzufügen",
+  "discovery.guidance.suggestions.other": "Sonstiges – frei formulieren",
+  "discovery.guidance.suggestions.selected": "Ausgewählt",
+  "discovery.guidance.suggestions.remove": "„{item}“ entfernen",
+  "discovery.guidance.suggestions.empty": "Noch nichts ausgewählt.",
+  "discovery.guidance.unknown.toggle": "Ich weiß es noch nicht",
+  "discovery.guidance.unknown.client":
+    "Diese Angabe kann später gemeinsam mit Ihrer Ansprechperson geklärt werden.",
+  "discovery.guidance.unknown.consultant": "Klärung mit dem Kunden erforderlich",
+  "discovery.guidance.unknown.gap": "Noch offen: {field}",
+
+  // --- field guidance: Kundensituation & Betrieb ---------------------------
+  "discovery.help.department.client":
+    "Nennen Sie den Bereich oder die Funktion, um die es geht. So ist klar, welcher Teil des Unternehmens betrachtet wird.",
+  "discovery.help.department.example.1": "Kundensupport für Bestandskunden",
+  "discovery.help.department.example.2": "Auftragsabwicklung im Innendienst",
+  "discovery.help.affected_users.client":
+    "Wer arbeitet heute in diesem Ablauf oder ist davon betroffen? Rollen genügen, Namen sind nicht nötig.",
+  "discovery.help.affected_users.consultant":
+    "Diese Angabe wird später für die Bewertung von Aufwand, Betroffenheit und Change-Bedarf verwendet.",
+  "discovery.help.notes.client":
+    "Alles, was zum Verständnis der Situation hilft und in keine andere Frage passt.",
+
+  // --- field guidance: Probleme & Auswirkungen -----------------------------
+  "discovery.help.stated_problem.client":
+    "Beschreiben Sie in eigenen Worten, was heute nicht gut funktioniert. Eine ungefähre Beschreibung genügt.",
+  "discovery.help.stated_problem.consultant":
+    "Diese Angabe ist der Ausgangspunkt für Bewertung, Priorisierung und Empfehlungen.",
+  "discovery.help.stated_problem.example.1":
+    "Anfragen bleiben liegen, weil niemand eindeutig zuständig ist.",
+  "discovery.help.stated_problem.example.2":
+    "Dieselben Daten werden in zwei Systemen erfasst.",
+  "discovery.help.pain_points.client":
+    "Welche Schwierigkeiten treten dabei konkret auf? Wählen Sie passende Punkte aus oder ergänzen Sie eigene.",
+  "discovery.help.business_impact.client":
+    "Was kostet die Situation heute – an Zeit, Geld, Qualität oder Zufriedenheit? Eine grobe Einschätzung reicht.",
+  "discovery.help.business_impact.consultant":
+    "Diese Angabe wird später für Priorisierung und Nutzenabschätzung verwendet; Zahlen dazu gehören in die Wert- und Messbasis.",
+  "discovery.help.business_impact.example.1":
+    "Pro Woche entstehen etwa vier Stunden Nacharbeit im Team.",
+
+  // --- field guidance: Aktueller Prozess -----------------------------------
+  "discovery.help.current_process.client":
+    "Beschreiben Sie den Ablauf von Anfang bis Ende: Wodurch wird er ausgelöst, wer macht was, wo wird entschieden, wann ist er fertig?",
+  "discovery.help.current_process.consultant":
+    "Der Ist-Ablauf ist die Grundlage für die Prozessbewertung und für die Frage, welche Schritte überhaupt automatisierbar sind.",
+  "discovery.help.current_process.example.1":
+    "Auslöser, Zuständigkeit, Schritte, Entscheidungspunkte, Übergaben, Ausnahmen, Ergebnis.",
+  "discovery.help.current_process.example.2":
+    "Eine Anfrage geht per E-Mail ein, wird manuell einem Team zugeordnet, dort geprüft und beantwortet.",
+  "discovery.help.process_steps.client":
+    "Die einzelnen Schritte in der Reihenfolge, in der sie tatsächlich passieren.",
+  "discovery.help.bottlenecks.client":
+    "An welchen Stellen bleibt die Arbeit liegen oder wird sie besonders aufwendig?",
+  "discovery.help.bottlenecks.consultant":
+    "Engpässe zeigen, wo eine Verbesserung den größten Hebel hätte; sie fließen in die Priorisierung ein.",
+
+  // --- field guidance: Werkzeuge & Kanäle ----------------------------------
+  "discovery.help.current_tools.client":
+    "Welche Systeme werden in diesem Ablauf genutzt? Beschreiben Sie die Art des Systems oder nennen Sie das eingesetzte Produkt.",
+  "discovery.help.current_tools.consultant":
+    "Die Systemlandschaft bestimmt später, welche Lösungswege und Integrationen realistisch sind.",
+  "discovery.help.communication_channels.client":
+    "Über welche Wege kommen Anfragen herein oder werden Antworten verschickt?",
+  "discovery.help.integration_needs.client":
+    "Welche Systeme müssten zusammenarbeiten, damit eine Verbesserung wirklich hilft?",
+  "discovery.help.integration_needs.consultant":
+    "Integrationsbedarf beeinflusst Aufwand, Risiko und die technische Machbarkeit einer Empfehlung.",
+
+  // --- field guidance: Daten -----------------------------------------------
+  "discovery.help.data_types.client":
+    "Welche Art von Informationen fällt in diesem Ablauf an?",
+  "discovery.help.data_types.consultant":
+    "Art, Qualität und Zugänglichkeit der Daten bestimmen die KI-Reife dieses Anwendungsfalls.",
+  "discovery.help.data_locations.client":
+    "Wo liegen diese Informationen heute?",
+  "discovery.help.sensitive_data_types.client":
+    "Welche besonders schützenswerten Angaben sind betroffen, zum Beispiel Personen-, Gesundheits- oder Zahlungsdaten?",
+  "discovery.help.sensitive_data_types.consultant":
+    "Diese Angabe wird für die Risikobetrachtung und für datenschutzrechtliche Voraussetzungen benötigt.",
+
+  // --- field guidance: Rahmenbedingungen -----------------------------------
+  "discovery.help.technical_constraints.client":
+    "Was muss auf jeden Fall berücksichtigt werden – rechtlich, organisatorisch oder technisch?",
+  "discovery.help.technical_constraints.consultant":
+    "Rahmenbedingungen begrenzen den Lösungsraum und gehören zu den Voraussetzungen einer Empfehlung.",
+  "discovery.help.budget_notes.client":
+    "Alles zum finanziellen Rahmen, was hilfreich ist – auch wenn noch keine Summe feststeht.",
+
+  // --- field guidance: Ziele & Erfolg --------------------------------------
+  "discovery.help.desired_outcome.client":
+    "Beschreiben Sie, was sich nach der Verbesserung konkret ändern soll.",
+  "discovery.help.desired_outcome.consultant":
+    "Der gewünschte Soll-Zustand wird später für Bewertung, Priorisierung und Empfehlungen verwendet.",
+  "discovery.help.desired_outcome.example.1":
+    "Die Bearbeitungszeit für Support-Anfragen soll verkürzt werden.",
+  "discovery.help.desired_outcome.example.2":
+    "Manuelle Arbeitsschritte sollen deutlich reduziert werden.",
+  "discovery.help.desired_outcome.example.3":
+    "Anfragen sollen schneller dem richtigen Team zugeordnet werden.",
+  "discovery.help.success_metrics.client":
+    "Woran erkennen Sie später, dass die Verbesserung erfolgreich war? Wählen Sie die Kennzahlen aus, die zu Ihrer Situation passen.",
+  "discovery.help.success_metrics.consultant":
+    "Hier wird nur benannt, was gemessen wird. Der heutige Wert und der Zielwert gehören in die Wert- und Messbasis und werden für die Erfolgskontrolle verwendet.",
+  "discovery.help.mvp_scope.client":
+    "Womit sollte sinnvollerweise begonnen werden, wenn nicht alles auf einmal geht?",
+  "discovery.help.mvp_scope.consultant":
+    "Ein klarer erster Schritt erleichtert später den Zuschnitt von Roadmap und Angebot.",
+
+  // --- Ziele & Erfolg: the target value, shown here, edited in the baseline --
+  "discovery.goals.target.title": "Welcher Zielwert wäre erfolgreich?",
+  "discovery.goals.target.hint":
+    "Der Zielwert gehört zur jeweiligen Kennzahl: Was müsste die Kennzahl erreichen, damit die Verbesserung gelungen ist?",
+  "discovery.goals.target.consultant":
+    "Zielwerte und heutige Ausgangswerte werden in der Wert- und Messbasis mit Messmethode und Datenquelle erfasst und später für die Erfolgskontrolle verwendet.",
+  "discovery.goals.target.empty":
+    "Wählen Sie zuerst eine Erfolgskennzahl aus.",
+  "discovery.goals.target.none": "Noch kein Zielwert erfasst",
+  "discovery.goals.target.value": "Zielwert: {value}",
+  "discovery.goals.target.baseline": "Heute: {value}",
+  "discovery.goals.target.action": "Zielwerte in der Wert- und Messbasis erfassen",
+
+  // --- suggestion groups ---------------------------------------------------
+  "discovery.suggestion.group.role": "Rollen und Teams",
+  "discovery.suggestion.group.problem": "Häufige Schwierigkeiten",
+  "discovery.suggestion.group.impact": "Häufige Auswirkungen",
+  "discovery.suggestion.group.process_step": "Typische Prozessschritte",
+  "discovery.suggestion.group.bottleneck": "Typische Engpässe",
+  "discovery.suggestion.group.tool": "Systemarten",
+  "discovery.suggestion.group.channel": "Kanäle",
+  "discovery.suggestion.group.data_type": "Informationsarten",
+  "discovery.suggestion.group.data_location": "Ablageorte",
+  "discovery.suggestion.group.constraint": "Rahmenbedingungen",
+  "discovery.suggestion.group.outcome": "Mögliche Ziele",
+  "discovery.suggestion.group.metric": "Mögliche Kennzahlen",
+
+  // --- suggestions: desired outcome ----------------------------------------
+  "discovery.suggestion.outcome.shorten_processing_time":
+    "Bearbeitungszeit verkürzen",
+  "discovery.suggestion.outcome.shorten_processing_time.insert":
+    "Die Bearbeitungszeit soll spürbar verkürzt werden.",
+  "discovery.suggestion.outcome.shorten_response_time": "Reaktionszeit verkürzen",
+  "discovery.suggestion.outcome.shorten_response_time.insert":
+    "Auf Anfragen soll schneller reagiert werden.",
+  "discovery.suggestion.outcome.reduce_error_rate": "Fehlerquote reduzieren",
+  "discovery.suggestion.outcome.reduce_error_rate.insert":
+    "Fehler in der Bearbeitung sollen seltener auftreten.",
+  "discovery.suggestion.outcome.relieve_staff": "Mitarbeitende entlasten",
+  "discovery.suggestion.outcome.relieve_staff.insert":
+    "Das Team soll von wiederkehrender Routinearbeit entlastet werden.",
+  "discovery.suggestion.outcome.raise_customer_satisfaction":
+    "Kundenzufriedenheit erhöhen",
+  "discovery.suggestion.outcome.raise_customer_satisfaction.insert":
+    "Die Zufriedenheit der Kundschaft mit dem Ablauf soll steigen.",
+  "discovery.suggestion.outcome.reduce_cost": "Kosten senken",
+  "discovery.suggestion.outcome.reduce_cost.insert":
+    "Die Kosten pro Vorgang sollen sinken.",
+  "discovery.suggestion.outcome.improve_transparency": "Transparenz verbessern",
+  "discovery.suggestion.outcome.improve_transparency.insert":
+    "Der Stand eines Vorgangs soll jederzeit nachvollziehbar sein.",
+  "discovery.suggestion.outcome.reduce_manual_work": "Manuelle Arbeit reduzieren",
+  "discovery.suggestion.outcome.reduce_manual_work.insert":
+    "Manuelle Arbeitsschritte sollen deutlich reduziert werden.",
+  "discovery.suggestion.outcome.raise_revenue": "Umsatz oder Conversion erhöhen",
+  "discovery.suggestion.outcome.raise_revenue.insert":
+    "Mehr Anfragen sollen zu einem erfolgreichen Abschluss führen.",
+  "discovery.suggestion.outcome.improve_compliance": "Compliance verbessern",
+  "discovery.suggestion.outcome.improve_compliance.insert":
+    "Vorgaben sollen zuverlässiger eingehalten und nachweisbar dokumentiert werden.",
+
+  // --- suggestions: success metrics ----------------------------------------
+  "discovery.suggestion.metric.processing_time": "Bearbeitungszeit",
+  "discovery.suggestion.metric.processing_time.description":
+    "Zeit vom Eingang eines Vorgangs bis zu seinem Abschluss.",
+  "discovery.suggestion.metric.first_response_time": "Erstantwortzeit",
+  "discovery.suggestion.metric.first_response_time.description":
+    "Zeit zwischen Eingang einer Anfrage und der ersten Antwort.",
+  "discovery.suggestion.metric.resolution_rate": "Lösungsquote",
+  "discovery.suggestion.metric.resolution_rate.description":
+    "Anteil der Fälle, die erfolgreich abgeschlossen werden.",
+  "discovery.suggestion.metric.error_rate": "Fehlerquote",
+  "discovery.suggestion.metric.error_rate.description":
+    "Anteil der Vorgänge, bei denen ein Fehler auftritt oder nachgearbeitet werden muss.",
+  "discovery.suggestion.metric.manual_steps": "Anzahl manueller Schritte",
+  "discovery.suggestion.metric.manual_steps.description":
+    "Wie viele Arbeitsschritte pro Vorgang von Hand erledigt werden.",
+  "discovery.suggestion.metric.cost_per_case": "Kosten pro Vorgang",
+  "discovery.suggestion.metric.cost_per_case.description":
+    "Durchschnittliche Kosten für die Bearbeitung eines einzelnen Vorgangs.",
+  "discovery.suggestion.metric.customer_satisfaction": "Kundenzufriedenheit",
+  "discovery.suggestion.metric.customer_satisfaction.description":
+    "Bewertung der Zufriedenheit nach einem Kontakt oder Vorgang.",
+  "discovery.suggestion.metric.staff_effort": "Mitarbeiteraufwand",
+  "discovery.suggestion.metric.staff_effort.description":
+    "Arbeitszeit, die das Team für diesen Ablauf aufwendet.",
+  "discovery.suggestion.metric.escalations": "Anzahl Eskalationen",
+  "discovery.suggestion.metric.escalations.description":
+    "Wie oft ein Vorgang an eine höhere Stelle abgegeben werden muss.",
+  "discovery.suggestion.metric.revenue": "Umsatz",
+  "discovery.suggestion.metric.revenue.description":
+    "Erlös, der mit diesem Ablauf zusammenhängt.",
+  "discovery.suggestion.metric.conversion_rate": "Abschlussquote",
+  "discovery.suggestion.metric.conversion_rate.description":
+    "Anteil der Anfragen, die zu einem Abschluss führen.",
+
+  // --- suggestions: problems and impact ------------------------------------
+  "discovery.suggestion.problem.manual_effort": "Hoher manueller Aufwand",
+  "discovery.suggestion.problem.processing_time": "Lange Bearbeitungszeit",
+  "discovery.suggestion.problem.frequent_errors": "Häufige Fehler",
+  "discovery.suggestion.problem.duplicate_entry": "Doppelte Datenerfassung",
+  "discovery.suggestion.problem.no_transparency": "Fehlende Transparenz",
+  "discovery.suggestion.problem.delayed_response": "Verzögerte Rückmeldungen",
+  "discovery.suggestion.problem.hard_prioritization": "Schwierige Priorisierung",
+  "discovery.suggestion.problem.key_person_risk":
+    "Wissen hängt an einzelnen Personen",
+  "discovery.suggestion.impact.extra_cost": "Zusätzliche Kosten",
+  "discovery.suggestion.impact.extra_cost.insert":
+    "Durch die Situation entstehen zusätzliche Kosten.",
+  "discovery.suggestion.impact.customer_dissatisfaction": "Unzufriedene Kundschaft",
+  "discovery.suggestion.impact.customer_dissatisfaction.insert":
+    "Die Kundschaft ist mit der aktuellen Bearbeitung unzufrieden.",
+  "discovery.suggestion.impact.staff_overload": "Überlastung im Team",
+  "discovery.suggestion.impact.staff_overload.insert":
+    "Das Team ist durch die aktuelle Arbeitsweise überlastet.",
+  "discovery.suggestion.impact.lost_revenue": "Entgangener Umsatz",
+  "discovery.suggestion.impact.lost_revenue.insert":
+    "Es geht Umsatz verloren, weil Vorgänge zu lange dauern oder liegen bleiben.",
+  "discovery.suggestion.impact.compliance_risk": "Compliance-Risiko",
+  "discovery.suggestion.impact.compliance_risk.insert":
+    "Vorgaben lassen sich derzeit nicht zuverlässig einhalten oder nachweisen.",
+  "discovery.suggestion.impact.poor_data_quality": "Schlechte Datenqualität",
+  "discovery.suggestion.impact.poor_data_quality.insert":
+    "Die erfassten Daten sind unvollständig oder widersprüchlich.",
+  "discovery.suggestion.impact.delayed_decisions": "Verzögerte Entscheidungen",
+  "discovery.suggestion.impact.delayed_decisions.insert":
+    "Entscheidungen verzögern sich, weil Informationen fehlen.",
+
+  // --- suggestions: roles, process, bottlenecks ----------------------------
+  "discovery.suggestion.role.service_team": "Kundenservice",
+  "discovery.suggestion.role.sales": "Vertrieb",
+  "discovery.suggestion.role.back_office": "Innendienst / Backoffice",
+  "discovery.suggestion.role.team_lead": "Teamleitung",
+  "discovery.suggestion.role.it": "IT",
+  "discovery.suggestion.role.management": "Geschäftsleitung",
+  "discovery.suggestion.role.customers": "Kundschaft",
+  "discovery.suggestion.process_step.intake": "Eingang der Anfrage",
+  "discovery.suggestion.process_step.triage": "Zuordnung und Einstufung",
+  "discovery.suggestion.process_step.research": "Recherche und Prüfung",
+  "discovery.suggestion.process_step.decision": "Entscheidung",
+  "discovery.suggestion.process_step.handover": "Übergabe an ein anderes Team",
+  "discovery.suggestion.process_step.approval": "Freigabe",
+  "discovery.suggestion.process_step.documentation": "Dokumentation",
+  "discovery.suggestion.process_step.closing": "Abschluss und Rückmeldung",
+  "discovery.suggestion.bottleneck.waiting_for_approval": "Warten auf Freigaben",
+  "discovery.suggestion.bottleneck.media_break":
+    "Wechsel zwischen Systemen und Medien",
+  "discovery.suggestion.bottleneck.manual_research": "Manuelles Zusammensuchen",
+  "discovery.suggestion.bottleneck.unclear_ownership": "Unklare Zuständigkeit",
+  "discovery.suggestion.bottleneck.peak_load": "Belastungsspitzen",
+  "discovery.suggestion.bottleneck.missing_information": "Fehlende Angaben",
+
+  // --- suggestions: tools, channels, data, constraints ---------------------
+  "discovery.suggestion.tool.crm": "CRM-System",
+  "discovery.suggestion.tool.erp": "ERP-System",
+  "discovery.suggestion.tool.ticket_system": "Ticketsystem",
+  "discovery.suggestion.tool.spreadsheets": "Tabellen",
+  "discovery.suggestion.tool.shared_drive": "Gemeinsames Laufwerk",
+  "discovery.suggestion.tool.paper": "Papier und manuelle Unterlagen",
+  "discovery.suggestion.channel.email": "E-Mail",
+  "discovery.suggestion.channel.telephone": "Telefon",
+  "discovery.suggestion.channel.chat": "Chat",
+  "discovery.suggestion.channel.web_form": "Web-Formular",
+  "discovery.suggestion.channel.portal": "Kundenportal",
+  "discovery.suggestion.channel.in_person": "Persönlicher Kontakt",
+  "discovery.suggestion.data_type.customer_records": "Kundendaten",
+  "discovery.suggestion.data_type.tickets": "Tickets und Vorgänge",
+  "discovery.suggestion.data_type.emails": "E-Mails",
+  "discovery.suggestion.data_type.documents": "Dokumente",
+  "discovery.suggestion.data_type.orders": "Aufträge und Bestellungen",
+  "discovery.suggestion.data_type.call_notes": "Gesprächsnotizen",
+  "discovery.suggestion.data_location.crm": "Im CRM-System",
+  "discovery.suggestion.data_location.erp": "Im ERP-System",
+  "discovery.suggestion.data_location.mailbox": "In Postfächern",
+  "discovery.suggestion.data_location.file_share": "Auf einem Laufwerk",
+  "discovery.suggestion.data_location.spreadsheets": "In Tabellen",
+  "discovery.suggestion.data_location.paper_archive": "In Papierablagen",
+  "discovery.suggestion.constraint.data_protection": "Datenschutz",
+  "discovery.suggestion.constraint.it_security": "IT-Sicherheit",
+  "discovery.suggestion.constraint.legal": "Rechtliche Vorgaben",
+  "discovery.suggestion.constraint.internal_capacity": "Begrenzte interne Kapazität",
+  "discovery.suggestion.constraint.integrations": "Notwendige Integrationen",
+  "discovery.suggestion.constraint.change_management":
+    "Begrenzte Veränderungsbereitschaft",
 
   "discovery.profile.department": "Abteilung / Funktion",
   "discovery.profile.department_placeholder": "Zum Beispiel: Kundensupport",
@@ -466,6 +971,13 @@ const uiMessages = {
     "Dieser Discovery-Zugang wurde nicht gefunden.",
 
   // --- Client Discovery Portal (Phase 3A) ---------------------------------
+  // The Client Portal's own frame. Its navigation names only the client
+  // surfaces that exist; an entry for an unbuilt page would be a promise the
+  // product cannot keep (UI-KIT §6.2, §7.1).
+  "portal.shell.brand": "Kundenportal",
+  "portal.shell.nav_aria_label": "Portalnavigation",
+  "portal.shell.nav.discovery": "Discovery",
+
   "portal.eyebrow": "Client Discovery Portal",
   "portal.title": "Discovery-Profil",
   "portal.subtitle":
@@ -500,7 +1012,7 @@ const uiMessages = {
   "opportunity.review_state.consultant_edited": "Von Ihnen bearbeitet",
   "opportunity.review_state.accepted": "Von Ihnen angenommen",
 
-  "opportunity.eyebrow": "Phase 4 · Priorisierung",
+  "opportunity.eyebrow": "Priorisierung",
   "opportunity.title": "Opportunities",
   "opportunity.intro":
     "Aus dem Assessment abgeleitete Verbesserungskandidaten, gewichtet nach Nutzen, Aufwand, Wirkung und Zuversicht, gegen die KI-Reife qualifiziert und gegeneinander priorisiert. Der Entwurf gehört Ihnen: bearbeiten, umsortieren, verwerfen oder annehmen.",
@@ -538,6 +1050,7 @@ const uiMessages = {
   "opportunity.field.effort": "Aufwand",
   "opportunity.field.impact": "Wirkung",
   "opportunity.field.confidence": "Zuversicht",
+  "opportunity.confidence_badge": "Zuversicht: {level}",
   "opportunity.field.priority_rationale": "Begründung des Rangs",
   "opportunity.field.assumptions": "Annahmen",
   "opportunity.field.source_findings": "Belegende Assessment-Ergebnisse",
@@ -579,6 +1092,271 @@ const uiMessages = {
     "Was müsste bekannt sein, um die Reihenfolge sicher zu beurteilen?",
   "opportunity.gaps.add": "Offene Frage hinzufügen",
 
+  // --- the document itself ------------------------------------------------
+  // The browser tab and the description a link preview shows are read like any
+  // other string, so they are looked up like any other string.
+  "app.title": "AI Consulting Workbench",
+  "app.description":
+    "Mehrbenutzer-Arbeitsbereich für Discovery und Engagements",
+
+  // The address that does not exist. It says nothing about what does: which
+  // engagement identifiers are real is not something an unknown URL reveals.
+  "not_found.title": "Seite nicht gefunden",
+  "not_found.hint":
+    "Diese Adresse gibt es nicht – oder sie gehört zu einem Bereich, für den Sie nicht freigeschaltet sind.",
+  "not_found.action": "Zur Startseite",
+
+  "shell.brand.eyebrow": "AI Consulting Workbench",
+  "shell.brand.title": "AI Consulting Workbench",
+  "shell.nav.aria_label": "Primäre Navigation",
+  "shell.group.work": "Arbeit",
+  "shell.group.knowledge": "Wissen",
+  "shell.nav.new_engagement": "Neues Engagement",
+  "shell.nav.engagements": "Engagements",
+  "shell.nav.knowledge_base": "Consulting Knowledge Base",
+  "shell.breadcrumbs.aria_label": "Navigationspfad",
+  "shell.user.unknown": "Unbekannt",
+  "shell.user.role.unknown": "Rolle unbekannt",
+  "shell.user.role.manager": "Manager",
+  "shell.user.role.admin": "Administrator",
+  "shell.user.role.client": "Client",
+
+  "workflow.progress.title": "Gesamtfortschritt",
+  "workflow.progress.complete": "Vollständig",
+  "workflow.progress.partial": "Teilweise ausgefüllt",
+  "workflow.progress.not_started": "Nicht begonnen",
+  "workflow.progress.action_required": "Angaben erforderlich",
+  "workflow.progress.summary": "{completed} von {total} Abschnitten vollständig",
+
+  // --- the methodology stage an engagement stands at ----------------------
+  // The stage identifiers are the backend's own enum and stay English on the
+  // wire and in storage; only their rendering is German.
+  "engagement.stage.discovery": "Discovery",
+  "engagement.stage.assessment": "Assessment",
+  "engagement.stage.prioritization": "Priorisierung",
+  "engagement.stage.solution_matching": "Solution Matching",
+  "engagement.stage.roadmap": "Roadmap",
+  "engagement.stage.report": "Report",
+
+  "engagement.stage.label": "Aktuelle Phase",
+  "engagement.stage.save_failed": "Die Phase konnte nicht gespeichert werden.",
+
+  // --- opening an organization and an engagement (roadmap Phase 1) ---------
+  "home.eyebrow": "AI Consulting Workbench",
+  "home.title": "Ein Engagement für eine Kundenorganisation eröffnen",
+  "home.intro":
+    "Legen Sie eine Organisation an, eröffnen Sie ein Engagement dafür und nehmen Sie diese Arbeit jederzeit wieder auf. Discovery-Angaben sind hier optional und können später ergänzt werden.",
+  "home.link.engagements": "Alle Engagements ansehen",
+
+  // The three steps are one process, not three unrelated screens: each step
+  // becomes available only once the one before it has produced its result.
+  "home.step.marker": "Schritt {number} von {total}",
+  "home.step.state.open": "Offen",
+  "home.step.state.done": "Abgeschlossen",
+  "home.step.state.locked": "Noch nicht verfügbar",
+  "home.step.locked.needs_organization":
+    "Verfügbar, sobald Schritt 1 eine Organisation angelegt hat.",
+  "home.step.locked.needs_engagement":
+    "Verfügbar, sobald Schritt 2 ein Engagement eröffnet hat.",
+
+  "home.organization.title": "1. Organisation anlegen",
+  "home.organization.intro":
+    "Das Kundenunternehmen, unter dem seine Engagements zusammenlaufen.",
+  "home.organization.name": "Name der Organisation",
+  "home.organization.name_placeholder": "Zum Beispiel: Demo Hotel GmbH",
+  "home.organization.industry": "Branche (optional)",
+  "home.organization.industry_placeholder": "Zum Beispiel: Gastgewerbe",
+  "home.organization.company_size": "Unternehmensgröße (optional)",
+  "home.organization.submit": "Organisation anlegen",
+  "home.organization.ready": "Organisation bereit: {name}",
+  "home.organization.required":
+    "Legen Sie zuerst eine Organisation an.",
+
+  // The company-size identifiers are the backend's enum values; only their
+  // presentation is German.
+  "organization.company_size.solo": "Einzelperson",
+  "organization.company_size.micro": "Kleinstunternehmen",
+  "organization.company_size.small": "Kleinunternehmen",
+  "organization.company_size.medium": "Mittelstand",
+  "organization.company_size.large": "Großunternehmen",
+  "organization.company_size.enterprise": "Konzern",
+
+  "home.engagement.title": "2. Engagement eröffnen",
+  "home.engagement.intro":
+    "Ein vollständiges Beratungsvorhaben für {organization}. Alle Felder sind optional – ein leeres Engagement ist ein gültiger Ausgangspunkt.",
+  "home.engagement.organization_fallback": "die Organisation",
+  "home.engagement.title_field": "Titel des Engagements (optional)",
+  "home.engagement.title_placeholder":
+    "Zum Beispiel: Prüfung der Support-Automatisierung",
+  "home.engagement.stated_problem": "Beschriebenes Problem (optional)",
+  "home.engagement.stated_problem_placeholder":
+    "Welches Problem hat die Kundenseite beschrieben?",
+  "home.engagement.current_process": "Aktueller Prozess (optional)",
+  "home.engagement.current_process_placeholder": "Wie läuft die Arbeit heute ab?",
+  "home.engagement.desired_outcome": "Gewünschtes Ergebnis (optional)",
+  "home.engagement.desired_outcome_placeholder":
+    "Was soll sich durch die KI-Lösung verbessern?",
+  "home.engagement.sensitive_data": "Sensible Daten betroffen",
+  "home.engagement.gdpr_concerns": "DSGVO-Bedenken",
+  "home.engagement.submit": "Engagement eröffnen",
+  "home.engagement.opened": "Engagement eröffnet",
+  "home.engagement.opened_stage": "Phase: {stage}",
+  "home.engagement.open_workspace": "Arbeitsbereich des Engagements öffnen",
+  "home.engagement.required": "Eröffnen Sie zuerst ein Engagement.",
+
+  "home.analysis.title": "3. Analyse ausführen",
+  "home.analysis.intro":
+    "Dieses Engagement an die Analyse im Backend übergeben und den KI-Lauf festhalten.",
+  "home.analysis.requires_engagement":
+    "Eröffnen Sie ein Engagement, bevor Sie die Analyse ausführen.",
+
+  // --- the engagement list (roadmap Phase 1) ------------------------------
+  "engagements.eyebrow": "AI Consulting Workbench",
+  "engagements.title": "Engagements",
+  "engagements.intro":
+    "Öffnen Sie ein bestehendes Engagement und machen Sie dort weiter, wo es steht.",
+  "engagements.action.start_new": "Neues Engagement starten",
+  "engagements.empty": "Noch keine Engagements erfasst.",
+  "engagements.empty.title": "Noch kein Engagement",
+  "engagements.action.create_first": "Erstes Engagement anlegen",
+  "engagements.action.open": "Öffnen",
+  "engagements.created": "Angelegt: {date}",
+  "engagements.load_failed": "Die Engagements konnten nicht geladen werden.",
+  "engagements.load_failed.title": "Engagements nicht verfügbar",
+  "engagement.untitled": "Engagement ohne Titel",
+
+  // The comparison table. Every column is data the list endpoint already
+  // returns — no derived score, no invented metric (UI-KIT §3.8).
+  "engagements.table.aria_label": "Engagements im Arbeitsbereich",
+  "engagements.column.organization": "Organisation",
+  "engagements.column.engagement": "Engagement",
+  "engagements.column.stage": "Aktuelle Phase",
+  "engagements.column.updated": "Zuletzt geändert",
+  "engagements.column.created": "Angelegt",
+  "engagements.column.action": "Aktion",
+  "engagements.count": "{count} Engagements",
+  "engagements.count.one": "1 Engagement",
+
+  // --- one engagement's workspace (roadmap Phase 1) -----------------------
+  "engagement.detail.overview": "Überblick",
+  "engagement.detail.eyebrow": "AI Consulting Workbench · {stage}",
+  "engagement.detail.load_failed_title": "Engagement nicht verfügbar",
+  "engagement.detail.load_failed":
+    "Dieses Engagement konnte nicht geladen werden.",
+  "engagement.discovery.card.title": "Discovery",
+  "engagement.discovery.card.hint":
+    "Kundendaten, Situation, Wert- und Messbasis sowie offene Lücken erfassen und zur Prüfung geben.",
+  "engagement.discovery.card.open": "Discovery öffnen",
+  "engagement.info.stated_problem": "Beschriebenes Problem",
+  "engagement.info.current_process": "Aktueller Prozess",
+  "engagement.info.desired_outcome": "Gewünschtes Ergebnis",
+  "engagement.info.sensitive_data": "Sensible Daten",
+  "engagement.info.gdpr_concerns": "DSGVO-Bedenken",
+  "engagement.info.created": "Angelegt",
+
+  // --- the AI-assisted analysis and its audit trail -----------------------
+  "analysis.panel.intro":
+    "Jeder KI-gestützte Schritt dieses Engagements wird hier als Lauf festgehalten – mit Modell, Prompt-Version, Kosten und Gültigkeit der Antwort.",
+  "analysis.panel.title": "Analyse-Workflow",
+  "analysis.action.run": "Analyse ausführen",
+  "analysis.action.running": "Analyse läuft …",
+  "analysis.result.title": "Analyseergebnis",
+  "analysis.result.missing": "Die Antwort enthielt keinen Bericht.",
+  "analysis.runs.title": "Verlauf der Läufe",
+  "analysis.runs.empty":
+    "Für dieses Engagement wurde noch kein KI-gestützter Schritt ausgeführt.",
+  "analysis.runs.badge.stage": "Phase: {stage}",
+  "analysis.runs.badge.tokens": "{count} Tokens",
+  "analysis.runs.badge.cost": "{amount} USD",
+  "analysis.runs.badge.schema": "Schema: {validity}",
+
+  // --- the consultant report the analysis produces ------------------------
+  // The report's *content* is what the AI wrote; these are the headings the
+  // workbench puts around it.
+  "report.section.client_summary": "Zusammenfassung für die Kundenseite",
+  "report.section.detected_problems": "Erkannte Probleme",
+  "report.section.ai_opportunities": "KI-Opportunities",
+  "report.section.recommended_solution": "Empfohlene Lösung",
+  "report.section.risks": "Risiken",
+  "report.section.validation_plan": "Validierungsplan",
+  "report.section.follow_up_questions": "Rückfragen",
+  "report.section.mvp_plan": "MVP-Plan",
+  "report.field.stated_problem": "Beschriebenes Problem",
+  "report.field.hidden_problem": "Hypothese zum verdeckten Problem",
+  "report.field.business_value": "Geschäftlicher Nutzen",
+  "report.field.reason": "Begründung",
+  "report.field.architecture_summary": "Architektur im Überblick",
+  "report.field.suggested_tools": "Vorgeschlagene Werkzeuge",
+  "report.field.mitigation": "Gegenmaßnahme",
+  "report.field.hypothesis": "Hypothese",
+  "report.field.what_to_check": "Was zu prüfen ist",
+  "report.field.required_data": "Benötigte Daten",
+  "report.field.data_source": "Datenquelle",
+  "report.field.success_criteria": "Erfolgskriterium",
+  "report.badge.confidence": "Zuversicht: {level}",
+  "report.badge.complexity": "Komplexität: {level}",
+  "report.badge.impact": "Wirkung: {level}",
+  "report.badge.severity": "Schwere: {level}",
+  "report.badge.method": "Methode: {method}",
+  "report.badge.priority": "Priorität: {priority}",
+  "report.badge.effort": "Aufwand: {effort}",
+
+  // --- Business & AI Readiness Assessment (Phase 3) -----------------------
+  "assessment.eyebrow": "Geschäfts- & KI-Reife",
+  "assessment.title": "Assessment",
+  "assessment.intro":
+    "Eine KI-gestützte Lesart des gespeicherten Discovery-Profils über alle sechs Dimensionen. Jedes Ergebnis zeigt, ob es durch Discovery belegt ist oder auf einer Annahme beruht, und wie sicher es ist. Der Entwurf gehört Ihnen: bearbeiten, überschreiben oder annehmen.",
+  "assessment.empty":
+    "Noch kein Assessment. Halten Sie zuerst das Discovery-Profil fest und erstellen Sie daraus einen Entwurf.",
+
+  "assessment.review_state.ai_draft": "KI-Entwurf – noch nicht geprüft",
+  "assessment.review_state.consultant_edited": "Von Ihnen bearbeitet",
+  "assessment.review_state.accepted": "Von Ihnen angenommen",
+
+  "assessment.basis.discovery_fact": "Durch Discovery belegt",
+  "assessment.basis.assumption": "Beruht auf einer Annahme",
+
+  "assessment.confidence.low": "gering",
+  "assessment.confidence.medium": "mittel",
+  "assessment.confidence.high": "hoch",
+
+  "assessment.action.generate": "Assessment erstellen",
+  "assessment.action.regenerate": "Aus Discovery neu erstellen",
+  "assessment.action.generating": "Wird erstellt …",
+  "assessment.action.save": "Assessment speichern",
+  "assessment.action.accept": "Assessment annehmen",
+  "assessment.action.add_finding": "Ergebnis hinzufügen",
+  "assessment.action.add_gap": "Lücke hinzufügen",
+  "assessment.action.replace_edits":
+    "Meine Änderungen ersetzen und neu erstellen",
+  "assessment.warning.replace_edits":
+    "Ein neuer Lauf ersetzt das von Ihnen bearbeitete Assessment. Die gespeicherte Fassung lässt sich danach nicht wiederherstellen.",
+  "assessment.confirm.accepted": "Assessment angenommen",
+
+  "assessment.field.summary": "Gesamtbild",
+  "assessment.field.dimension_summary": "Zusammenfassung der Dimension",
+  "assessment.finding.empty":
+    "Keine Ergebnisse für diese Dimension. Discovery hat keine belegt – ergänzen Sie eigene oder halten Sie das Fehlende als Lücke fest.",
+  "assessment.finding.title": "Ergebnis",
+  "assessment.finding.basis": "Grundlage",
+  "assessment.finding.confidence": "Zuversicht",
+  "assessment.finding.confidence_badge": "Zuversicht: {level}",
+  "assessment.finding.detail": "Erläuterung",
+  "assessment.finding.supporting_facts": "Belegende Discovery-Tatsachen",
+  "assessment.finding.assumptions": "Annahmen",
+
+  "assessment.gaps.eyebrow": "Offene Fragen",
+  "assessment.gaps.title": "Was das Assessment nicht klären konnte",
+  "assessment.gaps.intro":
+    "Lücken bleiben sichtbar, statt durch Vermutungen gefüllt zu werden.",
+  "assessment.gaps.empty": "Für dieses Assessment sind keine Lücken erfasst.",
+  "assessment.gaps.dimension": "Dimension",
+  "assessment.gaps.description": "Beschreibung",
+  "assessment.gaps.description_placeholder":
+    "Was muss noch bekannt sein, um das beurteilen zu können?",
+  "assessment.hint.requirements":
+    "Jedes Ergebnis braucht einen Titel, eine Erläuterung, eine Zuversicht und – je nach Grundlage – mindestens eine belegende Tatsache oder eine Annahme.",
+
   "opportunity.hint.pipe": "Einträge mit senkrechtem Strich (|) trennen.",
   "opportunity.hint.requirements":
     "Jede Opportunity braucht ein Problem, einen Verbesserungsansatz, mindestens ein zitiertes Assessment-Ergebnis, mindestens ein Erfolgskriterium und eine Begründung ihres Rangs. Eine Einstufung unterhalb von „KI-bereit“ muss mindestens eine Voraussetzung nennen, und bei geringer Zuversicht ist mindestens eine Annahme zu nennen.",
@@ -587,6 +1365,7 @@ const uiMessages = {
 export const de = {
   ...serverMessages,
   ...opportunityServerMessages,
+  ...workbenchServerMessages,
   ...uiMessages,
 }
 

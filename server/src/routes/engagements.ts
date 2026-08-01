@@ -2,6 +2,7 @@ import { Router, type Response } from "express"
 import type { ZodError } from "zod"
 
 import { discoveryTransitionMessageIds } from "../../../shared/discovery-messages.js"
+import type { WorkbenchMessageId } from "../../../shared/workbench-messages.js"
 import {
   engagementScopeOf,
   type ActingUser,
@@ -27,6 +28,7 @@ import {
 import {
   createEngagement,
   getEngagements,
+  toAssessment,
   toDiscoveryProfile,
   toDiscoveryWorkflowState,
   updateEngagement,
@@ -53,6 +55,7 @@ import {
 import {
   generateAssessment,
   saveAssessment,
+  type GenerateAssessmentFailure,
 } from "../services/assessment.service.js"
 import {
   prioritizeOpportunitiesSchema,
@@ -67,6 +70,7 @@ import {
   type SaveOpportunitiesFailure,
 } from "../services/opportunities.service.js"
 import { getOpportunityVersionById } from "../repositories/opportunity-version.repository.js"
+import { retrieveKnowledgePackage } from "../services/consulting-knowledge.service.js"
 import { failureIdentity } from "../lib/failure-identity.js"
 
 const router = Router()
@@ -86,6 +90,20 @@ const assessmentFailureStatus = {
   ai_output_invalid: 422,
   ai_step_failed: 502,
 } as const
+
+// What the consultant is told, as an identifier. The service's `error` is a
+// diagnostic — a provider's own failure text, a parser's complaint — and it is
+// logged rather than shown: it is English, it is not addressed to a consultant,
+// and for invalid AI output it quotes the model's response back at them.
+const assessmentFailureMessageIds: Record<
+  GenerateAssessmentFailure,
+  WorkbenchMessageId
+> = {
+  discovery_not_ready: "assessment.error.discovery_not_ready",
+  consultant_edits_protected: "assessment.error.consultant_edits_protected",
+  ai_output_invalid: "assessment.error.ai_output_invalid",
+  ai_step_failed: "assessment.error.ai_step_failed",
+}
 
 // How a refused or failed prioritization is reported at the boundary: the
 // consultant is missing a precondition (422), a second regeneration got there
@@ -147,7 +165,7 @@ router.get("/", async (req, res) => {
 
     return res.json({
       status: true,
-      message: "Engagements loaded",
+      message: "engagement.message.list_loaded",
       data: engagements,
     })
   } catch (error) {
@@ -155,7 +173,7 @@ router.get("/", async (req, res) => {
 
     return res.status(500).json({
       status: false,
-      message: "Internal server error",
+      message: "engagement.error.internal",
     })
   }
 })
@@ -180,18 +198,30 @@ router.get("/:id", async (req, res) => {
       authorized.resource,
       authorized.scope,
     )
+    // The curated knowledge the consultant's stage views show. It is the same
+    // deterministic package the Assessment is grounded in, so what the
+    // consultant reads is what the model was given (roadmap Phase 5).
+    const knowledgePackage = await retrieveKnowledgePackage(
+      authorized.resource,
+      "assessment",
+      toAssessment(authorized.resource),
+    )
 
     return res.json({
       status: true,
-      message: "Engagement loaded",
-      data: { ...withDiscoveryState(authorized.resource), opportunities },
+      message: "engagement.message.loaded",
+      data: {
+        ...withDiscoveryState(authorized.resource),
+        opportunities,
+        knowledgePackage,
+      },
     })
   } catch (error) {
     console.error("LOAD_ENGAGEMENT_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
-      message: "Internal server error",
+      message: "engagement.error.internal",
     })
   }
 })
@@ -210,7 +240,7 @@ router.post("/", async (req, res) => {
   if (!parseResult.success) {
     return res.status(400).json({
       status: false,
-      message: "invalid input",
+      message: "engagement.error.invalid_input",
       errors: parseResult.error.flatten(),
     })
   }
@@ -226,7 +256,7 @@ router.post("/", async (req, res) => {
     if (!organization) {
       return res.status(404).json({
         status: false,
-        message: "Organization not found",
+        message: "engagement.error.organization_not_found",
       })
     }
 
@@ -237,7 +267,7 @@ router.post("/", async (req, res) => {
 
     return res.status(201).json({
       status: true,
-      message: "Engagement created",
+      message: "engagement.message.created",
       data: engagement,
     })
   } catch (error) {
@@ -245,7 +275,7 @@ router.post("/", async (req, res) => {
 
     return res.status(500).json({
       status: false,
-      message: "Internal server error",
+      message: "engagement.error.internal",
     })
   }
 })
@@ -268,7 +298,7 @@ router.patch("/:id", async (req, res) => {
   if (!parseResult.success) {
     return res.status(400).json({
       status: false,
-      message: "invalid input",
+      message: "engagement.error.invalid_input",
       errors: parseResult.error.flatten(),
     })
   }
@@ -282,7 +312,7 @@ router.patch("/:id", async (req, res) => {
 
     return res.json({
       status: true,
-      message: "Engagement saved",
+      message: "engagement.message.saved",
       data: engagement,
     })
   } catch (error) {
@@ -290,7 +320,7 @@ router.patch("/:id", async (req, res) => {
 
     return res.status(500).json({
       status: false,
-      message: "Internal server error",
+      message: "engagement.error.internal",
     })
   }
 })
@@ -457,7 +487,7 @@ router.post("/:id/assessment", async (req, res) => {
   if (!parseResult.success) {
     return res.status(400).json({
       status: false,
-      message: "invalid input",
+      message: "assessment.error.invalid_input",
       errors: parseResult.error.flatten(),
     })
   }
@@ -468,11 +498,18 @@ router.post("/:id/assessment", async (req, res) => {
     })
 
     if (!result.success) {
-      // The consultant sees why no draft was produced; engagement state is
-      // unchanged in every failure case (architecture.md §13).
+      // The consultant sees why no draft was produced, named as an identifier;
+      // engagement state is unchanged in every failure case (architecture.md
+      // §13). The service's own diagnostic goes to the log, not to the screen.
+      console.error("GENERATE_ASSESSMENT_REFUSED", {
+        engagementId: authorized.resource.id,
+        failure: result.failure,
+        detail: result.error,
+      })
+
       return res.status(assessmentFailureStatus[result.failure]).json({
         status: false,
-        message: result.error,
+        message: assessmentFailureMessageIds[result.failure],
         data: {
           failure: result.failure,
           evaluation: result.evaluation,
@@ -482,7 +519,7 @@ router.post("/:id/assessment", async (req, res) => {
 
     return res.json({
       status: true,
-      message: "Assessment draft generated",
+      message: "assessment.message.draft_generated",
       data: {
         assessment: result.assessment,
         reviewState: result.reviewState,
@@ -494,7 +531,7 @@ router.post("/:id/assessment", async (req, res) => {
 
     return res.status(500).json({
       status: false,
-      message: "Internal server error",
+      message: "assessment.error.internal",
     })
   }
 })
@@ -516,7 +553,7 @@ router.patch("/:id/assessment", async (req, res) => {
   if (!parseResult.success) {
     return res.status(400).json({
       status: false,
-      message: "invalid assessment",
+      message: "assessment.error.invalid_input",
       errors: parseResult.error.flatten(),
     })
   }
@@ -531,7 +568,7 @@ router.patch("/:id/assessment", async (req, res) => {
 
     return res.json({
       status: true,
-      message: "Assessment saved",
+      message: "assessment.message.saved",
       data: engagement,
     })
   } catch (error) {
@@ -539,7 +576,7 @@ router.patch("/:id/assessment", async (req, res) => {
 
     return res.status(500).json({
       status: false,
-      message: "Internal server error",
+      message: "assessment.error.internal",
     })
   }
 })
@@ -703,7 +740,7 @@ router.get("/:id/opportunities/versions", async (req, res) => {
 
     return res.json({
       status: true,
-      message: "Opportunity versions loaded",
+      message: "opportunity.message.versions_loaded",
       data: { versions },
     })
   } catch (error) {
@@ -745,7 +782,7 @@ router.get("/:id/opportunities/versions/:versionId", async (req, res) => {
 
     return res.json({
       status: true,
-      message: "Opportunity version loaded",
+      message: "opportunity.message.version_loaded",
       data: { version },
     })
   } catch (error) {
@@ -787,7 +824,7 @@ router.get("/:id/analysis-runs", async (req, res) => {
 
     return res.status(500).json({
       status: false,
-      message: "Failed to load analysis runs",
+      message: "analysis.error.runs_not_loaded",
     })
   }
 })
@@ -809,7 +846,7 @@ router.post("/:id/analyze", async (req, res) => {
     if (!result.success) {
       return res.status(422).json({
         status: false,
-        message: "LLM output failed validation",
+        message: "analysis.error.output_invalid",
         data: {
           evaluation: result.evaluation,
           error: result.error,
@@ -819,7 +856,7 @@ router.post("/:id/analyze", async (req, res) => {
 
     return res.status(200).json({
       status: true,
-      message: "Analysis completed",
+      message: "analysis.message.completed",
       data: {
         report: result.report,
         evaluation: result.evaluation,
@@ -827,7 +864,7 @@ router.post("/:id/analyze", async (req, res) => {
     })
   } catch (error) {
     console.error("RUN_ANALYSIS_FAILED", failureIdentity(error))
-    return res.status(500).json({ status: false, message: "Analysis failed" })
+    return res.status(500).json({ status: false, message: "analysis.error.failed" })
   }
 })
 

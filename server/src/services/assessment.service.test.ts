@@ -14,6 +14,8 @@ import type { EngagementWithOrganization } from "../repositories/engagement.repo
 
 let llmCall: () => Promise<LlmResponse>
 let llmCallCount = 0
+// What the stage actually sent, so the prompt's contents can be asserted on.
+let lastPrompt = ""
 let discoveryProfile: DiscoveryProfile
 const recordedRuns: CreateAnalysisRunInput[] = []
 const savedAssessments: {
@@ -24,8 +26,9 @@ const savedAssessments: {
 
 mock.module("../lib/llm-client.js", {
   namedExports: {
-    callLlm: async () => {
+    callLlm: async (prompt: string) => {
       llmCallCount += 1
+      lastPrompt = prompt
       return llmCall()
     },
   },
@@ -34,6 +37,7 @@ mock.module("../lib/llm-client.js", {
 mock.module("../repositories/engagement.repository.js", {
   namedExports: {
     toDiscoveryProfile: () => discoveryProfile,
+    toAssessment: () => null,
     updateEngagementAssessment: async (
       engagementId: string,
       _scope: unknown,
@@ -42,6 +46,56 @@ mock.module("../repositories/engagement.repository.js", {
     ) => {
       savedAssessments.push({ engagementId, assessment, reviewState })
       return {}
+    },
+  },
+})
+
+// One curated entry, so the stage retrieves a real package without a database.
+// The domain's retrieval runs for real; only the storage seam is replaced.
+const KNOWLEDGE_ENTRY = {
+  code: "customer-operations-readiness-framework",
+  kind: "assessment_framework" as const,
+  domainCode: "customer-operations",
+  title: "Customer-Operations-Readiness Framework",
+  summary: "Ein deterministischer Bewertungsrahmen.",
+  tags: [],
+  matchTerms: [],
+  stageScopes: ["assessment" as const],
+  taxonomyCodes: [],
+  processCodes: [],
+  problemCodes: [],
+  useCaseCodes: [],
+  relatedCodes: [],
+  details: {
+    objective: null,
+    applicability: [],
+    questions: [],
+    criteria: [],
+    signals: [],
+    steps: [],
+    risks: [],
+    mitigations: [],
+    roiDrivers: [],
+    bestPractices: [],
+    notes: [],
+  },
+  sortOrder: 7,
+  active: true,
+  revision: 0,
+}
+
+mock.module("../repositories/consulting-knowledge.repository.js", {
+  namedExports: {
+    ensureConsultingKnowledgeSeeded: async () => {},
+    listConsultingKnowledgeEntries: async () => [KNOWLEDGE_ENTRY],
+    getConsultingKnowledgeEntryByCode: async () => null,
+    // Running a stage must never reach a knowledge write path
+    // (architecture.md §9.4; agent-rules.md §4).
+    createConsultingKnowledgeEntry: async () => {
+      throw new Error("an engagement stage wrote to the Consulting Knowledge Base")
+    },
+    updateConsultingKnowledgeEntry: async () => {
+      throw new Error("an engagement stage wrote to the Consulting Knowledge Base")
     },
   },
 })
@@ -198,6 +252,11 @@ test("a generated Assessment records its Analysis Run with the stage's trust sig
   assert.equal(typeof run.costEstimateUsd, "number")
   assert.equal(run.jsonParseSuccess, true)
   assert.equal(run.schemaValid, true)
+  // The curated entries the run was grounded in, by code and in package order
+  // (roadmap Phase 5 traceability).
+  assert.deepEqual(run.knowledgeEntryCodes, [
+    "customer-operations-readiness-framework",
+  ])
   assert.equal(run.errorMessage, undefined)
 })
 
@@ -239,6 +298,28 @@ test("a provider failure is recorded as a run and changes no engagement state", 
   assert.equal(recordedRuns.length, 1)
   assert.equal(recordedRuns[0].stage, "assessment")
   assert.equal(recordedRuns[0].errorMessage, "provider unavailable")
+  // What the model was *given* belongs to the audit trail whether or not it
+  // answered (coding-standards.md §7 "the audit trail survives failure").
+  assert.deepEqual(recordedRuns[0].knowledgeEntryCodes, [
+    "customer-operations-readiness-framework",
+  ])
+})
+
+test("the Assessment prompt carries only the retrieved package, not the knowledge base", async () => {
+  llmCall = async () => llmResponse(validAssessmentOutput)
+
+  await generateAssessment(engagementFixture(), scope, { replaceConsultantEdits: false })
+
+  assert.ok(
+    lastPrompt.includes("customer-operations-readiness-framework"),
+    "the retrieved entry did not reach the prompt",
+  )
+  // One entry was retrieved, so its code may appear exactly once. A prompt
+  // carrying more than the package would repeat or exceed it.
+  assert.equal(
+    lastPrompt.split("customer-operations-readiness-framework").length - 1,
+    1,
+  )
 })
 
 test("an empty Discovery Profile is refused before any AI call is made", async () => {

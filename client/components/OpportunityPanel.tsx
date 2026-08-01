@@ -3,7 +3,46 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 
+import {
+  SectionStatusLegend,
+  WorkflowAccordion,
+  WorkflowProgressSummary,
+  WorkflowSectionNav,
+  type WorkflowSectionItem,
+} from "./WorkflowPrimitives"
+import {
+  stageEyebrowStyle,
+  stageHeaderStyle,
+  stageHeadingStyle,
+  stageIntroStyle,
+  stageSurfaceStyle,
+} from "./StagePanel"
+import {
+  Badge,
+  EmptyState,
+  InlineAlert,
+  actionRowStyle,
+  buttonStyle,
+  compactButtonStyle,
+  fieldStyle,
+  fieldsGridStyle,
+  fieldsetStyle,
+  hintStyle,
+  inputStyle,
+  legendStyle,
+  nestedBlockStyle,
+  removeButtonStyle,
+  rowStyle,
+  subSectionTitleStyle,
+  textareaStyle,
+} from "./UiKit"
+import { uiColors, uiSpace } from "../lib/design-tokens"
 import { t, translateServerMessage } from "../i18n"
+import {
+  hasAnyItem,
+  hasAnyText,
+  type WorkflowSectionStatus,
+} from "../lib/workflow-status"
 
 import type {
   Assessment,
@@ -62,14 +101,30 @@ const emptyOpportunity = (rank: number): Opportunity => ({
   priorityRationale: "",
 })
 
+// The marker a not-yet-filled success criterion carries. This is **data, not a
+// label**: the server refuses to save a prioritization that still contains it
+// (`services/opportunities.service.ts`, `opportunity.error.success_criteria_placeholder`),
+// so both sides must agree on the exact string. It is therefore deliberately
+// *not* looked up in the catalogue — translating it would silently disarm that
+// guard the moment a second language exists. Making it language-neutral is a
+// contract change, tracked separately.
 const emptySuccessCriterion = (): SuccessCriterion => ({
-  metric: "Zu definieren",
-  measurementMethod: "Zu definieren",
-  dataSource: "Zu definieren",
+  metric: DRAFT_SUCCESS_CRITERION_PLACEHOLDER,
+  measurementMethod: DRAFT_SUCCESS_CRITERION_PLACEHOLDER,
+  dataSource: DRAFT_SUCCESS_CRITERION_PLACEHOLDER,
   assumptions: [],
-  baseline: { status: "unknown", validationNote: "Zu definieren" },
-  target: { status: "unknown", validationNote: "Zu definieren" },
-  timeframe: { status: "unknown", validationNote: "Zu definieren" },
+  baseline: {
+    status: "unknown",
+    validationNote: DRAFT_SUCCESS_CRITERION_PLACEHOLDER,
+  },
+  target: {
+    status: "unknown",
+    validationNote: DRAFT_SUCCESS_CRITERION_PLACEHOLDER,
+  },
+  timeframe: {
+    status: "unknown",
+    validationNote: DRAFT_SUCCESS_CRITERION_PLACEHOLDER,
+  },
 })
 
 const toSubmission = (
@@ -109,6 +164,95 @@ const hasPlaceholderSuccessCriteria = (
     ),
   )
 
+const hasMeaningfulText = (value: string | null | undefined): boolean =>
+  hasAnyText([value]) && value !== DRAFT_SUCCESS_CRITERION_PLACEHOLDER
+
+const successCriterionValueHasIssue = (
+  value: SuccessCriterionValue,
+): boolean => {
+  if (value.status === "known") {
+    return (
+      !hasMeaningfulText(value.value) || !hasMeaningfulText(value.source)
+    )
+  }
+
+  return !hasMeaningfulText(value.validationNote)
+}
+
+const successCriterionHasContent = (criterion: SuccessCriterion): boolean =>
+  hasAnyText([
+    criterion.metric,
+    criterion.measurementMethod,
+    criterion.dataSource,
+    ...(criterion.assumptions as string[]),
+  ]) ||
+  successCriterionValueHasIssue(criterion.baseline) ||
+  successCriterionValueHasIssue(criterion.target) ||
+  successCriterionValueHasIssue(criterion.timeframe)
+
+const successCriterionIsComplete = (criterion: SuccessCriterion): boolean =>
+  hasMeaningfulText(criterion.metric) &&
+  hasMeaningfulText(criterion.measurementMethod) &&
+  hasMeaningfulText(criterion.dataSource) &&
+  criterion.assumptions.every((assumption) => hasMeaningfulText(assumption)) &&
+  !successCriterionValueHasIssue(criterion.baseline) &&
+  !successCriterionValueHasIssue(criterion.target) &&
+  !successCriterionValueHasIssue(criterion.timeframe)
+
+const opportunityHasContent = (opportunity: Opportunity): boolean =>
+  hasAnyText([
+    opportunity.title,
+    opportunity.problem,
+    opportunity.improvement,
+    opportunity.priorityRationale,
+    opportunity.aiReadiness.rationale,
+  ]) ||
+  hasAnyItem(opportunity.assumptions) ||
+  hasAnyItem(opportunity.aiReadiness.blockers) ||
+  hasAnyItem(opportunity.sourceFindings) ||
+  hasAnyItem(opportunity.successCriteria) ||
+  opportunity.successCriteria.some(successCriterionHasContent)
+
+const opportunityHasActionRequiredIssue = (
+  opportunity: Opportunity,
+): boolean =>
+  !hasMeaningfulText(opportunity.title) ||
+  !hasMeaningfulText(opportunity.problem) ||
+  !hasMeaningfulText(opportunity.improvement) ||
+  !hasMeaningfulText(opportunity.priorityRationale) ||
+  !hasMeaningfulText(opportunity.aiReadiness.rationale) ||
+  (opportunity.aiReadiness.qualification !== "ready" &&
+    opportunity.aiReadiness.blockers.length === 0) ||
+  (opportunity.confidence === "low" && opportunity.assumptions.length === 0) ||
+  opportunity.sourceFindings.length === 0 ||
+  opportunity.successCriteria.length === 0 ||
+  opportunity.successCriteria.some(
+    (criterion) => !successCriterionIsComplete(criterion),
+  )
+
+const getOpportunitySectionStatus = (
+  opportunity: Opportunity,
+): WorkflowSectionStatus => {
+  if (!opportunityHasContent(opportunity)) {
+    return "not_started"
+  }
+
+  if (!opportunityHasActionRequiredIssue(opportunity)) {
+    return "complete"
+  }
+
+  return "action_required"
+}
+
+const getOpportunitySummaryStatus = (
+  summary: string,
+): WorkflowSectionStatus =>
+  hasMeaningfulText(summary) ? "complete" : "not_started"
+
+const getOpportunityGapsStatus = (
+  gaps: readonly string[],
+): WorkflowSectionStatus => (gaps.length > 0 ? "complete" : "not_started")
+
 export default function OpportunityPanel({
   engagementId,
   assessment,
@@ -128,6 +272,7 @@ export default function OpportunityPanel({
   const [editsAtRisk, setEditsAtRisk] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
+  const [activeSectionId, setActiveSectionId] = useState("summary")
 
   // Every finding the current Assessment holds, as the citations a consultant
   // may pick from.
@@ -364,9 +509,9 @@ export default function OpportunityPanel({
       setEditsAtRisk(false)
       setMessage(translateServerMessage(result.message))
       router.refresh()
-    } catch (caught) {
+    } catch {
       setError(
-        caught instanceof Error ? caught.message : t("common.error.unexpected"),
+        t("common.error.unexpected"),
       )
     } finally {
       setIsGenerating(false)
@@ -422,518 +567,459 @@ export default function OpportunityPanel({
       setEditsAtRisk(false)
       setMessage(translateServerMessage(result.message))
       router.refresh()
-    } catch (caught) {
+    } catch {
       setError(
-        caught instanceof Error ? caught.message : t("common.error.unexpected"),
+        t("common.error.unexpected"),
       )
     } finally {
       setIsSaving(false)
     }
   }
 
-  return (
-    <section style={panelStyle}>
-      <div style={headerStyle}>
-        <div>
-          <p style={eyebrowStyle}>{t("opportunity.eyebrow")}</p>
-          <h2 style={headingStyle}>{t("opportunity.title")}</h2>
-          <p style={introStyle}>{t("opportunity.intro")}</p>
-        </div>
-        <div style={{ display: "grid", gap: 10, justifyItems: "end" }}>
-          {reviewState && (
-            <span
-              style={
-                reviewState === "ai_draft" ? draftBadgeStyle : reviewedBadgeStyle
-              }
-            >
-              {t(`opportunity.review_state.${reviewState}`)}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={() => prioritize(false)}
-            disabled={isGenerating || citableFindings.length === 0}
-            style={{
-              ...generateButtonStyle,
-              opacity: isGenerating || citableFindings.length === 0 ? 0.6 : 1,
-            }}
-          >
-            {isGenerating
-              ? t("opportunity.action.generating")
-              : prioritization
-                ? t("opportunity.action.regenerate")
-                : t("opportunity.action.generate")}
-          </button>
-        </div>
-      </div>
-
-      {versionState?.stale && (
-        <p style={staleStyle}>{t("opportunity.warning.stale")}</p>
-      )}
-      {message && <p style={successStyle}>{message}</p>}
-      {error && <p style={errorStyle}>{error}</p>}
-
-      {editsAtRisk && (
-        <div style={confirmStyle}>
-          <p style={{ margin: 0 }}>{t("opportunity.warning.replace_edits")}</p>
-          <button
-            type="button"
-            onClick={() => prioritize(true)}
-            disabled={isGenerating}
-            style={{ ...dangerButtonStyle, opacity: isGenerating ? 0.6 : 1 }}
-          >
-            {t("opportunity.action.replace_edits")}
-          </button>
-        </div>
-      )}
-
-      {citableFindings.length === 0 && (
-        <p style={emptyStyle}>{t("opportunity.no_assessment")}</p>
-      )}
-
-      {!prioritization ? (
-        citableFindings.length > 0 && (
-          <p style={emptyStyle}>{t("opportunity.empty")}</p>
-        )
-      ) : (
-        <>
+  function buildOpportunitySections(
+    current: OpportunityPrioritization,
+  ): WorkflowSectionItem[] {
+    return [
+      {
+        id: "summary",
+        title: t("opportunity.field.summary"),
+        status: getOpportunitySummaryStatus(current.summary),
+        content: (
           <label style={fieldStyle}>
             <span>{t("opportunity.field.summary")}</span>
             <textarea
-              value={prioritization.summary}
+              value={current.summary}
               onChange={(event) =>
-                update((current) => ({
-                  ...current,
+                update((state) => ({
+                  ...state,
                   summary: event.target.value,
                 }))
               }
               style={textareaStyle}
             />
           </label>
+        ),
+      },
+      ...current.opportunities.map((opportunity, index) => ({
+        id: `opportunity-${opportunity.priorityRank}`,
+        title: t("opportunity.rank", { rank: opportunity.priorityRank }),
+        meta:
+          opportunity.title.trim().length > 0
+            ? opportunity.title
+            : t("opportunity.field.title"),
+        status: getOpportunitySectionStatus(opportunity),
+        content: (
+          <div style={sectionStyle}>
+            <div style={rowStyle}>
+              {/* Readiness and confidence are statuses; they use the shared
+                  semantic tones and never a colour of their own. */}
+              <Badge
+                tone={
+                  opportunity.aiReadiness.qualification === "ready"
+                    ? "success"
+                    : "warning"
+                }
+                label={t(
+                  `opportunity.ai_readiness.${opportunity.aiReadiness.qualification}`,
+                )}
+              />
+              <Badge
+                tone="neutral"
+                label={t("opportunity.confidence_badge", {
+                  level: levelLabel(opportunity.confidence),
+                })}
+              />
+              <button
+                type="button"
+                onClick={() => moveOpportunity(index, -1)}
+                disabled={index === 0}
+                style={compactButtonStyle("secondary", index === 0)}
+              >
+                {t("opportunity.action.move_up")}
+              </button>
+              <button
+                type="button"
+                onClick={() => moveOpportunity(index, 1)}
+                disabled={index === current.opportunities.length - 1}
+                style={compactButtonStyle(
+                  "secondary",
+                  index === current.opportunities.length - 1,
+                )}
+              >
+                {t("opportunity.action.move_down")}
+              </button>
+              <button
+                type="button"
+                onClick={() => removeOpportunity(index)}
+                style={removeButtonStyle}
+              >
+                {t("common.action.remove")}
+              </button>
+            </div>
 
-          {prioritization.opportunities.length === 0 ? (
-            <p style={emptyStyle}>{t("opportunity.none_found")}</p>
-          ) : (
-            prioritization.opportunities.map((opportunity, index) => (
-              <fieldset key={index} style={sectionStyle}>
-                <legend style={legendStyle}>
-                  {t("opportunity.rank", { rank: opportunity.priorityRank })}
-                </legend>
+            <div style={fieldsGridStyle}>
+              <label style={fullWidthFieldStyle}>
+                <span>{t("opportunity.field.title")}</span>
+                <input
+                  value={opportunity.title}
+                  onChange={(event) =>
+                    updateOpportunity(index, { title: event.target.value })
+                  }
+                  style={inputStyle}
+                />
+              </label>
 
-                <div style={findingHeaderStyle}>
-                  <span
-                    style={
-                      opportunity.aiReadiness.qualification === "ready"
-                        ? readyBadgeStyle
-                        : conditionalBadgeStyle
+              <label style={fieldStyle}>
+                <span>{t("opportunity.field.problem")}</span>
+                <textarea
+                  value={opportunity.problem}
+                  onChange={(event) =>
+                    updateOpportunity(index, { problem: event.target.value })
+                  }
+                  style={textareaStyle}
+                />
+              </label>
+
+              <label style={fieldStyle}>
+                <span>{t("opportunity.field.improvement")}</span>
+                <textarea
+                  value={opportunity.improvement}
+                  onChange={(event) =>
+                    updateOpportunity(index, {
+                      improvement: event.target.value,
+                    })
+                  }
+                  style={textareaStyle}
+                />
+              </label>
+
+              <LevelField
+                label={t("opportunity.field.value")}
+                value={opportunity.value}
+                onChange={(value) => updateOpportunity(index, { value })}
+              />
+              <LevelField
+                label={t("opportunity.field.effort")}
+                value={opportunity.effort}
+                onChange={(effort) => updateOpportunity(index, { effort })}
+              />
+              <LevelField
+                label={t("opportunity.field.impact")}
+                value={opportunity.impact}
+                onChange={(impact) => updateOpportunity(index, { impact })}
+              />
+              <LevelField
+                label={t("opportunity.field.confidence")}
+                value={opportunity.confidence}
+                onChange={(confidence) =>
+                  updateOpportunity(index, { confidence })
+                }
+              />
+
+              <label style={fullWidthFieldStyle}>
+                <span>{t("opportunity.field.priority_rationale")}</span>
+                <textarea
+                  value={opportunity.priorityRationale}
+                  onChange={(event) =>
+                    updateOpportunity(index, {
+                      priorityRationale: event.target.value,
+                    })
+                  }
+                  style={textareaStyle}
+                />
+              </label>
+
+              <label style={fullWidthFieldStyle}>
+                <span>{t("opportunity.field.assumptions")}</span>
+                <input
+                  value={opportunity.assumptions.join(" | ")}
+                  onChange={(event) =>
+                    updateOpportunity(index, {
+                      assumptions: toList(event.target.value),
+                    })
+                  }
+                  style={inputStyle}
+                />
+                <small style={hintStyle}>{t("opportunity.hint.pipe")}</small>
+              </label>
+            </div>
+
+            <fieldset style={nestedSectionStyle}>
+              <legend style={nestedLegendStyle}>
+                {t("opportunity.field.ai_readiness")}
+              </legend>
+
+              <div style={fieldsGridStyle}>
+                <label style={fieldStyle}>
+                  <span>{t("opportunity.field.ai_readiness_qualification")}</span>
+                  <select
+                    value={opportunity.aiReadiness.qualification}
+                    onChange={(event) =>
+                      updateOpportunity(index, {
+                        aiReadiness: {
+                          ...opportunity.aiReadiness,
+                          qualification: event.target
+                            .value as Opportunity["aiReadiness"]["qualification"],
+                        },
+                      })
                     }
+                    style={inputStyle}
                   >
-                    {t(
-                      `opportunity.ai_readiness.${opportunity.aiReadiness.qualification}`,
-                    )}
-                  </span>
-                  <span style={confidenceBadgeStyle}>
-                    {t("opportunity.field.confidence")}:{" "}
-                    {levelLabel(opportunity.confidence)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => moveOpportunity(index, -1)}
-                    disabled={index === 0}
-                    style={moveButtonStyle}
-                  >
-                    {t("opportunity.action.move_up")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveOpportunity(index, 1)}
-                    disabled={index === prioritization.opportunities.length - 1}
-                    style={moveButtonStyle}
-                  >
-                    {t("opportunity.action.move_down")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removeOpportunity(index)}
-                    style={removeButtonStyle}
-                  >
-                    {t("common.action.remove")}
-                  </button>
-                </div>
-
-                <div style={fieldsGridStyle}>
-                  <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
-                    <span>{t("opportunity.field.title")}</span>
-                    <input
-                      value={opportunity.title}
-                      onChange={(event) =>
-                        updateOpportunity(index, { title: event.target.value })
-                      }
-                      style={inputStyle}
-                    />
-                  </label>
-
-                  <label style={fieldStyle}>
-                    <span>{t("opportunity.field.problem")}</span>
-                    <textarea
-                      value={opportunity.problem}
-                      onChange={(event) =>
-                        updateOpportunity(index, { problem: event.target.value })
-                      }
-                      style={textareaStyle}
-                    />
-                  </label>
-
-                  <label style={fieldStyle}>
-                    <span>{t("opportunity.field.improvement")}</span>
-                    <textarea
-                      value={opportunity.improvement}
-                      onChange={(event) =>
-                        updateOpportunity(index, {
-                          improvement: event.target.value,
-                        })
-                      }
-                      style={textareaStyle}
-                    />
-                  </label>
-
-                  <LevelField
-                    label={t("opportunity.field.value")}
-                    value={opportunity.value}
-                    onChange={(value) => updateOpportunity(index, { value })}
-                  />
-                  <LevelField
-                    label={t("opportunity.field.effort")}
-                    value={opportunity.effort}
-                    onChange={(effort) => updateOpportunity(index, { effort })}
-                  />
-                  <LevelField
-                    label={t("opportunity.field.impact")}
-                    value={opportunity.impact}
-                    onChange={(impact) => updateOpportunity(index, { impact })}
-                  />
-                  <LevelField
-                    label={t("opportunity.field.confidence")}
-                    value={opportunity.confidence}
-                    onChange={(confidence) =>
-                      updateOpportunity(index, { confidence })
-                    }
-                  />
-
-                  <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
-                    <span>{t("opportunity.field.priority_rationale")}</span>
-                    <textarea
-                      value={opportunity.priorityRationale}
-                      onChange={(event) =>
-                        updateOpportunity(index, {
-                          priorityRationale: event.target.value,
-                        })
-                      }
-                      style={textareaStyle}
-                    />
-                  </label>
-
-                  <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
-                    <span>{t("opportunity.field.assumptions")}</span>
-                    <input
-                      value={opportunity.assumptions.join(" | ")}
-                      onChange={(event) =>
-                        updateOpportunity(index, {
-                          assumptions: toList(event.target.value),
-                        })
-                      }
-                      style={inputStyle}
-                    />
-                    <small style={hintStyle}>{t("opportunity.hint.pipe")}</small>
-                  </label>
-                </div>
-
-                <fieldset style={nestedSectionStyle}>
-                  <legend style={nestedLegendStyle}>
-                    {t("opportunity.field.ai_readiness")}
-                  </legend>
-
-                  <div style={fieldsGridStyle}>
-                    <label style={fieldStyle}>
-                      <span>
-                        {t("opportunity.field.ai_readiness_qualification")}
-                      </span>
-                      <select
-                        value={opportunity.aiReadiness.qualification}
-                        onChange={(event) =>
-                          updateOpportunity(index, {
-                            aiReadiness: {
-                              ...opportunity.aiReadiness,
-                              qualification: event.target
-                                .value as Opportunity["aiReadiness"]["qualification"],
-                            },
-                          })
-                        }
-                        style={inputStyle}
-                      >
-                        {QUALIFICATIONS.map((option) => (
-                          <option key={option} value={option}>
-                            {t(`opportunity.ai_readiness.${option}`)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label style={fieldStyle}>
-                      <span>{t("opportunity.field.ai_readiness_rationale")}</span>
-                      <input
-                        value={opportunity.aiReadiness.rationale}
-                        onChange={(event) =>
-                          updateOpportunity(index, {
-                            aiReadiness: {
-                              ...opportunity.aiReadiness,
-                              rationale: event.target.value,
-                            },
-                          })
-                        }
-                        style={inputStyle}
-                      />
-                    </label>
-
-                    <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
-                      <span>{t("opportunity.field.ai_readiness_blockers")}</span>
-                      <input
-                        value={opportunity.aiReadiness.blockers.join(" | ")}
-                        onChange={(event) =>
-                          updateOpportunity(index, {
-                            aiReadiness: {
-                              ...opportunity.aiReadiness,
-                              blockers: toList(event.target.value),
-                            },
-                          })
-                        }
-                        style={inputStyle}
-                      />
-                      <small style={hintStyle}>
-                        {t("opportunity.hint.pipe")}
-                      </small>
-                    </label>
-                  </div>
-                </fieldset>
-
-                <div style={citationsStyle}>
-                  <p style={labelStyle}>
-                    {t("opportunity.field.source_findings")}
-                  </p>
-
-                  {opportunity.sourceFindings.length === 0 ? (
-                    <p style={emptyCitationStyle}>
-                      {t("opportunity.source.none")}
-                    </p>
-                  ) : (
-                    <ul style={citationListStyle}>
-                      {opportunity.sourceFindings.map((reference, position) => (
-                        <li key={position} style={citationStyle}>
-                          <span>
-                            <strong>{dimensionLabel(reference.dimension)}</strong>
-                            {" · "}
-                            {reference.findingTitle}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => removeCitation(index, position)}
-                            style={removeButtonStyle}
-                          >
-                            {t("common.action.remove")}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-
-                  {citableFindings.length === 0 ? (
-                    <p style={emptyCitationStyle}>
-                      {t("opportunity.source.unavailable")}
-                    </p>
-                  ) : (
-                    <label style={fieldStyle}>
-                      <span>{t("opportunity.source.add")}</span>
-                      <select
-                        value=""
-                        onChange={(event) => {
-                          const chosen = citableFindings[Number(event.target.value)]
-                          if (chosen) citeFinding(index, chosen)
-                        }}
-                        style={inputStyle}
-                      >
-                        <option value="">—</option>
-                        {citableFindings.map((reference, position) => (
-                          <option key={position} value={position}>
-                            {dimensionLabel(reference.dimension)} ·{" "}
-                            {reference.findingTitle}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
-                </div>
-
-                <fieldset style={nestedSectionStyle}>
-                  <legend style={nestedLegendStyle}>
-                    {t("opportunity.success_criteria.title")}
-                  </legend>
-
-                  <p style={nestedIntroStyle}>
-                    {t("opportunity.success_criteria.intro")}
-                  </p>
-
-                  <div style={{ display: "grid", gap: 14 }}>
-                    {opportunity.successCriteria.map((criterion, criterionIndex) => (
-                      <fieldset key={criterionIndex} style={criterionStyle}>
-                        <legend style={nestedLegendStyle}>
-                          {t("opportunity.success_criteria.item", {
-                            rank: criterionIndex + 1,
-                          })}
-                        </legend>
-
-                        <div style={fieldsGridStyle}>
-                          <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
-                            <span>
-                              {t("opportunity.success_criteria.metric")}
-                            </span>
-                            <input
-                              value={criterion.metric}
-                              onChange={(event) =>
-                                updateSuccessCriterion(index, criterionIndex, {
-                                  metric: event.target.value,
-                                })
-                              }
-                              style={inputStyle}
-                            />
-                          </label>
-
-                          <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
-                            <span>
-                              {t(
-                                "opportunity.success_criteria.measurement_method",
-                              )}
-                            </span>
-                            <textarea
-                              value={criterion.measurementMethod}
-                              onChange={(event) =>
-                                updateSuccessCriterion(index, criterionIndex, {
-                                  measurementMethod: event.target.value,
-                                })
-                              }
-                              style={textareaStyle}
-                            />
-                          </label>
-
-                          <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
-                            <span>
-                              {t("opportunity.success_criteria.data_source")}
-                            </span>
-                            <input
-                              value={criterion.dataSource}
-                              onChange={(event) =>
-                                updateSuccessCriterion(index, criterionIndex, {
-                                  dataSource: event.target.value,
-                                })
-                              }
-                              style={inputStyle}
-                            />
-                          </label>
-
-                          <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
-                            <span>
-                              {t("opportunity.success_criteria.assumptions")}
-                            </span>
-                            <input
-                              value={criterion.assumptions.join(" | ")}
-                              onChange={(event) =>
-                                updateSuccessCriterion(index, criterionIndex, {
-                                  assumptions: toList(event.target.value),
-                                })
-                              }
-                              style={inputStyle}
-                            />
-                            <small style={hintStyle}>
-                              {t("opportunity.hint.pipe")}
-                            </small>
-                          </label>
-
-                          <SuccessCriterionValueField
-                            label={t("opportunity.success_criteria.baseline")}
-                            value={criterion.baseline}
-                            onChange={(baseline) =>
-                              updateSuccessCriterion(index, criterionIndex, {
-                                baseline,
-                              })
-                            }
-                          />
-                          <SuccessCriterionValueField
-                            label={t("opportunity.success_criteria.target")}
-                            value={criterion.target}
-                            onChange={(target) =>
-                              updateSuccessCriterion(index, criterionIndex, {
-                                target,
-                              })
-                            }
-                          />
-                          <SuccessCriterionValueField
-                            label={t("opportunity.success_criteria.timeframe")}
-                            value={criterion.timeframe}
-                            onChange={(timeframe) =>
-                              updateSuccessCriterion(index, criterionIndex, {
-                                timeframe,
-                              })
-                            }
-                          />
-                        </div>
-
-                        <div style={{ display: "flex", justifyContent: "end" }}>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              removeSuccessCriterion(index, criterionIndex)
-                            }
-                            style={removeButtonStyle}
-                          >
-                            {t("common.action.remove")}
-                          </button>
-                        </div>
-                      </fieldset>
+                    {QUALIFICATIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {t(`opportunity.ai_readiness.${option}`)}
+                      </option>
                     ))}
-                  </div>
+                  </select>
+                </label>
 
-                  <button
-                    type="button"
-                    onClick={() => addSuccessCriterion(index)}
-                    style={addButtonStyle}
+                <label style={fieldStyle}>
+                  <span>{t("opportunity.field.ai_readiness_rationale")}</span>
+                  <input
+                    value={opportunity.aiReadiness.rationale}
+                    onChange={(event) =>
+                      updateOpportunity(index, {
+                        aiReadiness: {
+                          ...opportunity.aiReadiness,
+                          rationale: event.target.value,
+                        },
+                      })
+                    }
+                    style={inputStyle}
+                  />
+                </label>
+
+                <label style={fullWidthFieldStyle}>
+                  <span>{t("opportunity.field.ai_readiness_blockers")}</span>
+                  <input
+                    value={opportunity.aiReadiness.blockers.join(" | ")}
+                    onChange={(event) =>
+                      updateOpportunity(index, {
+                        aiReadiness: {
+                          ...opportunity.aiReadiness,
+                          blockers: toList(event.target.value),
+                        },
+                      })
+                    }
+                    style={inputStyle}
+                  />
+                  <small style={hintStyle}>{t("opportunity.hint.pipe")}</small>
+                </label>
+              </div>
+            </fieldset>
+
+            <div style={citationsStyle}>
+              <p style={labelStyle}>{t("opportunity.field.source_findings")}</p>
+
+              {opportunity.sourceFindings.length === 0 ? (
+                <p style={emptyCitationStyle}>
+                  {t("opportunity.source.none")}
+                </p>
+              ) : (
+                <ul style={citationListStyle}>
+                  {opportunity.sourceFindings.map((reference, position) => (
+                    <li key={position} style={citationStyle}>
+                      <span>
+                        <strong>{dimensionLabel(reference.dimension)}</strong>
+                        {" · "}
+                        {reference.findingTitle}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeCitation(index, position)}
+                        style={removeButtonStyle}
+                      >
+                        {t("common.action.remove")}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {citableFindings.length === 0 ? (
+                <p style={emptyCitationStyle}>
+                  {t("opportunity.source.unavailable")}
+                </p>
+              ) : (
+                <label style={fieldStyle}>
+                  <span>{t("opportunity.source.add")}</span>
+                  <select
+                    value=""
+                    onChange={(event) => {
+                      const chosen = citableFindings[Number(event.target.value)]
+                      if (chosen) citeFinding(index, chosen)
+                    }}
+                    style={inputStyle}
                   >
-                    {t("opportunity.success_criteria.add")}
-                  </button>
-                </fieldset>
-              </fieldset>
-            ))
-          )}
+                    <option value="">—</option>
+                    {citableFindings.map((reference, position) => (
+                      <option key={position} value={position}>
+                        {dimensionLabel(reference.dimension)} ·{" "}
+                        {reference.findingTitle}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
 
-          <button
-            type="button"
-            onClick={addOpportunity}
-            style={addButtonStyle}
-          >
-            {t("opportunity.action.add")}
-          </button>
+            <fieldset style={nestedSectionStyle}>
+              <legend style={nestedLegendStyle}>
+                {t("opportunity.success_criteria.title")}
+              </legend>
 
+              <p style={nestedIntroStyle}>
+                {t("opportunity.success_criteria.intro")}
+              </p>
+
+              <div style={{ display: "grid", gap: 14 }}>
+                {opportunity.successCriteria.map(
+                  (criterion, criterionIndex) => (
+                    <fieldset key={criterionIndex} style={criterionStyle}>
+                      <legend style={nestedLegendStyle}>
+                        {t("opportunity.success_criteria.item", {
+                          rank: criterionIndex + 1,
+                        })}
+                      </legend>
+
+                      <div style={fieldsGridStyle}>
+                        <label style={fullWidthFieldStyle}>
+                          <span>{t("opportunity.success_criteria.metric")}</span>
+                          <input
+                            value={criterion.metric}
+                            onChange={(event) =>
+                              updateSuccessCriterion(index, criterionIndex, {
+                                metric: event.target.value,
+                              })
+                            }
+                            style={inputStyle}
+                          />
+                        </label>
+
+                        <label style={fullWidthFieldStyle}>
+                          <span>
+                            {t(
+                              "opportunity.success_criteria.measurement_method",
+                            )}
+                          </span>
+                          <textarea
+                            value={criterion.measurementMethod}
+                            onChange={(event) =>
+                              updateSuccessCriterion(index, criterionIndex, {
+                                measurementMethod: event.target.value,
+                              })
+                            }
+                            style={textareaStyle}
+                          />
+                        </label>
+
+                        <label style={fullWidthFieldStyle}>
+                          <span>
+                            {t("opportunity.success_criteria.data_source")}
+                          </span>
+                          <input
+                            value={criterion.dataSource}
+                            onChange={(event) =>
+                              updateSuccessCriterion(index, criterionIndex, {
+                                dataSource: event.target.value,
+                              })
+                            }
+                            style={inputStyle}
+                          />
+                        </label>
+
+                        <label style={fullWidthFieldStyle}>
+                          <span>
+                            {t("opportunity.success_criteria.assumptions")}
+                          </span>
+                          <input
+                            value={criterion.assumptions.join(" | ")}
+                            onChange={(event) =>
+                              updateSuccessCriterion(index, criterionIndex, {
+                                assumptions: toList(event.target.value),
+                              })
+                            }
+                            style={inputStyle}
+                          />
+                          <small style={hintStyle}>
+                            {t("opportunity.hint.pipe")}
+                          </small>
+                        </label>
+
+                        <SuccessCriterionValueField
+                          label={t("opportunity.success_criteria.baseline")}
+                          value={criterion.baseline}
+                          onChange={(baseline) =>
+                            updateSuccessCriterion(index, criterionIndex, {
+                              baseline,
+                            })
+                          }
+                        />
+                        <SuccessCriterionValueField
+                          label={t("opportunity.success_criteria.target")}
+                          value={criterion.target}
+                          onChange={(target) =>
+                            updateSuccessCriterion(index, criterionIndex, {
+                              target,
+                            })
+                          }
+                        />
+                        <SuccessCriterionValueField
+                          label={t("opportunity.success_criteria.timeframe")}
+                          value={criterion.timeframe}
+                          onChange={(timeframe) =>
+                            updateSuccessCriterion(index, criterionIndex, {
+                              timeframe,
+                            })
+                          }
+                        />
+                      </div>
+
+                      <div style={{ display: "flex", justifyContent: "end" }}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            removeSuccessCriterion(index, criterionIndex)
+                          }
+                          style={removeButtonStyle}
+                        >
+                          {t("common.action.remove")}
+                        </button>
+                      </div>
+                    </fieldset>
+                  ),
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => addSuccessCriterion(index)}
+                style={addButtonStyle}
+              >
+                {t("opportunity.success_criteria.add")}
+              </button>
+            </fieldset>
+          </div>
+        ),
+      })),
+      {
+        id: "gaps",
+        title: t("opportunity.gaps.title"),
+        status: getOpportunityGapsStatus(current.gaps),
+        content: (
           <section style={gapsStyle}>
             <div>
-              <p style={eyebrowStyle}>{t("opportunity.gaps.title")}</p>
+              <h3 style={subSectionTitleStyle}>{t("opportunity.gaps.title")}</h3>
               <p style={introStyle}>{t("opportunity.gaps.intro")}</p>
             </div>
 
-            {prioritization.gaps.length === 0 ? (
-              <p style={emptyGapStyle}>{t("opportunity.gaps.empty")}</p>
+            {current.gaps.length === 0 ? (
+              <EmptyState>{t("opportunity.gaps.empty")}</EmptyState>
             ) : (
-              <div style={{ display: "grid", gap: 10 }}>
-                {prioritization.gaps.map((gap, index) => (
+              <div style={gapListStyle}>
+                {current.gaps.map((gap, index) => (
                   <div key={index} style={gapItemStyle}>
-                    <p style={{ margin: 0, color: "#374151" }}>{gap}</p>
+                    <p style={gapTextStyle}>{gap}</p>
                     <button
                       type="button"
                       onClick={() => removeGap(index)}
@@ -972,30 +1058,145 @@ export default function OpportunityPanel({
               </button>
             </div>
           </section>
+        ),
+      },
+    ]
+  }
 
-          <p style={hintStyle}>{t("opportunity.hint.requirements")}</p>
+  const sectionItems = prioritization
+    ? buildOpportunitySections(prioritization)
+    : []
+  const defaultActiveSectionId =
+    sectionItems.find((section) => section.status !== "complete")?.id ??
+    sectionItems[0]?.id ??
+    ""
+  const effectiveActiveSectionId = sectionItems.some(
+    (section) => section.id === activeSectionId,
+  )
+    ? activeSectionId
+    : defaultActiveSectionId
 
-          <div style={footerStyle}>
+  return (
+    <section style={panelStyle}>
+      <div style={headerStyle}>
+        <div>
+          <p style={eyebrowStyle}>{t("opportunity.eyebrow")}</p>
+          <h2 style={headingStyle}>{t("opportunity.title")}</h2>
+          <p style={introStyle}>{t("opportunity.intro")}</p>
+        </div>
+        <div style={headerActionsStyle}>
+          {reviewState && (
+            <Badge
+              tone={reviewState === "ai_draft" ? "warning" : "success"}
+              label={t(`opportunity.review_state.${reviewState}`)}
+            />
+          )}
+          <button
+            type="button"
+            onClick={() => prioritize(false)}
+            disabled={isGenerating || citableFindings.length === 0}
+            style={buttonStyle(
+              "secondary",
+              isGenerating || citableFindings.length === 0,
+            )}
+          >
+            {isGenerating
+              ? t("opportunity.action.generating")
+              : prioritization
+                ? t("opportunity.action.regenerate")
+                : t("opportunity.action.generate")}
+          </button>
+        </div>
+      </div>
+
+      {versionState?.stale && (
+        <InlineAlert tone="warning">
+          {t("opportunity.warning.stale")}
+        </InlineAlert>
+      )}
+      {message && <InlineAlert tone="success">{message}</InlineAlert>}
+      {error && <InlineAlert tone="danger">{error}</InlineAlert>}
+
+      {editsAtRisk && (
+        <InlineAlert tone="warning">
+          <span>{t("opportunity.warning.replace_edits")}</span>
+          <button
+            type="button"
+            onClick={() => prioritize(true)}
+            disabled={isGenerating}
+            style={buttonStyle("danger", isGenerating)}
+          >
+            {t("opportunity.action.replace_edits")}
+          </button>
+        </InlineAlert>
+      )}
+
+      {citableFindings.length === 0 && (
+        <EmptyState>{t("opportunity.no_assessment")}</EmptyState>
+      )}
+
+      {!prioritization ? (
+        citableFindings.length > 0 && (
+          <EmptyState>{t("opportunity.empty")}</EmptyState>
+        )
+      ) : (
+        <div className="workflow-shell">
+          <aside className="workflow-sticky">
+            <WorkflowSectionNav
+              title={t("workflow.nav.opportunities_title")}
+              sections={sectionItems}
+              activeId={effectiveActiveSectionId}
+              onSelect={setActiveSectionId}
+            />
+          </aside>
+
+          <div className="workflow-mobile-stack">
+            <WorkflowProgressSummary sections={sectionItems} />
+
+            <SectionStatusLegend />
+
+            <WorkflowAccordion
+              items={sectionItems}
+              activeId={effectiveActiveSectionId}
+              onActiveIdChange={setActiveSectionId}
+            />
+
+            {prioritization.opportunities.length === 0 && (
+              <EmptyState>{t("opportunity.none_found")}</EmptyState>
+            )}
+
             <button
               type="button"
-              onClick={() => save("consultant_edited")}
-              disabled={isSaving}
-              style={{ ...saveButtonStyle, opacity: isSaving ? 0.6 : 1 }}
+              onClick={addOpportunity}
+              style={addButtonStyle}
             >
-              {isSaving
-                ? t("opportunity.action.saving")
-                : t("opportunity.action.save")}
+              {t("opportunity.action.add")}
             </button>
-            <button
-              type="button"
-              onClick={() => save("accepted")}
-              disabled={isSaving}
-              style={{ ...acceptButtonStyle, opacity: isSaving ? 0.6 : 1 }}
-            >
-              {t("opportunity.action.accept")}
-            </button>
+
+            <p style={hintStyle}>{t("opportunity.hint.requirements")}</p>
+
+            <div style={actionRowStyle}>
+              <button
+                type="button"
+                onClick={() => save("consultant_edited")}
+                disabled={isSaving}
+                style={buttonStyle("secondary", isSaving)}
+              >
+                {isSaving
+                  ? t("opportunity.action.saving")
+                  : t("opportunity.action.save")}
+              </button>
+              <button
+                type="button"
+                onClick={() => save("accepted")}
+                disabled={isSaving}
+                style={buttonStyle("primary", isSaving)}
+              >
+                {t("opportunity.action.accept")}
+              </button>
+            </div>
           </div>
-        </>
+        </div>
       )}
     </section>
   )
@@ -1047,10 +1248,13 @@ function SuccessCriterionValueField({
             event.target.value === "known"
               ? {
                   status: "known",
-                  value: "Zu definieren",
-                  source: "Zu definieren",
+                  value: DRAFT_SUCCESS_CRITERION_PLACEHOLDER,
+                  source: DRAFT_SUCCESS_CRITERION_PLACEHOLDER,
                 }
-              : { status: "unknown", validationNote: "Zu definieren" },
+              : {
+                  status: "unknown",
+                  validationNote: DRAFT_SUCCESS_CRITERION_PLACEHOLDER,
+                },
           )
         }
         style={inputStyle}
@@ -1064,7 +1268,7 @@ function SuccessCriterionValueField({
       </select>
 
       {value.status === "known" ? (
-        <div style={{ display: "grid", gap: 10 }}>
+        <div style={gapListStyle}>
           <input
             value={value.value}
             onChange={(event) =>
@@ -1125,302 +1329,120 @@ function toList(value: string): string[] {
     .filter(Boolean)
 }
 
-const panelStyle: React.CSSProperties = {
-  maxWidth: 1120,
-  margin: "24px auto 0",
-  display: "grid",
-  gap: 20,
-  background: "#fff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 24,
-  padding: 32,
-  boxShadow: "0 20px 50px rgba(15, 23, 42, 0.08)",
-}
-const headerStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: 24,
-  alignItems: "start",
-  flexWrap: "wrap",
-}
-const eyebrowStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#4f46e5",
-  fontWeight: 800,
-  fontSize: 12,
-  textTransform: "uppercase",
-  letterSpacing: 0.8,
-}
-const headingStyle: React.CSSProperties = { margin: "6px 0 8px", fontSize: 30 }
-const introStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#6b7280",
-  lineHeight: 1.55,
-  maxWidth: 720,
-}
-const sectionStyle: React.CSSProperties = {
-  border: "1px solid #e5e7eb",
-  borderRadius: 18,
-  padding: 20,
-  margin: 0,
-  display: "grid",
-  gap: 14,
-}
-const nestedSectionStyle: React.CSSProperties = {
-  ...sectionStyle,
-  background: "#f9fafb",
-}
-const legendStyle: React.CSSProperties = {
-  padding: "0 8px",
-  fontWeight: 800,
-  fontSize: 18,
-}
-const nestedLegendStyle: React.CSSProperties = {
-  ...legendStyle,
-  fontSize: 15,
-}
+const panelStyle = stageSurfaceStyle
+const headerStyle = stageHeaderStyle
+const eyebrowStyle = stageEyebrowStyle
+const headingStyle = stageHeadingStyle
+const introStyle = stageIntroStyle
+
+// The same shared vocabulary the Assessment uses: one field, one button, one
+// badge and one empty state across every stage of the engagement.
+
+const sectionStyle = nestedBlockStyle
+const nestedSectionStyle = fieldsetStyle
+const nestedLegendStyle = legendStyle
+const criterionStyle = fieldsetStyle
+
 const nestedIntroStyle: React.CSSProperties = {
   margin: 0,
-  color: "#64748b",
+  color: uiColors.textSecondary,
+  fontSize: 14,
   lineHeight: 1.5,
 }
-const criterionStyle: React.CSSProperties = {
-  border: "1px solid #dbe3f0",
-  borderRadius: 14,
-  padding: 16,
-  display: "grid",
-  gap: 14,
-  background: "#fff",
-}
-const fieldsGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-  gap: 16,
-}
-const fieldStyle: React.CSSProperties = {
-  display: "grid",
-  gap: 7,
-  alignContent: "start",
-  fontWeight: 700,
-  fontSize: 14,
-}
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  borderRadius: 12,
-  border: "1px solid #d1d5db",
-  padding: "11px 12px",
-  fontSize: 15,
-  background: "#fff",
-  color: "#111827",
-}
-const textareaStyle: React.CSSProperties = {
-  ...inputStyle,
-  minHeight: 78,
-  resize: "vertical",
-}
-const hintStyle: React.CSSProperties = {
-  color: "#6b7280",
-  fontWeight: 400,
-  margin: 0,
-}
+
 const labelStyle: React.CSSProperties = {
   margin: 0,
-  fontWeight: 700,
+  color: uiColors.textPrimary,
   fontSize: 14,
+  fontWeight: 600,
 }
-const findingHeaderStyle: React.CSSProperties = {
-  display: "flex",
-  gap: 8,
-  alignItems: "center",
-  flexWrap: "wrap",
+
+const fullWidthFieldStyle: React.CSSProperties = {
+  ...fieldStyle,
+  gridColumn: "1 / -1",
 }
-const badgeBaseStyle: React.CSSProperties = {
-  padding: "4px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: 800,
+
+const headerActionsStyle: React.CSSProperties = {
+  display: "grid",
+  gap: uiSpace.xs,
+  justifyItems: "end",
 }
-const readyBadgeStyle: React.CSSProperties = {
-  ...badgeBaseStyle,
-  background: "#ecfdf5",
-  color: "#065f46",
-}
-const conditionalBadgeStyle: React.CSSProperties = {
-  ...badgeBaseStyle,
-  background: "#fef3c7",
-  color: "#92400e",
-}
-const confidenceBadgeStyle: React.CSSProperties = {
-  ...badgeBaseStyle,
-  background: "#eef2ff",
-  color: "#3730a3",
-}
-const draftBadgeStyle: React.CSSProperties = {
-  ...badgeBaseStyle,
-  background: "#fef3c7",
-  color: "#92400e",
-}
-const reviewedBadgeStyle: React.CSSProperties = {
-  ...badgeBaseStyle,
-  background: "#ecfdf5",
-  color: "#065f46",
-}
-const staleStyle: React.CSSProperties = {
-  margin: 0,
-  padding: "12px 14px",
-  borderRadius: 12,
-  background: "#fffbeb",
-  border: "1px solid #f59e0b",
-  color: "#92400e",
-  fontWeight: 700,
-}
-const generateButtonStyle: React.CSSProperties = {
-  border: 0,
-  borderRadius: 12,
-  padding: "12px 17px",
-  background: "#111827",
-  color: "#fff",
-  fontWeight: 800,
-  cursor: "pointer",
-}
-const saveButtonStyle: React.CSSProperties = {
-  ...generateButtonStyle,
-  background: "#4f46e5",
-}
-const acceptButtonStyle: React.CSSProperties = {
-  ...generateButtonStyle,
-  background: "#047857",
-}
-const dangerButtonStyle: React.CSSProperties = {
-  ...generateButtonStyle,
-  background: "#b91c1c",
-}
+
 const addButtonStyle: React.CSSProperties = {
-  ...generateButtonStyle,
+  ...buttonStyle("secondary"),
   justifySelf: "start",
 }
-const moveButtonStyle: React.CSSProperties = {
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  borderRadius: 10,
-  padding: "6px 10px",
-  fontWeight: 700,
-  fontSize: 12,
-  cursor: "pointer",
-  color: "#111827",
-}
-const removeButtonStyle: React.CSSProperties = {
-  border: 0,
-  background: "transparent",
-  color: "#b91c1c",
-  fontWeight: 700,
-  cursor: "pointer",
-  marginLeft: "auto",
-}
-const footerStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "flex-end",
-  gap: 12,
-}
-const successStyle: React.CSSProperties = {
-  margin: 0,
-  padding: 12,
-  borderRadius: 12,
-  background: "#ecfdf5",
-  color: "#065f46",
-  border: "1px solid #bbf7d0",
-}
-const errorStyle: React.CSSProperties = {
-  margin: 0,
-  padding: 12,
-  borderRadius: 12,
-  background: "#fef2f2",
-  color: "#991b1b",
-  border: "1px solid #fecaca",
-}
-const confirmStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 16,
-  flexWrap: "wrap",
-  padding: 16,
-  borderRadius: 14,
-  background: "#fff7ed",
-  border: "1px solid #fed7aa",
-  color: "#9a3412",
-}
-const emptyStyle: React.CSSProperties = {
-  margin: 0,
-  padding: 16,
-  borderRadius: 14,
-  background: "#f9fafb",
-  border: "1px dashed #d1d5db",
-  color: "#6b7280",
-}
+
+// Cited assessment findings: evidence, so they sit on the neutral tinted block
+// every grouped list uses rather than on a colour of their own.
 const citationsStyle: React.CSSProperties = {
-  display: "grid",
-  gap: 10,
-  padding: 16,
-  borderRadius: 14,
-  border: "1px solid #dbeafe",
-  background: "#f5f7ff",
+  ...nestedBlockStyle,
+  gridColumn: "1 / -1",
 }
+
 const citationListStyle: React.CSSProperties = {
   listStyle: "none",
   margin: 0,
   padding: 0,
   display: "grid",
-  gap: 8,
+  gap: uiSpace.xs,
 }
+
 const citationStyle: React.CSSProperties = {
   display: "flex",
+  flexWrap: "wrap",
   justifyContent: "space-between",
-  alignItems: "start",
-  gap: 16,
-  padding: 12,
-  borderRadius: 12,
-  background: "#fff",
-  border: "1px solid #dbeafe",
+  alignItems: "flex-start",
+  gap: uiSpace.sm,
+  padding: uiSpace.sm,
+  borderRadius: 8,
+  background: uiColors.surface,
+  border: `1px solid ${uiColors.border}`,
 }
+
 const emptyCitationStyle: React.CSSProperties = {
   margin: 0,
-  padding: 12,
-  borderRadius: 12,
-  background: "#fff",
-  border: "1px dashed #a5b4fc",
-  color: "#6b7280",
+  padding: uiSpace.sm,
+  borderRadius: 8,
+  background: uiColors.surface,
+  border: `1px dashed ${uiColors.borderStrong}`,
+  color: uiColors.textSecondary,
+  fontSize: 14,
   fontWeight: 400,
 }
+
 const gapsStyle: React.CSSProperties = {
-  display: "grid",
-  gap: 16,
-  border: "2px solid #c7d2fe",
-  borderRadius: 18,
-  padding: 20,
-  background: "#f5f7ff",
+  ...fieldsetStyle,
+  background: uiColors.subtle,
 }
-const emptyGapStyle: React.CSSProperties = {
+
+const gapTextStyle: React.CSSProperties = {
   margin: 0,
-  padding: 14,
-  borderRadius: 12,
-  background: "#fff",
-  border: "1px dashed #a5b4fc",
-  color: "#6b7280",
+  color: uiColors.textSecondary,
+  fontSize: 14,
+  lineHeight: 1.5,
 }
+
+const gapListStyle: React.CSSProperties = {
+  display: "grid",
+  gap: uiSpace.xs,
+}
+
 const gapItemStyle: React.CSSProperties = {
   display: "flex",
+  flexWrap: "wrap",
   justifyContent: "space-between",
-  alignItems: "start",
-  gap: 16,
-  padding: 14,
-  borderRadius: 12,
-  background: "#fff",
-  border: "1px solid #dbeafe",
+  alignItems: "flex-start",
+  gap: uiSpace.sm,
+  padding: uiSpace.sm,
+  borderRadius: 8,
+  background: uiColors.surface,
+  border: `1px solid ${uiColors.border}`,
 }
+
 const gapInputStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(260px, 1fr) auto",
-  gap: 12,
+  gridTemplateColumns: "minmax(240px, 1fr) auto",
+  gap: uiSpace.sm,
   alignItems: "end",
 }

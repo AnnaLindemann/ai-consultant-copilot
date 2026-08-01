@@ -1,13 +1,40 @@
 import Link from "next/link"
 import { cookies } from "next/headers"
+import { redirect } from "next/navigation"
 
-import { STAGE_LABELS } from "../../lib/engagement-stage"
+import ManagerShell from "../../components/ManagerShell"
+import {
+  Badge,
+  EmptyState,
+  InlineAlert,
+  buttonStyle,
+  cardStyle,
+  compactButtonStyle,
+  metaTextStyle,
+  mutedTextStyle,
+  pageStackStyle,
+  tableCellStyle,
+  tableHeadCellStyle,
+  tableScrollStyle,
+  tableStyle,
+} from "../../components/UiKit"
+import { formatDateTime, t, translateServerMessage } from "../../i18n"
+import { signInPath } from "../../lib/auth-redirect"
+import { uiColors } from "../../lib/design-tokens"
+import { stageLabel, type EngagementStage } from "../../lib/engagement-stage"
+
+// The engagement list. A Manager compares several records at once, so this is a
+// table rather than a wall of cards (UI-KIT §M02) — and every column is
+// something the list endpoint already returns. There is deliberately no status,
+// no next action and no filter here: the list contract carries none of them,
+// and a column filled with a guess is worse than a column that is absent.
 
 type EngagementSummary = {
   id: string
   title: string | null
-  stage: keyof typeof STAGE_LABELS
+  stage: EngagementStage
   createdAt: string
+  updatedAt: string
   organization: {
     id: string
     name: string
@@ -31,71 +58,141 @@ export default async function EngagementsPage() {
     headers: cookieHeader ? { cookie: cookieHeader } : undefined,
   })
 
+  // Not signed in — or signed in with a session the server no longer accepts,
+  // which the cookie-only check in `proxy.ts` cannot see. Either way the answer
+  // is the sign-in page, not the server's identifier rendered as prose.
+  if (response.status === 401) redirect(signInPath("/engagements"))
+
   const result = (await response.json()) as EngagementsResponse
 
   if (!response.ok || !result.status || !result.data) {
     return (
-      <main style={pageStyle}>
-        <section style={cardStyle}>
-          <h1>Engagements</h1>
-          <p style={{ color: "#991b1b" }}>
-            Failed to load engagements: {result.message}
-          </p>
-        </section>
-      </main>
+      <ManagerShell
+        title={t("engagements.title")}
+        description={t("engagements.intro")}
+      >
+        <div style={pageStackStyle}>
+          <InlineAlert tone="danger">
+            <span>
+              <strong>{t("engagements.load_failed.title")}</strong>{" "}
+              {/* The refusal the server named, rendered. Its identifier is for
+                  this page to act on, never for the consultant to read. */}
+              {translateServerMessage(
+                result.message,
+                undefined,
+                "engagements.load_failed",
+              )}
+            </span>
+          </InlineAlert>
+        </div>
+      </ManagerShell>
     )
   }
 
+  const engagements = result.data
+
   return (
-    <main style={pageStyle}>
-      <section style={headerStyle}>
-        <p style={eyebrowStyle}>AI Consultant Copilot</p>
-        <h1 style={titleStyle}>Engagements</h1>
-        <p style={subtitleStyle}>
-          Open an existing engagement and resume where it stands, or{" "}
-          <Link href="/" style={inlineLinkStyle}>
-            start a new one
-          </Link>
-          .
-        </p>
-      </section>
-
-      {result.data.length === 0 ? (
-        <section style={{ ...cardStyle, maxWidth: 1180, margin: "0 auto" }}>
-          <p style={mutedStyle}>
-            No engagements yet.{" "}
-            <Link href="/" style={inlineLinkStyle}>
-              Create your first engagement
-            </Link>
-            .
-          </p>
-        </section>
-      ) : (
-        <section style={gridStyle}>
-          {result.data.map((engagement) => (
-            <article key={engagement.id} style={cardStyle}>
-              <span style={stageBadgeStyle}>{STAGE_LABELS[engagement.stage]}</span>
-              <h2 style={engagementTitleStyle}>{engagement.organization.name}</h2>
-              <p style={mutedStyle}>
-                {engagement.title ?? "Untitled engagement"}
-                {engagement.organization.industry
-                  ? ` · ${engagement.organization.industry}`
-                  : ""}
-              </p>
-
-              <p style={metaStyle}>
-                Created: {new Date(engagement.createdAt).toLocaleDateString()}
-              </p>
-
-              <p style={idStyle}>{engagement.id}</p>
-              <Link href={`/engagements/${engagement.id}`} style={linkStyle}>
-                Open →
+    <ManagerShell
+      title={t("engagements.title")}
+      description={t("engagements.intro")}
+      actions={
+        <Link href="/" style={buttonStyle("primary")}>
+          {t("engagements.action.start_new")}
+        </Link>
+      }
+    >
+      <div style={pageStackStyle}>
+        {engagements.length === 0 ? (
+          <EmptyState title={t("engagements.empty.title")}>
+            <p style={mutedTextStyle}>{t("engagements.empty")}</p>
+            <p style={mutedTextStyle}>
+              <Link href="/" style={linkStyle}>
+                {t("engagements.action.create_first")}
               </Link>
-            </article>
-          ))}
-        </section>
-      )}
-    </main>
+            </p>
+          </EmptyState>
+        ) : (
+          <section style={cardStyle}>
+            <p style={metaTextStyle}>
+              {engagements.length === 1
+                ? t("engagements.count.one")
+                : t("engagements.count", { count: engagements.length })}
+            </p>
+
+            <div style={tableScrollStyle}>
+              <table
+                style={tableStyle}
+                aria-label={t("engagements.table.aria_label")}
+              >
+                <thead>
+                  <tr>
+                    <th scope="col" style={tableHeadCellStyle}>
+                      {t("engagements.column.organization")}
+                    </th>
+                    <th scope="col" style={tableHeadCellStyle}>
+                      {t("engagements.column.engagement")}
+                    </th>
+                    <th scope="col" style={tableHeadCellStyle}>
+                      {t("engagements.column.stage")}
+                    </th>
+                    <th scope="col" style={tableHeadCellStyle}>
+                      {t("engagements.column.updated")}
+                    </th>
+                    <th scope="col" style={tableHeadCellStyle}>
+                      {t("engagements.column.created")}
+                    </th>
+                    <th scope="col" style={tableHeadCellStyle}>
+                      <span className="visually-hidden">
+                        {t("engagements.column.action")}
+                      </span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {engagements.map((engagement) => (
+                    <tr key={engagement.id}>
+                      <td style={tableCellStyle}>
+                        <span style={organizationNameStyle}>
+                          {engagement.organization.name}
+                        </span>
+                        {engagement.organization.industry && (
+                          <span style={industryStyle}>
+                            {engagement.organization.industry}
+                          </span>
+                        )}
+                      </td>
+                      <td style={tableCellStyle}>
+                        {engagement.title ?? t("engagement.untitled")}
+                      </td>
+                      <td style={tableCellStyle}>
+                        <Badge
+                          tone="neutral"
+                          label={stageLabel(engagement.stage)}
+                        />
+                      </td>
+                      <td style={numericCellStyle}>
+                        {formatDateTime(engagement.updatedAt)}
+                      </td>
+                      <td style={numericCellStyle}>
+                        {formatDateTime(engagement.createdAt)}
+                      </td>
+                      <td style={actionCellStyle}>
+                        <Link
+                          href={`/engagements/${engagement.id}`}
+                          style={compactButtonStyle("secondary")}
+                        >
+                          {t("engagements.action.open")}
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+      </div>
+    </ManagerShell>
   )
 }
 
@@ -106,102 +203,35 @@ async function serializeCookies() {
     .join("; ")
 }
 
-const pageStyle: React.CSSProperties = {
-  minHeight: "100vh",
-  background: "#f6f7fb",
-  color: "#111827",
-  padding: "40px 24px",
-  fontFamily:
-    'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+const organizationNameStyle: React.CSSProperties = {
+  display: "block",
+  color: uiColors.textPrimary,
+  fontWeight: 600,
 }
 
-const headerStyle: React.CSSProperties = {
-  maxWidth: 1180,
-  margin: "0 auto 32px",
-}
-
-const eyebrowStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#4f46e5",
-  fontWeight: 700,
-  fontSize: 14,
-  textTransform: "uppercase",
-  letterSpacing: 1,
-}
-
-const titleStyle: React.CSSProperties = {
-  fontSize: 42,
-  lineHeight: 1.1,
-  margin: "8px 0 12px",
-}
-
-const subtitleStyle: React.CSSProperties = {
-  color: "#6b7280",
-  fontSize: 18,
-  maxWidth: 760,
-}
-
-const gridStyle: React.CSSProperties = {
-  maxWidth: 1180,
-  margin: "0 auto",
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-  gap: 20,
-}
-
-const cardStyle: React.CSSProperties = {
-  background: "#ffffff",
-  borderRadius: 24,
-  padding: 24,
-  boxShadow: "0 20px 50px rgba(15, 23, 42, 0.08)",
-  border: "1px solid #e5e7eb",
-}
-
-const engagementTitleStyle: React.CSSProperties = {
-  margin: 0,
-  fontSize: 22,
-}
-
-const mutedStyle: React.CSSProperties = {
-  color: "#6b7280",
-  margin: "8px 0 16px",
-}
-
-const metaStyle: React.CSSProperties = {
-  color: "#374151",
-  fontSize: 14,
-  margin: 0,
-}
-
-const idStyle: React.CSSProperties = {
-  marginTop: 12,
-  color: "#9ca3af",
+const industryStyle: React.CSSProperties = {
+  display: "block",
+  marginTop: 2,
+  color: uiColors.textSecondary,
   fontSize: 12,
-  wordBreak: "break-all",
 }
+
+const numericCellStyle: React.CSSProperties = {
+  ...tableCellStyle,
+  color: uiColors.textSecondary,
+  fontSize: 13,
+  whiteSpace: "nowrap",
+}
+
+const actionCellStyle: React.CSSProperties = {
+  ...tableCellStyle,
+  paddingRight: 0,
+  textAlign: "right",
+  whiteSpace: "nowrap",
+}
+
 const linkStyle: React.CSSProperties = {
-  display: "inline-block",
-  marginTop: 16,
-  color: "#4f46e5",
-  fontWeight: 800,
+  color: uiColors.primary,
+  fontWeight: 600,
   textDecoration: "none",
-}
-
-const inlineLinkStyle: React.CSSProperties = {
-  color: "#4f46e5",
-  fontWeight: 700,
-  textDecoration: "none",
-}
-
-const stageBadgeStyle: React.CSSProperties = {
-  display: "inline-block",
-  padding: "4px 10px",
-  borderRadius: 999,
-  background: "#eef2ff",
-  color: "#3730a3",
-  fontSize: 12,
-  fontWeight: 800,
-  textTransform: "uppercase",
-  letterSpacing: 0.5,
-  marginBottom: 12,
 }

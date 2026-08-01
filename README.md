@@ -8,7 +8,8 @@ Discovery Profile — including the **value & measurement baseline** of what the
 problem costs today and what success would measurably look like — moves that
 discovery through a **draft / submitted / returned / accepted** review workflow,
 generates an AI-assisted **Assessment** of the client across the six assessment
-dimensions, and reviews a structured consultant report — leaving and resuming
+dimensions, derives and prioritizes the **Opportunities** that follow from it,
+and reviews a structured consultant report — leaving and resuming
 the engagement without losing state. Every AI-assisted step
 is recorded
 as an **Analysis Run** — with provider, model, prompt version, prompt
@@ -179,6 +180,79 @@ output lands as an unreviewed draft the consultant edits, overrides, or accepts;
 regenerating over an Assessment that already carries consultant edits requires
 explicit confirmation.
 
+**Opportunities** are derived from the persisted Assessment: each one carries the
+problem it was carried forward from, an improvement candidate, the consultant's
+view of its **value, effort, impact, and confidence**, and a qualification
+against the Assessment's **AI Readiness** dimension — anything short of "ready"
+names what stands in the way. Every Opportunity cites the assessment findings it
+comes from, by dimension and title; a draft citing a finding the Assessment does
+not contain is rejected outright and nothing is persisted. The set is
+**prioritized**: ranks run 1..n without gaps or duplicates, the consultant
+re-orders by hand, and re-running after the Assessment changes updates the
+ordering without restarting the engagement. Like the Assessment, the AI draft is
+the consultant's to edit or accept, and re-running over their edits requires
+explicit confirmation.
+
+## Curated Consulting Knowledge Base (Phase 5)
+
+The **Consulting Knowledge Base** is the reusable, engagement-independent
+knowledge that grounds the methodology. It holds the approved kinds of
+consulting knowledge — business domains, processes and problems, the Customer
+Operations taxonomy, discovery questions, assessment frameworks, AI-readiness
+criteria, AI use cases, solution and implementation patterns, ROI and risk
+models, best practices, and follow-up templates — scoped to the Customer
+Operations domain. (Technology Profiles are **not** here; they belong to the
+separate Technology Knowledge Base in Phase 5A.)
+
+It is **strictly separate from engagement state**: its table group carries no
+workspace and no engagement reference, engagements reference an entry by its
+stable `code`, and there is no code path from running an engagement to a
+knowledge write. It is a **product-level asset shared across workspaces** — it
+holds no client-specific content, so it sits deliberately outside the Phase 3A
+isolation boundary.
+
+**Retrieval is deterministic and structural.** For a given engagement and
+consulting stage it runs:
+
+```
+engagement context
+  → the stage's required knowledge kinds
+  → structured filter (domain + active + kind + stage scope)
+  → anchor resolution: the engagement's own words are resolved through each
+    entry's curated match vocabulary into taxonomy codes, then into the
+    processes, problems, and use cases those codes are curated against
+  → traversal of the explicit curated relationships to those anchors
+  → deterministic ranking (integer weights over typed relationships;
+    ties broken by curator sort order, then by code)
+  → a limited package (at most 4 per kind, 12 in total)
+  → the prompt
+```
+
+Identical inputs against an unchanged knowledge base always produce identical,
+identically ordered results. The LLM never searches the knowledge base — it
+receives only the selected package, and the codes it was grounded in are
+recorded on the Analysis Run as `knowledgeEntryCodes`. **Tags are a weak
+additional signal and can never select an entry on their own**; stable codes,
+the taxonomy, and explicit relationships are what retrieval runs on. Embeddings,
+vector search, and RAG remain out of scope until Phase 10.
+
+**Curation is a deliberate, separate activity.** An Administrator creates,
+edits, and deactivates entries; a Manager reads; a Client reaches nothing.
+Writes are revision-checked, so a stale edit is refused rather than silently
+overwriting another curator's change, and a curated relationship that points at
+an unknown code — or at the wrong kind of entry — is rejected before it is
+persisted. Deactivation retires an entry from retrieval without deleting it or
+invalidating the codes an earlier Analysis Run recorded.
+
+**The shipped Customer Operations content is a starting point, not a fixture.**
+It is seeded only into an empty knowledge base: once the base holds a single
+row, restarting the application never writes to it again, so an administrator's
+curated changes are safe across restarts.
+
+**Nothing from the knowledge base reaches a client.** The Client Portal's
+responses carry no knowledge package, no guidance, and no internal frameworks
+or AI-readiness criteria; the portal has no knowledge route at all.
+
 ## Access control (Phase 3A)
 
 The workbench is multi-user and partitioned by **Workspace**. Every
@@ -280,8 +354,16 @@ account-lifecycle endpoints requires an authenticated session cookie.
 | POST   | `/engagements/:id/discovery/reopen`| Reopen discovery for revision (consultant).   |
 | POST   | `/engagements/:id/assessment`     | Generate the AI Assessment draft from discovery.|
 | PATCH  | `/engagements/:id/assessment`     | Save the consultant's reviewed Assessment.     |
+| POST   | `/engagements/:id/opportunities`  | Derive and prioritize the Opportunities from the Assessment. |
+| PATCH  | `/engagements/:id/opportunities`  | Save the consultant's reviewed, re-ordered Opportunities. |
 | POST   | `/engagements/:id/analyze`        | Run the AI analysis for an engagement.         |
 | GET    | `/engagements/:id/analysis-runs`  | List the engagement's Analysis Runs.           |
+| GET    | `/knowledge`                      | Browse the curated Consulting Knowledge Base (`ADMIN`, `MANAGER`). |
+| GET    | `/knowledge/entries/:code`        | Read one curated entry (`ADMIN`, `MANAGER`).   |
+| POST   | `/knowledge/entries`              | Create a curated entry (`ADMIN`).              |
+| PATCH  | `/knowledge/entries/:code`        | Edit or deactivate a curated entry (`ADMIN`, revision-checked). |
+| GET    | `/knowledge/engagements/:id/discovery-package` | The knowledge package retrieved for this engagement's Discovery. |
+| GET    | `/knowledge/engagements/:id/assessment-package` | The knowledge package retrieved for this engagement's Assessment. |
 
 ## Scripts
 
@@ -311,8 +393,17 @@ review workflow and content provenance (a client cannot accept their own
 submission, no transition rewrites content, client-provided content keeps its
 attribution), the Assessment stage's rules and orchestration (a failed AI step
 never mutates engagement state and is still recorded as an Analysis Run;
-consultant edits are not silently regenerated over), validating engagement
-input, and cost calculation.
+consultant edits are not silently regenerated over), the Consulting Knowledge
+Base's deterministic retrieval (the same inputs always produce the same ordered
+codes, a typed curated relationship always outranks a tag match, only a stage's
+required kinds are retrieved, inactive entries are excluded, the package is
+capped, and every shipped relationship resolves to a real entry of the right
+kind), the Opportunity contract and
+the prioritization stage (an opportunity must cite a finding the Assessment
+actually contains, a qualification short of "ready" must name a blocker, a
+ranking must be a real ordering, and output citing an invented finding is
+refused without mutating state), validating engagement input, and cost
+calculation.
 
 From Phase 3A they also cover **access control, tested negatively** — the
 denials, not only the permitted paths: unauthenticated access, cross-workspace
@@ -333,11 +424,18 @@ npm test --prefix server
 ```
 
 Replacing the infrastructure at its seams is right for proving the rules, but it
-leaves the seams themselves unproven. One suite therefore uses the real thing
+leaves the seams themselves unproven. Three suites therefore use the real thing
 end to end — a real Better Auth session → the real `AuthenticationProvider` →
 the domain `User` → the `AccessPolicy` → the Prisma repositories → the Express
-routes — against a **uniquely named throwaway PostgreSQL database it creates,
-migrates with the real Prisma migration chain, and drops afterwards**:
+routes; the prioritization stage's own storage path (a prioritization survives
+the Json round-trip with its citations and ranks intact, and the new routes are
+workspace-scoped like every other engagement route); and the Consulting
+Knowledge Base (an Administrator curates and a Manager cannot, a Client reaches
+nothing, the portal leaks nothing, repeated retrieval is identical, a
+deactivated entry disappears, an invalid relationship is refused, and a restart
+never overwrites a curated change) — each against a
+**uniquely named throwaway PostgreSQL database it creates, migrates with the
+real Prisma migration chain, and drops afterwards**:
 
 ```bash
 npm run test:integration --prefix server

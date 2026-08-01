@@ -3,6 +3,40 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 
+import {
+  SectionStatusLegend,
+  WorkflowAccordion,
+  WorkflowProgressSummary,
+  WorkflowSectionNav,
+  type WorkflowSectionItem,
+} from "./WorkflowPrimitives"
+import {
+  stageEyebrowStyle,
+  stageHeaderStyle,
+  stageHeadingStyle,
+  stageIntroStyle,
+  stageSurfaceStyle,
+} from "./StagePanel"
+import {
+  Badge,
+  EmptyState,
+  InlineAlert,
+  actionRowStyle,
+  buttonStyle,
+  fieldStyle,
+  fieldsGridStyle,
+  fieldsetStyle,
+  hintStyle,
+  inputStyle,
+  legendStyle,
+  nestedBlockStyle,
+  removeButtonStyle,
+  rowStyle,
+  subSectionTitleStyle,
+  textareaStyle,
+} from "./UiKit"
+import { uiColors, uiSpace } from "../lib/design-tokens"
+import { t, translateServerMessage } from "../i18n"
 import type {
   Assessment,
   AssessmentDimension,
@@ -10,6 +44,11 @@ import type {
   AssessmentFinding,
   AssessmentReviewState,
 } from "../../shared/assessment.schema"
+import {
+  hasAnyItem,
+  hasAnyText,
+  type WorkflowSectionStatus,
+} from "../lib/workflow-status"
 
 type AssessmentPanelProps = {
   engagementId: string
@@ -20,32 +59,34 @@ type AssessmentPanelProps = {
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8787"
 
-const DIMENSION_LABELS: Record<AssessmentDimensionKey, string> = {
-  businessProcess: "Business Process",
-  data: "Data",
-  technology: "Technology",
-  aiReadiness: "AI Readiness",
-  risks: "Risks",
-  opportunities: "Opportunities",
-}
+// The six assessment dimensions, the three-step confidence scale, the two
+// bases and the review state are the schema's own identifiers: they stay
+// English on the wire and in storage, and only their rendering is looked up.
+const DIMENSION_KEYS: AssessmentDimensionKey[] = [
+  "businessProcess",
+  "data",
+  "technology",
+  "aiReadiness",
+  "risks",
+  "opportunities",
+]
 
-const DIMENSION_KEYS = Object.keys(DIMENSION_LABELS) as AssessmentDimensionKey[]
+const dimensionLabel = (key: AssessmentDimensionKey) =>
+  t(`assessment.dimension.${key}`)
 
 // The draft is always labelled for what it is, so an unreviewed AI output is
 // never mistaken for the consultant's own conclusion.
-const REVIEW_STATE_LABELS: Record<AssessmentReviewState, string> = {
-  ai_draft: "AI draft · not yet reviewed",
-  consultant_edited: "Edited by you",
-  accepted: "Accepted by you",
-}
+const reviewStateLabel = (state: AssessmentReviewState) =>
+  t(`assessment.review_state.${state}`)
 
 const confidenceOptions = ["low", "medium", "high"] as const
 const basisOptions = ["discovery_fact", "assumption"] as const
 
-const BASIS_LABELS: Record<(typeof basisOptions)[number], string> = {
-  discovery_fact: "Supported by discovery",
-  assumption: "Rests on an assumption",
-}
+const confidenceLabel = (level: (typeof confidenceOptions)[number]) =>
+  t(`assessment.confidence.${level}`)
+
+const basisLabel = (basis: (typeof basisOptions)[number]) =>
+  t(`assessment.basis.${basis}`)
 
 const emptyFinding: Omit<AssessmentFinding, "id"> = {
   title: "",
@@ -156,24 +197,44 @@ export default function AssessmentPanel({
       const result = await response.json()
 
       // The backend refuses to overwrite reviewed work; regenerating anyway is
-      // the consultant's explicit decision.
+      // the consultant's explicit decision. Every refusal arrives as an
+      // identifier and is worded here (§12A).
       if (response.status === 409) {
         setEditsAtRisk(true)
-        setError(result.message ?? "This Assessment carries your own edits.")
+        setError(
+          translateServerMessage(
+            result.message,
+            undefined,
+            "assessment.error.consultant_edits_protected",
+          ),
+        )
         return
       }
 
       if (!response.ok) {
-        throw new Error(result.message ?? "Failed to generate the Assessment")
+        setError(
+          translateServerMessage(
+            result.message,
+            undefined,
+            "assessment.error.internal",
+          ),
+        )
+        return
       }
 
       setAssessment(result.data.assessment as Assessment)
       setReviewState(result.data.reviewState as AssessmentReviewState)
       setEditsAtRisk(false)
-      setMessage("AI draft generated. Review, edit, and save it before use.")
+      setMessage(
+        translateServerMessage(
+          result.message,
+          undefined,
+          "assessment.message.draft_generated",
+        ),
+      )
       router.refresh()
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unknown error")
+    } catch {
+      setError(t("common.error.unexpected"))
     } finally {
       setIsGenerating(false)
     }
@@ -204,372 +265,422 @@ export default function AssessmentPanel({
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.message ?? "Failed to save the Assessment")
+        setError(
+          translateServerMessage(
+            result.message,
+            undefined,
+            "assessment.error.internal",
+          ),
+        )
+        return
       }
 
       setReviewState(nextReviewState)
       setEditsAtRisk(false)
+      // Accepting and saving are the same endpoint but not the same event, so
+      // the consultant is told which one happened.
       setMessage(
         nextReviewState === "accepted"
-          ? "Assessment accepted"
-          : "Assessment saved",
+          ? t("assessment.confirm.accepted")
+          : translateServerMessage(
+              result.message,
+              undefined,
+              "assessment.message.saved",
+            ),
       )
       router.refresh()
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unknown error")
+    } catch {
+      setError(t("common.error.unexpected"))
     } finally {
       setIsSaving(false)
     }
   }
 
-  return (
-    <section style={panelStyle}>
-      <div style={headerStyle}>
-        <div>
-          <p style={eyebrowStyle}>Phase 3 · Business &amp; AI Readiness</p>
-          <h2 style={headingStyle}>Assessment</h2>
-          <p style={introStyle}>
-            An AI-assisted reading of the persisted Discovery Profile across all
-            six dimensions. Every finding shows whether it is supported by
-            discovery or rests on an assumption, and how confident it is. The
-            draft is yours to edit, override, or accept.
-          </p>
-        </div>
-        <div style={{ display: "grid", gap: 10, justifyItems: "end" }}>
-          {reviewState && (
-            <span
-              style={
-                reviewState === "ai_draft" ? draftBadgeStyle : reviewedBadgeStyle
-              }
-            >
-              {REVIEW_STATE_LABELS[reviewState]}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={() => generateAssessment(false)}
-            disabled={isGenerating}
-            style={{ ...generateButtonStyle, opacity: isGenerating ? 0.6 : 1 }}
-          >
-            {isGenerating
-              ? "Generating…"
-              : assessment
-                ? "Regenerate from Discovery"
-                : "Generate Assessment"}
-          </button>
-        </div>
-      </div>
+  function getAssessmentDimensionStatus(
+    key: AssessmentDimensionKey,
+    currentAssessment: Assessment | null,
+    currentReviewState: AssessmentReviewState | null,
+  ): WorkflowSectionStatus {
+    if (!currentAssessment) return "not_started"
 
-      {message && <p style={successStyle}>{message}</p>}
-      {error && <p style={errorStyle}>{error}</p>}
+    const dimension = currentAssessment.dimensions[key]
+    const hasGaps = currentAssessment.gaps.some((gap) => gap.dimension === key)
+    const hasSummary = hasAnyText([dimension.summary])
+    const hasFindings = hasAnyItem(dimension.findings)
 
-      {editsAtRisk && (
-        <div style={confirmStyle}>
-          <p style={{ margin: 0 }}>
-            Regenerating replaces the Assessment you edited. Your saved version
-            cannot be recovered afterwards.
-          </p>
-          <button
-            type="button"
-            onClick={() => generateAssessment(true)}
-            disabled={isGenerating}
-            style={{ ...dangerButtonStyle, opacity: isGenerating ? 0.6 : 1 }}
-          >
-            Replace my edits and regenerate
-          </button>
-        </div>
-      )}
+    if (hasGaps) return "action_required"
+    if (hasFindings && hasSummary) {
+      return currentReviewState === "accepted" ? "complete" : "in_progress"
+    }
+    if (hasSummary || hasFindings) return "in_progress"
+    return "not_started"
+  }
 
-      {!assessment ? (
-        <p style={emptyStyle}>
-          No Assessment yet. Capture the Discovery Profile first, then generate a
-          draft from it.
-        </p>
-      ) : (
-        <>
-          <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
-            <span>Overall summary</span>
-            <textarea
-              value={assessment.summary}
-              onChange={(event) =>
-                updateAssessment((current) => ({
-                  ...current,
-                  summary: event.target.value,
-                }))
-              }
-              style={textareaStyle}
-            />
-          </label>
+  function getAssessmentGapsStatus(
+    currentAssessment: Assessment | null,
+  ): WorkflowSectionStatus {
+    if (!currentAssessment) return "not_started"
+    return currentAssessment.gaps.length === 0 ? "not_started" : "complete"
+  }
 
-          {DIMENSION_KEYS.map((key) => {
-            const dimension = assessment.dimensions[key]
+  function renderDimensionSection(key: AssessmentDimensionKey) {
+    const dimension = assessment?.dimensions[key]
+    if (!assessment || !dimension) return null
 
-            return (
-              <fieldset key={key} style={sectionStyle}>
-                <legend style={legendStyle}>{DIMENSION_LABELS[key]}</legend>
+    return (
+      <fieldset style={sectionStyle}>
+        <legend style={legendStyle}>{dimensionLabel(key)}</legend>
+
+        <label style={fieldStyle}>
+          <span>{t("assessment.field.dimension_summary")}</span>
+          <textarea
+            value={dimension.summary}
+            onChange={(event) =>
+              updateDimension(key, (current) => ({
+                ...current,
+                summary: event.target.value,
+              }))
+            }
+            style={textareaStyle}
+          />
+        </label>
+
+        {dimension.findings.length === 0 ? (
+          <EmptyState>{t("assessment.finding.empty")}</EmptyState>
+        ) : (
+          dimension.findings.map((finding, index) => (
+            <div key={index} style={findingStyle}>
+              <div style={rowStyle}>
+                {/* Evidence and confidence are statuses, so they use the
+                    semantic tones — never a colour that means "this feature". */}
+                <Badge
+                  tone={finding.basis === "discovery_fact" ? "success" : "warning"}
+                  label={basisLabel(finding.basis)}
+                />
+                <Badge
+                  tone="neutral"
+                  label={t("assessment.finding.confidence_badge", {
+                    level: confidenceLabel(finding.confidence),
+                  })}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeFinding(key, index)}
+                  style={removeButtonStyle}
+                >
+                  {t("common.action.remove")}
+                </button>
+              </div>
+
+              <div style={fieldsGridStyle}>
+                <label style={fieldStyle}>
+                  <span>{t("assessment.finding.title")}</span>
+                  <input
+                    value={finding.title}
+                    onChange={(event) =>
+                      updateFinding(key, index, {
+                        title: event.target.value,
+                      })
+                    }
+                    style={inputStyle}
+                  />
+                </label>
 
                 <label style={fieldStyle}>
-                  <span>Dimension summary</span>
-                  <textarea
-                    value={dimension.summary}
+                  <span>{t("assessment.finding.basis")}</span>
+                  <select
+                    value={finding.basis}
                     onChange={(event) =>
-                      updateDimension(key, (current) => ({
-                        ...current,
-                        summary: event.target.value,
-                      }))
+                      updateFinding(key, index, {
+                        basis: event.target.value as AssessmentFinding["basis"],
+                      })
+                    }
+                    style={inputStyle}
+                  >
+                    {basisOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {basisLabel(option)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label style={fieldStyle}>
+                  <span>{t("assessment.finding.confidence")}</span>
+                  <select
+                    value={finding.confidence}
+                    onChange={(event) =>
+                      updateFinding(key, index, {
+                        confidence: event.target.value as AssessmentFinding["confidence"],
+                      })
+                    }
+                    style={inputStyle}
+                  >
+                    {confidenceOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {confidenceLabel(option)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label style={fullWidthFieldStyle}>
+                  <span>{t("assessment.finding.detail")}</span>
+                  <textarea
+                    value={finding.detail}
+                    onChange={(event) =>
+                      updateFinding(key, index, {
+                        detail: event.target.value,
+                      })
                     }
                     style={textareaStyle}
                   />
                 </label>
 
-                {dimension.findings.length === 0 ? (
-                  <p style={emptyFindingStyle}>
-                    No findings for this dimension. Discovery did not support
-                    any — add your own, or record what is missing as a gap.
-                  </p>
-                ) : (
-                  dimension.findings.map((finding, index) => (
-                    <div key={index} style={findingStyle}>
-                      <div style={findingHeaderStyle}>
-                        <span
-                          style={
-                            finding.basis === "discovery_fact"
-                              ? factBadgeStyle
-                              : assumptionBadgeStyle
-                          }
-                        >
-                          {BASIS_LABELS[finding.basis]}
-                        </span>
-                        <span style={confidenceBadgeStyle}>
-                          confidence: {finding.confidence}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => removeFinding(key, index)}
-                          style={removeButtonStyle}
-                        >
-                          Remove
-                        </button>
-                      </div>
+                <label style={fieldStyle}>
+                  <span>{t("assessment.finding.supporting_facts")}</span>
+                  <input
+                    value={finding.supportingFacts.join(" | ")}
+                    onChange={(event) =>
+                      updateFinding(key, index, {
+                        supportingFacts: toList(event.target.value),
+                      })
+                    }
+                    style={inputStyle}
+                  />
+                  <small style={hintStyle}>
+                    {t("common.field.pipe_hint")}
+                  </small>
+                </label>
 
-                      <div style={fieldsGridStyle}>
-                        <label style={fieldStyle}>
-                          <span>Finding</span>
-                          <input
-                            value={finding.title}
-                            onChange={(event) =>
-                              updateFinding(key, index, {
-                                title: event.target.value,
-                              })
-                            }
-                            style={inputStyle}
-                          />
-                        </label>
+                <label style={fieldStyle}>
+                  <span>{t("assessment.finding.assumptions")}</span>
+                  <input
+                    value={finding.assumptions.join(" | ")}
+                    onChange={(event) =>
+                      updateFinding(key, index, {
+                        assumptions: toList(event.target.value),
+                      })
+                    }
+                    style={inputStyle}
+                  />
+                  <small style={hintStyle}>
+                    {t("common.field.pipe_hint")}
+                  </small>
+                </label>
+              </div>
+            </div>
+          ))
+        )}
 
-                        <label style={fieldStyle}>
-                          <span>Basis</span>
-                          <select
-                            value={finding.basis}
-                            onChange={(event) =>
-                              updateFinding(key, index, {
-                                basis: event.target
-                                  .value as AssessmentFinding["basis"],
-                              })
-                            }
-                            style={inputStyle}
-                          >
-                            {basisOptions.map((option) => (
-                              <option key={option} value={option}>
-                                {BASIS_LABELS[option]}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
+        <button
+          type="button"
+          onClick={() => addFinding(key)}
+          style={addFindingButtonStyle}
+        >
+          {t("assessment.action.add_finding")}
+        </button>
+      </fieldset>
+    )
+  }
 
-                        <label style={fieldStyle}>
-                          <span>Confidence</span>
-                          <select
-                            value={finding.confidence}
-                            onChange={(event) =>
-                              updateFinding(key, index, {
-                                confidence: event.target
-                                  .value as AssessmentFinding["confidence"],
-                              })
-                            }
-                            style={inputStyle}
-                          >
-                            {confidenceOptions.map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
+  function renderGapsSection() {
+    return (
+      <section style={gapsStyle}>
+        <div>
+          <p style={eyebrowStyle}>{t("assessment.gaps.eyebrow")}</p>
+          <h3 style={subSectionTitleStyle}>{t("assessment.gaps.title")}</h3>
+          <p style={introStyle}>{t("assessment.gaps.intro")}</p>
+        </div>
 
-                        <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
-                          <span>Detail</span>
-                          <textarea
-                            value={finding.detail}
-                            onChange={(event) =>
-                              updateFinding(key, index, {
-                                detail: event.target.value,
-                              })
-                            }
-                            style={textareaStyle}
-                          />
-                        </label>
-
-                        <label style={fieldStyle}>
-                          <span>Supporting discovery facts</span>
-                          <input
-                            value={finding.supportingFacts.join(" | ")}
-                            onChange={(event) =>
-                              updateFinding(key, index, {
-                                supportingFacts: toList(event.target.value),
-                              })
-                            }
-                            style={inputStyle}
-                          />
-                          <small style={hintStyle}>
-                            Separate items with a pipe (|).
-                          </small>
-                        </label>
-
-                        <label style={fieldStyle}>
-                          <span>Assumptions</span>
-                          <input
-                            value={finding.assumptions.join(" | ")}
-                            onChange={(event) =>
-                              updateFinding(key, index, {
-                                assumptions: toList(event.target.value),
-                              })
-                            }
-                            style={inputStyle}
-                          />
-                          <small style={hintStyle}>
-                            Separate items with a pipe (|).
-                          </small>
-                        </label>
-                      </div>
-                    </div>
-                  ))
-                )}
-
+        {assessment?.gaps.length === 0 ? (
+          <EmptyState>{t("assessment.gaps.empty")}</EmptyState>
+        ) : (
+          <div style={gapListStyle}>
+            {assessment?.gaps.map((gap, index) => (
+              <div key={`${gap.dimension}-${index}`} style={gapItemStyle}>
+                <div>
+                  <strong>{dimensionLabel(gap.dimension)}</strong>
+                  <p style={gapDescriptionStyle}>{gap.description}</p>
+                </div>
                 <button
                   type="button"
-                  onClick={() => addFinding(key)}
-                  style={addButtonStyle}
+                  onClick={() => removeGap(index)}
+                  style={removeButtonStyle}
                 >
-                  Add finding
+                  {t("common.action.remove")}
                 </button>
-              </fieldset>
-            )
-          })}
-
-          <section style={gapsStyle}>
-            <div>
-              <p style={eyebrowStyle}>Open questions</p>
-              <h3 style={{ margin: "5px 0 8px", fontSize: 22 }}>
-                What the Assessment could not determine
-              </h3>
-              <p style={introStyle}>
-                Gaps stay visible instead of being filled in by guesswork.
-              </p>
-            </div>
-
-            {assessment.gaps.length === 0 ? (
-              <p style={emptyGapStyle}>
-                No gaps recorded for this Assessment.
-              </p>
-            ) : (
-              <div style={{ display: "grid", gap: 10 }}>
-                {assessment.gaps.map((gap, index) => (
-                  <div key={`${gap.dimension}-${index}`} style={gapItemStyle}>
-                    <div>
-                      <strong>{DIMENSION_LABELS[gap.dimension]}</strong>
-                      <p style={{ margin: "4px 0 0", color: "#374151" }}>
-                        {gap.description}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeGap(index)}
-                      style={removeButtonStyle}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
               </div>
-            )}
+            ))}
+          </div>
+        )}
 
-            <div style={gapInputStyle}>
-              <label style={fieldStyle}>
-                <span>Dimension</span>
-                <select
-                  value={gapDimension}
-                  onChange={(event) =>
-                    setGapDimension(event.target.value as AssessmentDimensionKey)
-                  }
-                  style={inputStyle}
-                >
-                  {DIMENSION_KEYS.map((key) => (
-                    <option key={key} value={key}>
-                      {DIMENSION_LABELS[key]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label style={fieldStyle}>
-                <span>Description</span>
-                <input
-                  value={gapDescription}
-                  onChange={(event) => setGapDescription(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault()
-                      addGap()
-                    }
-                  }}
-                  placeholder="What still has to be learned to assess this?"
-                  style={inputStyle}
-                />
-              </label>
+        <div style={gapInputStyle}>
+          <label style={fieldStyle}>
+            <span>{t("assessment.gaps.dimension")}</span>
+            <select
+              value={gapDimension}
+              onChange={(event) =>
+                setGapDimension(event.target.value as AssessmentDimensionKey)
+              }
+              style={inputStyle}
+            >
+              {DIMENSION_KEYS.map((key) => (
+                <option key={key} value={key}>
+                  {dimensionLabel(key)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={fieldStyle}>
+            <span>{t("assessment.gaps.description")}</span>
+            <input
+              value={gapDescription}
+              onChange={(event) => setGapDescription(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault()
+                  addGap()
+                }
+              }}
+              placeholder={t("assessment.gaps.description_placeholder")}
+              style={inputStyle}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={addGap}
+            disabled={!gapDescription.trim()}
+            style={buttonStyle("secondary", !gapDescription.trim())}
+          >
+            {t("assessment.action.add_gap")}
+          </button>
+        </div>
+      </section>
+    )
+  }
+
+  const sectionItems: WorkflowSectionItem[] = [
+    ...DIMENSION_KEYS.map((key) => ({
+      id: key,
+      title: dimensionLabel(key),
+      status: getAssessmentDimensionStatus(key, assessment, reviewState),
+      content: renderDimensionSection(key),
+    })),
+    {
+      id: "gaps",
+      title: t("assessment.gaps.title"),
+      status: getAssessmentGapsStatus(assessment),
+      content: renderGapsSection(),
+    },
+  ]
+
+  const [activeSectionId, setActiveSectionId] = useState(
+    sectionItems.find((section) => section.status !== "complete")?.id ??
+      sectionItems[0]?.id ??
+      "businessProcess",
+  )
+  const effectiveActiveSectionId = sectionItems.some(
+    (section) => section.id === activeSectionId,
+  )
+    ? activeSectionId
+    : sectionItems.find((section) => section.status !== "complete")?.id ??
+      sectionItems[0]?.id ??
+      "businessProcess"
+
+  return (
+    <section style={panelStyle}>
+      <div style={headerStyle}>
+        <div>
+          <p style={eyebrowStyle}>{t("assessment.eyebrow")}</p>
+          <h2 style={headingStyle}>{t("assessment.title")}</h2>
+          <p style={introStyle}>{t("assessment.intro")}</p>
+        </div>
+        <div style={headerActionsStyle}>
+          {reviewState && (
+            <Badge
+              tone={reviewState === "ai_draft" ? "warning" : "success"}
+              label={reviewStateLabel(reviewState)}
+            />
+          )}
+          <button
+            type="button"
+            onClick={() => generateAssessment(false)}
+            disabled={isGenerating}
+            style={buttonStyle("secondary", isGenerating)}
+          >
+            {isGenerating
+              ? t("assessment.action.generating")
+              : assessment
+                ? t("assessment.action.regenerate")
+                : t("assessment.action.generate")}
+          </button>
+        </div>
+      </div>
+
+      {message && <InlineAlert tone="success">{message}</InlineAlert>}
+      {error && <InlineAlert tone="danger">{error}</InlineAlert>}
+
+      {editsAtRisk && (
+        <InlineAlert tone="warning">
+          <span>{t("assessment.warning.replace_edits")}</span>
+          <button
+            type="button"
+            onClick={() => generateAssessment(true)}
+            disabled={isGenerating}
+            style={buttonStyle("danger", isGenerating)}
+          >
+            {t("assessment.action.replace_edits")}
+          </button>
+        </InlineAlert>
+      )}
+
+      {!assessment ? (
+        <EmptyState>{t("assessment.empty")}</EmptyState>
+      ) : (
+        <div className="workflow-shell">
+          <aside className="workflow-sticky">
+            <WorkflowSectionNav
+              title={t("workflow.nav.assessment_title")}
+              sections={sectionItems}
+              activeId={effectiveActiveSectionId}
+              onSelect={setActiveSectionId}
+            />
+          </aside>
+
+          <div className="workflow-mobile-stack">
+            <WorkflowProgressSummary sections={sectionItems} />
+
+            <SectionStatusLegend />
+
+            <WorkflowAccordion
+              items={sectionItems}
+              activeId={effectiveActiveSectionId}
+              onActiveIdChange={setActiveSectionId}
+            />
+
+            <p style={hintStyle}>{t("assessment.hint.requirements")}</p>
+
+            <div style={actionRowStyle}>
               <button
                 type="button"
-                onClick={addGap}
-                disabled={!gapDescription.trim()}
-                style={addButtonStyle}
+                onClick={() => saveAssessment("consultant_edited")}
+                disabled={isSaving}
+                style={buttonStyle("secondary", isSaving)}
               >
-                Add gap
+                {isSaving ? t("common.state.saving") : t("assessment.action.save")}
+              </button>
+              <button
+                type="button"
+                onClick={() => saveAssessment("accepted")}
+                disabled={isSaving}
+                style={buttonStyle("primary", isSaving)}
+              >
+                {t("assessment.action.accept")}
               </button>
             </div>
-          </section>
-
-          <p style={hintStyle}>
-            Every finding needs a title, a detail, a confidence, and — depending
-            on its basis — at least one supporting fact or one assumption.
-          </p>
-
-          <div style={footerStyle}>
-            <button
-              type="button"
-              onClick={() => saveAssessment("consultant_edited")}
-              disabled={isSaving}
-              style={{ ...saveButtonStyle, opacity: isSaving ? 0.6 : 1 }}
-            >
-              {isSaving ? "Saving…" : "Save Assessment"}
-            </button>
-            <button
-              type="button"
-              onClick={() => saveAssessment("accepted")}
-              disabled={isSaving}
-              style={{ ...acceptButtonStyle, opacity: isSaving ? 0.6 : 1 }}
-            >
-              Accept Assessment
-            </button>
           </div>
-        </>
+        </div>
       )}
     </section>
   )
@@ -584,235 +695,68 @@ function toList(value: string): string[] {
     .filter(Boolean)
 }
 
-const panelStyle: React.CSSProperties = {
-  maxWidth: 1120,
-  margin: "24px auto 0",
-  display: "grid",
-  gap: 20,
-  background: "#fff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 24,
-  padding: 32,
-  boxShadow: "0 20px 50px rgba(15, 23, 42, 0.08)",
-}
-const headerStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: 24,
-  alignItems: "start",
-  flexWrap: "wrap",
-}
-const eyebrowStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#4f46e5",
-  fontWeight: 800,
-  fontSize: 12,
-  textTransform: "uppercase",
-  letterSpacing: 0.8,
-}
-const headingStyle: React.CSSProperties = { margin: "6px 0 8px", fontSize: 30 }
-const introStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#6b7280",
-  lineHeight: 1.55,
-  maxWidth: 720,
-}
-const sectionStyle: React.CSSProperties = {
-  border: "1px solid #e5e7eb",
-  borderRadius: 18,
-  padding: 20,
-  margin: 0,
-  display: "grid",
-  gap: 14,
-}
-const legendStyle: React.CSSProperties = {
-  padding: "0 8px",
-  fontWeight: 800,
-  fontSize: 18,
-}
-const fieldsGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-  gap: 16,
-}
-const fieldStyle: React.CSSProperties = {
-  display: "grid",
-  gap: 7,
-  alignContent: "start",
-  fontWeight: 700,
-  fontSize: 14,
-}
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  borderRadius: 12,
-  border: "1px solid #d1d5db",
-  padding: "11px 12px",
-  fontSize: 15,
-  background: "#fff",
-  color: "#111827",
-}
-const textareaStyle: React.CSSProperties = {
-  ...inputStyle,
-  minHeight: 78,
-  resize: "vertical",
-}
-const hintStyle: React.CSSProperties = {
-  color: "#6b7280",
-  fontWeight: 400,
-  margin: 0,
-}
-const findingStyle: React.CSSProperties = {
-  display: "grid",
-  gap: 12,
-  padding: 16,
-  borderRadius: 14,
-  border: "1px solid #e5e7eb",
-  background: "#f9fafb",
-}
-const findingHeaderStyle: React.CSSProperties = {
-  display: "flex",
-  gap: 8,
-  alignItems: "center",
-  flexWrap: "wrap",
-}
-const badgeBaseStyle: React.CSSProperties = {
-  padding: "4px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: 800,
-}
-const factBadgeStyle: React.CSSProperties = {
-  ...badgeBaseStyle,
-  background: "#ecfdf5",
-  color: "#065f46",
-}
-const assumptionBadgeStyle: React.CSSProperties = {
-  ...badgeBaseStyle,
-  background: "#fef3c7",
-  color: "#92400e",
-}
-const confidenceBadgeStyle: React.CSSProperties = {
-  ...badgeBaseStyle,
-  background: "#eef2ff",
-  color: "#3730a3",
-}
-const draftBadgeStyle: React.CSSProperties = {
-  ...badgeBaseStyle,
-  background: "#fef3c7",
-  color: "#92400e",
-}
-const reviewedBadgeStyle: React.CSSProperties = {
-  ...badgeBaseStyle,
-  background: "#ecfdf5",
-  color: "#065f46",
-}
-const generateButtonStyle: React.CSSProperties = {
-  border: 0,
-  borderRadius: 12,
-  padding: "12px 17px",
-  background: "#111827",
-  color: "#fff",
-  fontWeight: 800,
-  cursor: "pointer",
-}
-const saveButtonStyle: React.CSSProperties = {
-  ...generateButtonStyle,
-  background: "#4f46e5",
-}
-const acceptButtonStyle: React.CSSProperties = {
-  ...generateButtonStyle,
-  background: "#047857",
-}
-const dangerButtonStyle: React.CSSProperties = {
-  ...generateButtonStyle,
-  background: "#b91c1c",
-}
-const addButtonStyle: React.CSSProperties = {
-  ...generateButtonStyle,
-  justifySelf: "start",
-}
-const removeButtonStyle: React.CSSProperties = {
-  border: 0,
-  background: "transparent",
-  color: "#b91c1c",
-  fontWeight: 700,
-  cursor: "pointer",
-  marginLeft: "auto",
-}
-const footerStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "flex-end",
-  gap: 12,
-}
-const successStyle: React.CSSProperties = {
-  margin: 0,
-  padding: 12,
-  borderRadius: 12,
-  background: "#ecfdf5",
-  color: "#065f46",
-  border: "1px solid #bbf7d0",
-}
-const errorStyle: React.CSSProperties = {
-  margin: 0,
-  padding: 12,
-  borderRadius: 12,
-  background: "#fef2f2",
-  color: "#991b1b",
-  border: "1px solid #fecaca",
-}
-const confirmStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 16,
-  flexWrap: "wrap",
-  padding: 16,
-  borderRadius: 14,
-  background: "#fff7ed",
-  border: "1px solid #fed7aa",
-  color: "#9a3412",
-}
-const emptyStyle: React.CSSProperties = {
-  margin: 0,
-  padding: 16,
-  borderRadius: 14,
-  background: "#f9fafb",
-  border: "1px dashed #d1d5db",
-  color: "#6b7280",
-}
-const emptyFindingStyle: React.CSSProperties = {
-  ...emptyStyle,
-  margin: 0,
-}
+const panelStyle = stageSurfaceStyle
+const headerStyle = stageHeaderStyle
+const eyebrowStyle = stageEyebrowStyle
+const headingStyle = stageHeadingStyle
+const introStyle = stageIntroStyle
+
+// Everything below is the shared control vocabulary, not this panel's own: the
+// Assessment, the Opportunities and the Discovery all draw their fields,
+// buttons, badges and empty states from `UiKit`, so the three stages of one
+// engagement no longer read as three products.
+
+const sectionStyle = fieldsetStyle
+const findingStyle = nestedBlockStyle
+
 const gapsStyle: React.CSSProperties = {
-  display: "grid",
-  gap: 16,
-  border: "2px solid #c7d2fe",
-  borderRadius: 18,
-  padding: 20,
-  background: "#f5f7ff",
+  ...fieldsetStyle,
+  background: uiColors.subtle,
 }
-const emptyGapStyle: React.CSSProperties = {
-  margin: 0,
-  padding: 14,
-  borderRadius: 12,
-  background: "#fff",
-  border: "1px dashed #a5b4fc",
-  color: "#6b7280",
-}
+
 const gapItemStyle: React.CSSProperties = {
   display: "flex",
+  flexWrap: "wrap",
   justifyContent: "space-between",
-  alignItems: "start",
-  gap: 16,
-  padding: 14,
-  borderRadius: 12,
-  background: "#fff",
-  border: "1px solid #dbeafe",
+  alignItems: "flex-start",
+  gap: uiSpace.sm,
+  padding: uiSpace.sm,
+  borderRadius: 8,
+  background: uiColors.surface,
+  border: `1px solid ${uiColors.border}`,
 }
+
+const gapDescriptionStyle: React.CSSProperties = {
+  margin: "2px 0 0",
+  color: uiColors.textSecondary,
+  fontSize: 14,
+  lineHeight: 1.5,
+}
+
 const gapInputStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(180px, .4fr) minmax(260px, 1fr) auto",
-  gap: 12,
+  gridTemplateColumns: "minmax(180px, 0.4fr) minmax(240px, 1fr) auto",
+  gap: uiSpace.sm,
   alignItems: "end",
+}
+
+const gapListStyle: React.CSSProperties = {
+  display: "grid",
+  gap: uiSpace.xs,
+}
+
+const headerActionsStyle: React.CSSProperties = {
+  display: "grid",
+  gap: uiSpace.xs,
+  justifyItems: "end",
+}
+
+const fullWidthFieldStyle: React.CSSProperties = {
+  ...fieldStyle,
+  gridColumn: "1 / -1",
+}
+
+const addFindingButtonStyle: React.CSSProperties = {
+  ...buttonStyle("secondary"),
+  justifySelf: "start",
 }

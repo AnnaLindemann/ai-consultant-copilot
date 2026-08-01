@@ -44,6 +44,10 @@ router.get("/engagements/:id/discovery", async (req, res) => {
   )
   if (!authorized.permitted) return denyRequest(res, authorized)
 
+  // The portal carries the client's own discovery and nothing else. Curated
+  // consulting knowledge — frameworks, AI-readiness criteria, guidance — is
+  // internal and never reaches a client surface (domain-model.md §2 "Client
+  // Portal"; architecture.md §7A.5).
   return res.json({
     status: true,
     data: {

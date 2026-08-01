@@ -23,6 +23,8 @@ export const opportunityMessageIds = [
   // two regenerations racing each other, and a generation that could not be
   // stored — each is a distinct thing for the consultant to do something about,
   // so each is named rather than collapsed into one error.
+  "opportunity.message.versions_loaded",
+  "opportunity.message.version_loaded",
   "opportunity.error.stale_update",
   "opportunity.error.historical_version_readonly",
   "opportunity.error.version_not_found",

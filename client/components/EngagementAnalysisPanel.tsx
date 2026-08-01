@@ -2,8 +2,27 @@
 
 import { useState } from "react"
 
+import { formatDateTime, t, translateServerMessage } from "../i18n"
 import type { ConsultantReport } from "../../shared/consultant-report.schema"
 import AnalysisReportView from "./AnalysisReportView"
+import {
+  stageHeaderStyle,
+  stageHeadingStyle,
+  stageIntroStyle,
+  stageSurfaceStyle,
+} from "./StagePanel"
+import {
+  Badge,
+  EmptyState,
+  InlineAlert,
+  bodyTextStyle,
+  buttonStyle,
+  metaTextStyle,
+  nestedBlockStyle,
+  rowStyle,
+  sectionTitleStyle,
+} from "./UiKit"
+import { uiSpace } from "../lib/design-tokens"
 
 type AnalysisRun = {
   id: string
@@ -50,6 +69,8 @@ export default function EngagementAnalysisPanel({
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
 
+  // The audit trail is a read; failing to refresh it must not be reported as a
+  // failed analysis, so it carries its own outcome.
   async function loadRunHistory() {
     const response = await fetch(
       `${API_BASE_URL}/engagements/${engagementId}/analysis-runs`,
@@ -59,7 +80,14 @@ export default function EngagementAnalysisPanel({
     const result = await response.json()
 
     if (!response.ok) {
-      throw new Error(result.message ?? "Failed to load run history")
+      setError(
+        translateServerMessage(
+          result.message,
+          undefined,
+          "analysis.error.runs_not_loaded",
+        ),
+      )
+      return
     }
 
     setRuns(result.data as AnalysisRun[])
@@ -81,13 +109,21 @@ export default function EngagementAnalysisPanel({
       const result = (await response.json()) as AnalyzeResponse
 
       if (!response.ok) {
-        throw new Error(result.message ?? "Failed to run analysis")
+        // The server names the outcome; the wording is ours (§12A).
+        setError(
+          translateServerMessage(
+            result.message,
+            undefined,
+            "analysis.error.failed",
+          ),
+        )
+        return
       }
 
       setAnalysisResult(result)
       await loadRunHistory()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error")
+    } catch {
+      setError(t("common.error.unexpected"))
     } finally {
       setIsLoading(false)
     }
@@ -95,57 +131,82 @@ export default function EngagementAnalysisPanel({
 
   return (
     <section style={panelStyle}>
-      <h2 style={{ marginTop: 0 }}>Analysis Workflow</h2>
+      <div style={stageHeaderStyle}>
+        <div>
+          <h2 style={stageHeadingStyle}>{t("analysis.panel.title")}</h2>
+          <p style={stageIntroStyle}>{t("analysis.panel.intro")}</p>
+        </div>
+        <button
+          type="button"
+          onClick={runAnalysis}
+          disabled={isLoading}
+          style={buttonStyle("secondary", isLoading)}
+        >
+          {isLoading ? t("analysis.action.running") : t("analysis.action.run")}
+        </button>
+      </div>
 
       {error && (
-        <div style={errorStyle}>
-          <strong>Error:</strong> {error}
-        </div>
+        <InlineAlert tone="danger">
+          <span>
+            <strong>{t("common.error.label")}</strong> {error}
+          </span>
+        </InlineAlert>
       )}
 
-      <button
-        onClick={runAnalysis}
-        disabled={isLoading}
-        style={{
-          ...buttonStyle,
-          opacity: isLoading ? 0.55 : 1,
-          cursor: isLoading ? "not-allowed" : "pointer",
-        }}
-      >
-        {isLoading ? "Running analysis..." : "Run Analysis"}
-      </button>
-
-      <section style={{ marginTop: 24 }}>
-        <h3>Run History</h3>
+      <section style={blockStyle}>
+        <h3 style={sectionTitleStyle}>{t("analysis.runs.title")}</h3>
 
         {runs.length === 0 ? (
-          <p style={mutedStyle}>
-            No AI-assisted step has been run for this engagement yet.
-          </p>
+          <EmptyState>{t("analysis.runs.empty")}</EmptyState>
         ) : (
-          <div style={{ display: "grid", gap: 12 }}>
+          <ul style={runListStyle}>
             {runs.map((run) => (
-              <div key={run.id} style={runCardStyle}>
-                <strong>{run.model}</strong>
-                <p style={mutedStyle}>
-                  {new Date(run.createdAt).toLocaleString()}
-                </p>
-                <div style={badgeRowStyle}>
-                  <Badge label={`stage: ${run.stage}`} />
-                  <Badge label={run.promptVersion} />
-                  <Badge label={`${run.totalTokens ?? 0} tokens`} />
-                  <Badge label={`$${run.costEstimateUsd ?? "0"}`} />
-                  <Badge label={`schema: ${String(run.schemaValid)}`} />
+              <li key={run.id} style={nestedBlockStyle}>
+                {/* The provider's model name, the prompt version and the run's
+                    stage are recorded identifiers, shown as they were stored. */}
+                <p style={runTitleStyle}>{run.model}</p>
+                <p style={metaTextStyle}>{formatDateTime(run.createdAt)}</p>
+                <div style={rowStyle}>
+                  <Badge
+                    tone="neutral"
+                    label={t("analysis.runs.badge.stage", { stage: run.stage })}
+                  />
+                  <Badge tone="neutral" label={run.promptVersion} />
+                  <Badge
+                    tone="neutral"
+                    label={t("analysis.runs.badge.tokens", {
+                      count: run.totalTokens ?? 0,
+                    })}
+                  />
+                  <Badge
+                    tone="neutral"
+                    label={t("analysis.runs.badge.cost", {
+                      amount: run.costEstimateUsd ?? "0",
+                    })}
+                  />
+                  {/* Whether the provider's answer matched the contract is a
+                      real outcome, so it carries a semantic tone. */}
+                  <Badge
+                    tone={run.schemaValid ? "success" : "danger"}
+                    label={t("analysis.runs.badge.schema", {
+                      validity: t(
+                        run.schemaValid
+                          ? "common.value.valid"
+                          : "common.value.invalid",
+                      ),
+                    })}
+                  />
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </section>
 
       {analysisResult?.data?.report && (
-        <section style={{ marginTop: 24 }}>
-          <h3>Analysis Result</h3>
+        <section style={blockStyle}>
+          <h3 style={sectionTitleStyle}>{t("analysis.result.title")}</h3>
           <AnalysisReportView report={analysisResult.data.report} />
         </section>
       )}
@@ -153,63 +214,22 @@ export default function EngagementAnalysisPanel({
   )
 }
 
-function Badge({ label }: { label: string }) {
-  return <span style={badgeStyle}>{label}</span>
+const panelStyle = stageSurfaceStyle
+
+const blockStyle: React.CSSProperties = {
+  display: "grid",
+  gap: uiSpace.sm,
 }
 
-const panelStyle: React.CSSProperties = {
-  maxWidth: 1000,
-  margin: "24px auto 0",
-  background: "#ffffff",
-  borderRadius: 24,
-  padding: 32,
-  boxShadow: "0 20px 50px rgba(15, 23, 42, 0.08)",
-  border: "1px solid #e5e7eb",
+const runListStyle: React.CSSProperties = {
+  listStyle: "none",
+  margin: 0,
+  padding: 0,
+  display: "grid",
+  gap: uiSpace.xs,
 }
 
-const buttonStyle: React.CSSProperties = {
-  border: 0,
-  borderRadius: 14,
-  background: "#111827",
-  color: "#ffffff",
-  padding: "12px 18px",
-  fontSize: 15,
-  fontWeight: 800,
-}
-
-const errorStyle: React.CSSProperties = {
-  padding: 16,
-  borderRadius: 14,
-  background: "#fee2e2",
-  color: "#991b1b",
-  marginBottom: 16,
-  border: "1px solid #fecaca",
-}
-
-const mutedStyle: React.CSSProperties = {
-  color: "#6b7280",
-  margin: "6px 0",
-}
-
-const runCardStyle: React.CSSProperties = {
-  padding: 14,
-  borderRadius: 14,
-  border: "1px solid #e5e7eb",
-  background: "#f9fafb",
-}
-
-const badgeRowStyle: React.CSSProperties = {
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
-  marginTop: 10,
-}
-
-const badgeStyle: React.CSSProperties = {
-  padding: "4px 8px",
-  borderRadius: 999,
-  background: "#eef2ff",
-  color: "#3730a3",
-  fontSize: 12,
-  fontWeight: 700,
+const runTitleStyle: React.CSSProperties = {
+  ...bodyTextStyle,
+  fontWeight: 600,
 }

@@ -1,11 +1,41 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import Link from "next/link"
 
+import { formatDateTime, t, translateServerMessage } from "../i18n"
+import type { MessageKey } from "../i18n/de"
 import type { ConsultantReport } from "../../shared/consultant-report.schema"
 import AnalysisReportView from "../components/AnalysisReportView"
-import { STAGE_LABELS, type EngagementStage } from "../lib/engagement-stage"
+import ManagerShell from "../components/ManagerShell"
+import {
+  Badge,
+  EmptyState,
+  InlineAlert,
+  bodyTextStyle,
+  buttonStyle,
+  cardStyle,
+  checkboxFieldStyle,
+  fieldStyle,
+  fieldsGridStyle,
+  inputStyle,
+  metaTextStyle,
+  mutedTextStyle,
+  nestedBlockStyle,
+  pageStackStyle,
+  rowStyle,
+  sectionTitleStyle,
+  textareaStyle,
+} from "../components/UiKit"
+import { uiColors, uiRadius, uiSpace } from "../lib/design-tokens"
+import { stageLabel, type EngagementStage } from "../lib/engagement-stage"
+
+// Opening an engagement: one process on one page, in the order it actually
+// happens. It used to be three cards of three widths in two columns, which
+// hid the fact that step 2 cannot start before step 1 has produced an
+// organization. Each step now states what it is waiting for, and the controls
+// of a step that is not reachable yet are genuinely disabled rather than merely
+// dimmed.
 
 type AnalysisRun = {
   id: string
@@ -60,6 +90,8 @@ const initialEngagementForm: EngagementFormState = {
   gdprConcerns: true,
 }
 
+// The Organization's size band. These are the backend's own enum values and
+// travel as they are; only their labels are looked up.
 const companySizeOptions = [
   "solo",
   "micro",
@@ -67,7 +99,9 @@ const companySizeOptions = [
   "medium",
   "large",
   "enterprise",
-]
+] as const
+
+const TOTAL_STEPS = 3
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8787"
@@ -124,13 +158,22 @@ export default function Home() {
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.message ?? "Failed to create organization")
+        // The server names the outcome; the wording is ours (§12A). Its
+        // identifier is never what the consultant reads.
+        setError(
+          translateServerMessage(
+            result.message,
+            undefined,
+            "organization.error.internal",
+          ),
+        )
+        return
       }
 
       setOrganizationId(result.data.id)
       setOrganizationName(result.data.name)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error")
+    } catch {
+      setError(t("common.error.unexpected"))
     } finally {
       setIsLoading(false)
     }
@@ -138,7 +181,7 @@ export default function Home() {
 
   async function createEngagement() {
     if (!organizationId) {
-      setError("Create an organization first")
+      setError(t("home.organization.required"))
       return
     }
 
@@ -168,13 +211,20 @@ export default function Home() {
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.message ?? "Failed to create engagement")
+        setError(
+          translateServerMessage(
+            result.message,
+            undefined,
+            "engagement.error.internal",
+          ),
+        )
+        return
       }
 
       setEngagementId(result.data.id)
       setEngagementStage(result.data.stage as EngagementStage)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error")
+    } catch {
+      setError(t("common.error.unexpected"))
     } finally {
       setIsLoading(false)
     }
@@ -182,7 +232,7 @@ export default function Home() {
 
   async function runAnalysis() {
     if (!engagementId) {
-      setError("Create an engagement first")
+      setError(t("home.engagement.required"))
       return
     }
 
@@ -198,13 +248,20 @@ export default function Home() {
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.message ?? "Failed to run analysis")
+        setError(
+          translateServerMessage(
+            result.message,
+            undefined,
+            "analysis.error.failed",
+          ),
+        )
+        return
       }
 
       setAnalysisResult(result)
       await loadRunHistory(engagementId)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error")
+    } catch {
+      setError(t("common.error.unexpected"))
     } finally {
       setIsLoading(false)
     }
@@ -221,455 +278,496 @@ export default function Home() {
     const result = await response.json()
 
     if (!response.ok) {
-      throw new Error(result.message ?? "Failed to load run history")
+      setError(
+        translateServerMessage(
+          result.message,
+          undefined,
+          "analysis.error.runs_not_loaded",
+        ),
+      )
+      return
     }
 
     setRuns(result.data)
   }
 
   const canCreateOrganization = organizationForm.name.trim().length > 0
+  const organizationReady = Boolean(organizationId)
+  const engagementReady = Boolean(engagementId)
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background: "#f6f7fb",
-        color: "#111827",
-        fontFamily:
-          'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-        padding: "40px 24px",
-      }}
+    <ManagerShell
+      title={t("home.title")}
+      description={t("home.intro")}
+      actions={
+        <Link href="/engagements" style={buttonStyle("secondary")}>
+          {t("home.link.engagements")}
+        </Link>
+      }
     >
-      <div style={{ maxWidth: 1180, margin: "0 auto" }}>
-        <header style={{ marginBottom: 32 }}>
-          <p
-            style={{
-              margin: 0,
-              color: "#4f46e5",
-              fontWeight: 700,
-              fontSize: 14,
-              textTransform: "uppercase",
-              letterSpacing: 1,
-            }}
-          >
-            AI Consultant Copilot
-          </p>
-          <h1 style={{ fontSize: 42, lineHeight: 1.1, margin: "8px 0 12px" }}>
-            Start an engagement for a client organization
-          </h1>
-          <p style={{ color: "#6b7280", fontSize: 18, maxWidth: 760 }}>
-            Create an organization, open an engagement for it, and resume that
-            work at any time. Discovery details are optional now and can be
-            filled in later.{" "}
-            <Link href="/engagements" style={{ color: "#4f46e5", fontWeight: 700 }}>
-              View all engagements →
-            </Link>
-          </p>
-        </header>
-
+      <div style={pageStackStyle}>
         {error && (
-          <div
-            style={{
-              padding: 16,
-              borderRadius: 14,
-              background: "#fee2e2",
-              color: "#991b1b",
-              marginBottom: 24,
-              border: "1px solid #fecaca",
-            }}
-          >
-            <strong>Error:</strong> {error}
-          </div>
+          <InlineAlert tone="danger">
+            <span>
+              <strong>{t("common.error.label")}</strong> {error}
+            </span>
+          </InlineAlert>
         )}
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1.1fr) minmax(360px, 0.9fr)",
-            gap: 24,
-            alignItems: "start",
-          }}
+        <ProcessStep
+          number={1}
+          title={t("home.organization.title")}
+          intro={t("home.organization.intro")}
+          state={organizationReady ? "done" : "open"}
         >
-          <div style={{ display: "grid", gap: 24 }}>
-            <section style={cardStyle}>
-              <div style={{ marginBottom: 24 }}>
-                <h2 style={{ margin: 0, fontSize: 24 }}>1. Create Organization</h2>
-                <p style={{ margin: "8px 0 0", color: "#6b7280" }}>
-                  The client company that groups its engagements.
-                </p>
-              </div>
+          <div style={fieldsGridStyle}>
+            <Field labelKey="home.organization.name">
+              <input
+                value={organizationForm.name}
+                onChange={(event) =>
+                  updateOrganizationForm("name", event.target.value)
+                }
+                placeholder={t("home.organization.name_placeholder")}
+                style={inputStyle}
+              />
+            </Field>
 
-              <div style={{ display: "grid", gap: 18 }}>
-                <Field label="Organization Name">
-                  <input
-                    value={organizationForm.name}
-                    onChange={(event) =>
-                      updateOrganizationForm("name", event.target.value)
-                    }
-                    placeholder="Example: Demo Hotel GmbH"
-                    style={inputStyle}
-                  />
-                </Field>
+            <Field labelKey="home.organization.industry">
+              <input
+                value={organizationForm.industry}
+                onChange={(event) =>
+                  updateOrganizationForm("industry", event.target.value)
+                }
+                placeholder={t("home.organization.industry_placeholder")}
+                style={inputStyle}
+              />
+            </Field>
 
-                <Field label="Industry (optional)">
-                  <input
-                    value={organizationForm.industry}
-                    onChange={(event) =>
-                      updateOrganizationForm("industry", event.target.value)
-                    }
-                    placeholder="Example: Hospitality"
-                    style={inputStyle}
-                  />
-                </Field>
-
-                <Field label="Company Size (optional)">
-                  <select
-                    value={organizationForm.companySize}
-                    onChange={(event) =>
-                      updateOrganizationForm("companySize", event.target.value)
-                    }
-                    style={inputStyle}
-                  >
-                    <option value="">—</option>
-                    {companySizeOptions.map((size) => (
-                      <option key={size} value={size}>
-                        {size}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-
-                <button
-                  onClick={createOrganization}
-                  disabled={isLoading || !canCreateOrganization}
-                  style={{
-                    ...buttonStyle,
-                    opacity: isLoading || !canCreateOrganization ? 0.55 : 1,
-                    cursor:
-                      isLoading || !canCreateOrganization
-                        ? "not-allowed"
-                        : "pointer",
-                  }}
-                >
-                  {isLoading ? "Working..." : "Create Organization"}
-                </button>
-
-                {organizationId && (
-                  <div style={successStyle}>
-                    <strong>Organization ready:</strong> {organizationName}
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <section style={{ ...cardStyle, opacity: organizationId ? 1 : 0.6 }}>
-              <div style={{ marginBottom: 24 }}>
-                <h2 style={{ margin: 0, fontSize: 24 }}>2. Open Engagement</h2>
-                <p style={{ margin: "8px 0 0", color: "#6b7280" }}>
-                  A complete piece of consulting work for{" "}
-                  {organizationName || "the organization"}. All fields are
-                  optional — an empty engagement is a valid starting point.
-                </p>
-              </div>
-
-              <div style={{ display: "grid", gap: 18 }}>
-                <Field label="Engagement Title (optional)">
-                  <input
-                    value={engagementForm.title}
-                    onChange={(event) =>
-                      updateEngagementForm("title", event.target.value)
-                    }
-                    placeholder="Example: Support automation review"
-                    style={inputStyle}
-                  />
-                </Field>
-
-                <Field label="Stated Problem (optional)">
-                  <textarea
-                    value={engagementForm.statedProblem}
-                    onChange={(event) =>
-                      updateEngagementForm("statedProblem", event.target.value)
-                    }
-                    placeholder="What problem did the client describe?"
-                    style={textareaStyle}
-                  />
-                </Field>
-
-                <Field label="Current Process (optional)">
-                  <textarea
-                    value={engagementForm.currentProcess}
-                    onChange={(event) =>
-                      updateEngagementForm("currentProcess", event.target.value)
-                    }
-                    placeholder="How does the process work today?"
-                    style={textareaStyle}
-                  />
-                </Field>
-
-                <Field label="Desired Outcome (optional)">
-                  <textarea
-                    value={engagementForm.desiredOutcome}
-                    onChange={(event) =>
-                      updateEngagementForm("desiredOutcome", event.target.value)
-                    }
-                    placeholder="What should improve after the AI solution?"
-                    style={textareaStyle}
-                  />
-                </Field>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: 12,
-                  }}
-                >
-                  <CheckboxCard
-                    label="Sensitive data involved"
-                    checked={engagementForm.sensitiveData}
-                    onChange={(checked) =>
-                      updateEngagementForm("sensitiveData", checked)
-                    }
-                  />
-
-                  <CheckboxCard
-                    label="GDPR concerns"
-                    checked={engagementForm.gdprConcerns}
-                    onChange={(checked) =>
-                      updateEngagementForm("gdprConcerns", checked)
-                    }
-                  />
-                </div>
-
-                <button
-                  onClick={createEngagement}
-                  disabled={isLoading || !organizationId}
-                  style={{
-                    ...buttonStyle,
-                    opacity: isLoading || !organizationId ? 0.55 : 1,
-                    cursor:
-                      isLoading || !organizationId ? "not-allowed" : "pointer",
-                  }}
-                >
-                  {isLoading ? "Working..." : "Open Engagement"}
-                </button>
-
-                {engagementId && (
-                  <div style={successStyle}>
-                    <strong>Engagement opened</strong>
-                    {engagementStage && (
-                      <> · stage: {STAGE_LABELS[engagementStage]}</>
-                    )}
-                    <div style={{ marginTop: 8 }}>
-                      <Link
-                        href={`/engagements/${engagementId}`}
-                        style={{ color: "#065f46", fontWeight: 800 }}
-                      >
-                        Open engagement workspace →
-                      </Link>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </section>
+            <Field labelKey="home.organization.company_size">
+              <select
+                value={organizationForm.companySize}
+                onChange={(event) =>
+                  updateOrganizationForm("companySize", event.target.value)
+                }
+                style={inputStyle}
+              >
+                <option value="">{t("common.field.not_captured")}</option>
+                {companySizeOptions.map((size) => (
+                  <option key={size} value={size}>
+                    {t(`organization.company_size.${size}`)}
+                  </option>
+                ))}
+              </select>
+            </Field>
           </div>
 
-          <aside style={{ display: "grid", gap: 24 }}>
-            <section style={cardStyle}>
-              <h2 style={{ marginTop: 0 }}>3. Run Analysis</h2>
-              <p style={{ color: "#6b7280" }}>
-                Send this engagement to the backend analysis engine and persist
-                the AI run.
-              </p>
+          <div style={rowStyle}>
+            <button
+              type="button"
+              onClick={createOrganization}
+              disabled={isLoading || !canCreateOrganization}
+              style={buttonStyle(
+                "primary",
+                isLoading || !canCreateOrganization,
+              )}
+            >
+              {isLoading
+                ? t("common.state.working")
+                : t("home.organization.submit")}
+            </button>
 
-              <button
-                onClick={runAnalysis}
-                disabled={isLoading || !engagementId}
-                style={{
-                  ...buttonStyle,
-                  width: "100%",
-                  background: "#111827",
-                  opacity: isLoading || !engagementId ? 0.55 : 1,
-                  cursor: isLoading || !engagementId ? "not-allowed" : "pointer",
-                }}
+            {organizationReady && (
+              <span style={confirmationStyle}>
+                {t("home.organization.ready", { name: organizationName })}
+              </span>
+            )}
+          </div>
+        </ProcessStep>
+
+        <ProcessStep
+          number={2}
+          title={t("home.engagement.title")}
+          intro={t("home.engagement.intro", {
+            organization:
+              organizationName || t("home.engagement.organization_fallback"),
+          })}
+          state={
+            engagementReady ? "done" : organizationReady ? "open" : "locked"
+          }
+          lockedHint={t("home.step.locked.needs_organization")}
+        >
+          <div style={fieldsGridStyle}>
+            <Field labelKey="home.engagement.title_field">
+              <input
+                value={engagementForm.title}
+                onChange={(event) =>
+                  updateEngagementForm("title", event.target.value)
+                }
+                placeholder={t("home.engagement.title_placeholder")}
+                disabled={!organizationReady}
+                style={inputStyle}
+              />
+            </Field>
+          </div>
+
+          <div style={fieldsGridStyle}>
+            <Field labelKey="home.engagement.stated_problem">
+              <textarea
+                value={engagementForm.statedProblem}
+                onChange={(event) =>
+                  updateEngagementForm("statedProblem", event.target.value)
+                }
+                placeholder={t("home.engagement.stated_problem_placeholder")}
+                disabled={!organizationReady}
+                style={textareaStyle}
+              />
+            </Field>
+
+            <Field labelKey="home.engagement.current_process">
+              <textarea
+                value={engagementForm.currentProcess}
+                onChange={(event) =>
+                  updateEngagementForm("currentProcess", event.target.value)
+                }
+                placeholder={t("home.engagement.current_process_placeholder")}
+                disabled={!organizationReady}
+                style={textareaStyle}
+              />
+            </Field>
+
+            <Field labelKey="home.engagement.desired_outcome">
+              <textarea
+                value={engagementForm.desiredOutcome}
+                onChange={(event) =>
+                  updateEngagementForm("desiredOutcome", event.target.value)
+                }
+                placeholder={t("home.engagement.desired_outcome_placeholder")}
+                disabled={!organizationReady}
+                style={textareaStyle}
+              />
+            </Field>
+          </div>
+
+          <div style={fieldsGridStyle}>
+            <CheckboxField
+              labelKey="home.engagement.sensitive_data"
+              checked={engagementForm.sensitiveData}
+              disabled={!organizationReady}
+              onChange={(checked) =>
+                updateEngagementForm("sensitiveData", checked)
+              }
+            />
+
+            <CheckboxField
+              labelKey="home.engagement.gdpr_concerns"
+              checked={engagementForm.gdprConcerns}
+              disabled={!organizationReady}
+              onChange={(checked) =>
+                updateEngagementForm("gdprConcerns", checked)
+              }
+            />
+          </div>
+
+          <div style={rowStyle}>
+            <button
+              type="button"
+              onClick={createEngagement}
+              disabled={isLoading || !organizationReady}
+              style={buttonStyle("primary", isLoading || !organizationReady)}
+            >
+              {isLoading
+                ? t("common.state.working")
+                : t("home.engagement.submit")}
+            </button>
+
+            {engagementReady && (
+              <span style={confirmationStyle}>
+                {t("home.engagement.opened")}
+                {engagementStage
+                  ? ` · ${t("home.engagement.opened_stage", {
+                      stage: stageLabel(engagementStage),
+                    })}`
+                  : ""}
+              </span>
+            )}
+
+            {engagementReady && (
+              <Link
+                href={`/engagements/${engagementId}`}
+                style={buttonStyle("secondary")}
               >
-                Run Analysis
-              </button>
+                {t("home.engagement.open_workspace")}
+              </Link>
+            )}
+          </div>
+        </ProcessStep>
 
-              {!engagementId && (
-                <p style={{ color: "#9ca3af", fontSize: 14 }}>
-                  Open an engagement before running analysis.
-                </p>
-              )}
-            </section>
+        <ProcessStep
+          number={3}
+          title={t("home.analysis.title")}
+          intro={t("home.analysis.intro")}
+          state={engagementReady ? "open" : "locked"}
+          lockedHint={t("home.step.locked.needs_engagement")}
+        >
+          <div style={rowStyle}>
+            <button
+              type="button"
+              onClick={runAnalysis}
+              disabled={isLoading || !engagementReady}
+              style={buttonStyle("primary", isLoading || !engagementReady)}
+            >
+              {isLoading ? t("analysis.action.running") : t("analysis.action.run")}
+            </button>
+          </div>
 
-            <section style={cardStyle}>
-              <h2 style={{ marginTop: 0 }}>Run History</h2>
+          <section style={runHistoryStyle}>
+            <h3 style={sectionTitleStyle}>{t("analysis.runs.title")}</h3>
 
-              {runs.length === 0 ? (
-                <p style={{ color: "#9ca3af" }}>No runs yet.</p>
-              ) : (
-                <div style={{ display: "grid", gap: 12 }}>
-                  {runs.map((run) => (
-                    <div
-                      key={run.id}
-                      style={{
-                        padding: 14,
-                        borderRadius: 14,
-                        border: "1px solid #e5e7eb",
-                        background: "#f9fafb",
-                      }}
-                    >
-                      <div style={{ fontWeight: 700 }}>{run.model}</div>
-                      <div style={{ color: "#6b7280", fontSize: 13 }}>
-                        {new Date(run.createdAt).toLocaleString()}
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: 8,
-                          flexWrap: "wrap",
-                          marginTop: 10,
-                        }}
-                      >
-                        <Badge label={run.promptVersion} />
-                        <Badge label={`${run.totalTokens ?? 0} tokens`} />
-                        <Badge label={`$${run.costEstimateUsd ?? "0"}`} />
-                        <Badge label={`schema: ${String(run.schemaValid)}`} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          </aside>
-        </div>
-
-        {analysisResult && (
-          <section
-            style={{
-              ...cardStyle,
-              marginTop: 24,
-            }}
-          >
-            <h2 style={{ marginTop: 0 }}>Analysis Result</h2>
-            {analysisResult.data?.report ? (
-              <AnalysisReportView report={analysisResult.data.report} />
+            {runs.length === 0 ? (
+              <EmptyState>{t("analysis.runs.empty")}</EmptyState>
             ) : (
-              <p style={{ color: "#9ca3af" }}>
-                {analysisResult.message ??
-                  "The response did not contain a report."}
-              </p>
+              <ul style={runListStyle}>
+                {runs.map((run) => (
+                  <li key={run.id} style={nestedBlockStyle}>
+                    {/* The provider's model name and the prompt version are
+                        recorded identifiers, shown as they were stored. */}
+                    <p style={runTitleStyle}>{run.model}</p>
+                    <p style={metaTextStyle}>{formatDateTime(run.createdAt)}</p>
+                    <div style={rowStyle}>
+                      <Badge tone="neutral" label={run.promptVersion} />
+                      <Badge
+                        tone="neutral"
+                        label={t("analysis.runs.badge.tokens", {
+                          count: run.totalTokens ?? 0,
+                        })}
+                      />
+                      <Badge
+                        tone="neutral"
+                        label={t("analysis.runs.badge.cost", {
+                          amount: run.costEstimateUsd ?? "0",
+                        })}
+                      />
+                      <Badge
+                        tone={run.schemaValid ? "success" : "danger"}
+                        label={t("analysis.runs.badge.schema", {
+                          validity: t(
+                            run.schemaValid
+                              ? "common.value.valid"
+                              : "common.value.invalid",
+                          ),
+                        })}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
             )}
           </section>
-        )}
+
+          {analysisResult && (
+            <section style={runHistoryStyle}>
+              <h3 style={sectionTitleStyle}>{t("analysis.result.title")}</h3>
+              {analysisResult.data?.report ? (
+                <AnalysisReportView report={analysisResult.data.report} />
+              ) : (
+                <EmptyState>
+                  {/* A successful call that carried no report still answers with
+                      an identifier, never with prose to print. */}
+                  {translateServerMessage(
+                    analysisResult.message,
+                    undefined,
+                    "analysis.result.missing",
+                  )}
+                </EmptyState>
+              )}
+            </section>
+          )}
+        </ProcessStep>
       </div>
-    </main>
+    </ManagerShell>
+  )
+}
+
+type StepState = "open" | "done" | "locked"
+
+const STEP_TONES = {
+  open: "info",
+  done: "success",
+  locked: "neutral",
+} as const
+
+const STEP_STATE_KEYS = {
+  open: "home.step.state.open",
+  done: "home.step.state.done",
+  locked: "home.step.state.locked",
+} as const
+
+// One step of the process. Its number, its state and — when it is waiting on an
+// earlier step — what it is waiting for are all stated, so a dimmed form is
+// never a mystery.
+function ProcessStep({
+  number,
+  title,
+  intro,
+  state,
+  lockedHint,
+  children,
+}: {
+  number: number
+  title: string
+  intro: string
+  state: StepState
+  lockedHint?: string
+  children: ReactNode
+}) {
+  const locked = state === "locked"
+
+  return (
+    <section
+      style={{
+        ...cardStyle,
+        borderColor: locked ? uiColors.border : uiColors.borderStrong,
+      }}
+      aria-labelledby={`process-step-${number}`}
+    >
+      <header style={stepHeaderStyle}>
+        <div style={stepHeadingStyle}>
+          <span aria-hidden="true" style={stepNumberStyle}>
+            {number}
+          </span>
+          <div>
+            <h2 id={`process-step-${number}`} style={sectionTitleStyle}>
+              {title}
+            </h2>
+            <p style={stepMarkerStyle}>
+              {t("home.step.marker", { number, total: TOTAL_STEPS })}
+            </p>
+          </div>
+        </div>
+        <Badge tone={STEP_TONES[state]} label={t(STEP_STATE_KEYS[state])} />
+      </header>
+
+      <p style={mutedTextStyle}>{intro}</p>
+
+      {locked && lockedHint && <EmptyState>{lockedHint}</EmptyState>}
+
+      <div
+        style={{
+          ...stepBodyStyle,
+          opacity: locked ? 0.6 : 1,
+        }}
+      >
+        {children}
+      </div>
+    </section>
   )
 }
 
 function Field({
-  label,
+  labelKey,
   children,
 }: {
-  label: string
-  children: React.ReactNode
+  labelKey: MessageKey
+  children: ReactNode
 }) {
   return (
-    <label style={{ display: "grid", gap: 8, fontWeight: 700 }}>
-      <span>{label}</span>
+    <label style={fieldStyle}>
+      <span>{t(labelKey)}</span>
       {children}
     </label>
   )
 }
 
-function CheckboxCard({
-  label,
+function CheckboxField({
+  labelKey,
   checked,
+  disabled,
   onChange,
 }: {
-  label: string
+  labelKey: MessageKey
   checked: boolean
+  disabled?: boolean
   onChange: (checked: boolean) => void
 }) {
   return (
     <label
       style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: 14,
-        borderRadius: 14,
-        border: checked ? "1px solid #4f46e5" : "1px solid #e5e7eb",
-        background: checked ? "#eef2ff" : "#ffffff",
-        fontWeight: 700,
+        ...checkboxFieldStyle,
+        borderColor: checked ? uiColors.primary : uiColors.border,
+        background: checked ? uiColors.primaryTint : uiColors.surface,
       }}
     >
       <input
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
       />
-      {label}
+      {t(labelKey)}
     </label>
   )
 }
 
-function Badge({ label }: { label: string }) {
-  return (
-    <span
-      style={{
-        padding: "4px 8px",
-        borderRadius: 999,
-        background: "#eef2ff",
-        color: "#3730a3",
-        fontSize: 12,
-        fontWeight: 700,
-      }}
-    >
-      {label}
-    </span>
-  )
+const stepHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: uiSpace.sm,
 }
 
-const cardStyle: React.CSSProperties = {
-  background: "#ffffff",
-  borderRadius: 24,
-  padding: 24,
-  boxShadow: "0 20px 50px rgba(15, 23, 42, 0.08)",
-  border: "1px solid #e5e7eb",
+const stepHeadingStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: uiSpace.sm,
+  minWidth: 0,
 }
 
-const successStyle: React.CSSProperties = {
-  padding: 14,
-  borderRadius: 14,
-  background: "#ecfdf5",
-  border: "1px solid #bbf7d0",
-  color: "#065f46",
+const stepNumberStyle: React.CSSProperties = {
+  display: "grid",
+  placeItems: "center",
+  flexShrink: 0,
+  width: 28,
+  height: 28,
+  borderRadius: uiRadius.pill,
+  background: uiColors.primaryTint,
+  color: uiColors.primary,
+  fontSize: 13,
+  fontWeight: 700,
+}
+
+const stepMarkerStyle: React.CSSProperties = {
+  margin: "2px 0 0",
+  color: uiColors.textMuted,
+  fontSize: 12,
+}
+
+const stepBodyStyle: React.CSSProperties = {
+  display: "grid",
+  gap: uiSpace.md,
+  minWidth: 0,
+}
+
+const confirmationStyle: React.CSSProperties = {
+  color: uiColors.success,
   fontSize: 14,
+  fontWeight: 600,
 }
 
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  borderRadius: 14,
-  border: "1px solid #d1d5db",
-  padding: "12px 14px",
-  fontSize: 15,
-  outline: "none",
+const runHistoryStyle: React.CSSProperties = {
+  display: "grid",
+  gap: uiSpace.sm,
 }
 
-const textareaStyle: React.CSSProperties = {
-  ...inputStyle,
-  minHeight: 96,
-  resize: "vertical",
+const runListStyle: React.CSSProperties = {
+  listStyle: "none",
+  margin: 0,
+  padding: 0,
+  display: "grid",
+  gap: uiSpace.xs,
 }
 
-const buttonStyle: React.CSSProperties = {
-  border: 0,
-  borderRadius: 14,
-  background: "#4f46e5",
-  color: "#ffffff",
-  padding: "12px 18px",
-  fontSize: 15,
-  fontWeight: 800,
+const runTitleStyle: React.CSSProperties = {
+  ...bodyTextStyle,
+  fontWeight: 600,
 }

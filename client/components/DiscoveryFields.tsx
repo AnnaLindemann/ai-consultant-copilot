@@ -1,11 +1,16 @@
 "use client"
 
 import { t } from "../i18n"
+import { uiColors, uiRadius, uiSpace } from "../lib/design-tokens"
 
 // The input primitives and styling shared by the Discovery Profile editor and
 // the value & measurement baseline editor, so both surfaces of the same stage
-// look and behave alike.
+// look and behave alike. Every visual value comes from the UI kit's tokens
+// (coding-standards.md §12B).
 
+// The fields of one section. The grouping stays a `fieldset` so assistive
+// technology still hears the section name, but the name is not drawn a second
+// time: the section it belongs to already carries it in its own header.
 export function DiscoverySection({
   title,
   children,
@@ -15,7 +20,7 @@ export function DiscoverySection({
 }) {
   return (
     <fieldset style={sectionStyle}>
-      <legend style={legendStyle}>{title}</legend>
+      <legend className="visually-hidden">{title}</legend>
       <div style={fieldsGridStyle}>{children}</div>
     </fieldset>
   )
@@ -205,97 +210,107 @@ export function formatOption(value: string): string {
 
 export const eyebrowStyle: React.CSSProperties = {
   margin: 0,
-  color: "#4f46e5",
-  fontWeight: 800,
-  fontSize: 12,
+  color: uiColors.textMuted,
+  fontWeight: 700,
+  fontSize: 11,
   textTransform: "uppercase",
-  letterSpacing: 0.8,
+  letterSpacing: "0.08em",
 }
 export const introStyle: React.CSSProperties = {
   margin: 0,
-  color: "#6b7280",
-  lineHeight: 1.55,
-  maxWidth: 720,
+  color: uiColors.textSecondary,
+  fontSize: 14,
+  lineHeight: 1.5,
+  maxWidth: 760,
 }
 export const sectionStyle: React.CSSProperties = {
-  border: "1px solid #e5e7eb",
-  borderRadius: 18,
-  padding: 20,
+  border: 0,
+  padding: 0,
   margin: 0,
-}
-export const legendStyle: React.CSSProperties = {
-  padding: "0 8px",
-  fontWeight: 800,
-  fontSize: 18,
+  minWidth: 0,
 }
 export const fieldsGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-  gap: 16,
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  gap: uiSpace.md,
 }
 export const fieldStyle: React.CSSProperties = {
   display: "grid",
-  gap: 7,
+  gap: uiSpace.xxs,
   alignContent: "start",
-  fontWeight: 700,
-  fontSize: 14,
+  fontWeight: 600,
+  fontSize: 13,
+  color: uiColors.textPrimary,
 }
 export const inputStyle: React.CSSProperties = {
   width: "100%",
-  borderRadius: 12,
-  border: "1px solid #d1d5db",
-  padding: "11px 12px",
-  fontSize: 15,
-  background: "#fff",
-  color: "#111827",
+  borderRadius: uiRadius.control,
+  border: `1px solid ${uiColors.borderStrong}`,
+  padding: "9px 11px",
+  fontSize: 14,
+  fontWeight: 400,
+  background: uiColors.surface,
+  color: uiColors.textPrimary,
 }
 export const textareaStyle: React.CSSProperties = {
   ...inputStyle,
-  minHeight: 88,
+  minHeight: 80,
+  lineHeight: 1.5,
   resize: "vertical",
 }
-export const hintStyle: React.CSSProperties = { color: "#6b7280", fontWeight: 400 }
+export const hintStyle: React.CSSProperties = {
+  color: uiColors.textSecondary,
+  fontWeight: 400,
+  fontSize: 12,
+}
 export const saveButtonStyle: React.CSSProperties = {
-  border: 0,
-  borderRadius: 12,
-  padding: "12px 17px",
-  background: "#4f46e5",
-  color: "#fff",
-  fontWeight: 800,
+  border: `1px solid ${uiColors.primary}`,
+  borderRadius: uiRadius.control,
+  minHeight: 40,
+  padding: `0 ${uiSpace.md}`,
+  background: uiColors.primary,
+  color: uiColors.textInverse,
+  fontSize: 14,
+  fontWeight: 600,
   cursor: "pointer",
 }
 export const addButtonStyle: React.CSSProperties = {
   ...saveButtonStyle,
-  background: "#111827",
+  border: `1px solid ${uiColors.borderStrong}`,
+  background: uiColors.surface,
+  color: uiColors.textPrimary,
 }
 export const removeButtonStyle: React.CSSProperties = {
   border: 0,
   background: "transparent",
-  color: "#b91c1c",
-  fontWeight: 700,
+  color: uiColors.danger,
+  fontSize: 13,
+  fontWeight: 600,
   cursor: "pointer",
 }
 export const successStyle: React.CSSProperties = {
   margin: 0,
-  padding: 12,
-  borderRadius: 12,
-  background: "#ecfdf5",
-  color: "#065f46",
-  border: "1px solid #bbf7d0",
+  padding: `${uiSpace.sm} ${uiSpace.md}`,
+  borderRadius: uiRadius.control,
+  background: uiColors.successTint,
+  color: uiColors.success,
+  border: `1px solid ${uiColors.success}33`,
+  fontSize: 14,
 }
 export const errorStyle: React.CSSProperties = {
   margin: 0,
-  padding: 12,
-  borderRadius: 12,
-  background: "#fef2f2",
-  color: "#991b1b",
-  border: "1px solid #fecaca",
+  padding: `${uiSpace.sm} ${uiSpace.md}`,
+  borderRadius: uiRadius.control,
+  background: uiColors.dangerTint,
+  color: uiColors.danger,
+  border: `1px solid ${uiColors.danger}33`,
+  fontSize: 14,
 }
 export const cardRowStyle: React.CSSProperties = {
   display: "grid",
-  gap: 12,
-  padding: 14,
-  borderRadius: 12,
-  background: "#fff",
-  border: "1px solid #e5e7eb",
+  gap: uiSpace.sm,
+  padding: uiSpace.sm,
+  borderRadius: uiRadius.control,
+  background: uiColors.surface,
+  border: `1px solid ${uiColors.border}`,
 }
