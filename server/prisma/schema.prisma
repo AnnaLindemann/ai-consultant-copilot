@@ -80,6 +80,43 @@ enum ConsultingKnowledgeKind {
   follow_up_template
 }
 
+// Whether a Technology Profile is current or has been retired (roadmap Phase
+// 5A). A deprecated profile stays readable and stays citable by whatever
+// already referenced it, but retrieval never selects it again.
+enum TechnologyProfileStatus {
+  active
+  deprecated
+}
+
+// How a Technology Profile's current content came to be (roadmap Phase 5A).
+// It is **origin metadata, not approval history**: `product_seed` is content
+// the product shipped in its initial catalogue and that no human approved
+// through the curator, so it has no Technology Update History entry;
+// `curator` is content applied from an explicitly approved proposal, from
+// which point the append-only history is the record.
+enum TechnologyProfileOrigin {
+  product_seed
+  curator
+}
+
+// What a Technology Update Proposal does to the Technology Knowledge Base —
+// the three changes the domain model names: "new, revised, or deprecated
+// technology/model information" (domain-model.md §2).
+enum TechnologyChangeKind {
+  create
+  revise
+  deprecate
+}
+
+// Where a Technology Update Proposal stands. `pending` is the only state from
+// which the knowledge base can still change; both decisions are terminal, so a
+// decided proposal is never re-decided or re-applied (architecture.md §9.3).
+enum TechnologyProposalStatus {
+  pending
+  approved
+  rejected
+}
+
 enum InvitationStatus {
   pending
   accepted
@@ -367,6 +404,226 @@ model ConsultingKnowledgeEntry {
   @@index([domainCode, kind, active])
 }
 
+// ---------------------------------------------------------------------------
+// The curated Technology Knowledge Base (roadmap Phase 5A).
+//
+// A separate table group from both the Consulting Knowledge Base and the
+// engagement tables, kept apart because AI technologies and models churn far
+// faster than consulting methodology knowledge (domain-model.md §4.2). Like the
+// Consulting Knowledge Base it carries **no workspace**: both knowledge bases
+// are product-level assets shared across workspaces, outside the Phase 3A
+// isolation boundary (architecture.md §9; domain-model.md §3A.1). There is no
+// foreign key from here into an engagement, and none from an engagement into
+// here — an engagement references a profile by its stable `code`.
+//
+// The **only** write path to TechnologyProfile is the Technology Curator
+// applying an explicitly human-approved TechnologyUpdateProposal (§9.3).
+// ---------------------------------------------------------------------------
+
+// The top-level organizing concept. Categories are curated data rather than
+// hard-coded types, so the set is extensible without a code change. The
+// hierarchy is one level deep: nesting is added "only if a real second level
+// appears" (architecture.md §6), so there is deliberately no parent column.
+model TechnologyCategory {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  code    String @unique
+  title   String
+  summary String
+
+  sortOrder Int     @default(0)
+  active    Boolean @default(true)
+  revision  Int     @default(0)
+
+  updatedByUserId String?
+  updatedBy       User?   @relation("TechnologyCategoryCuratedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  profiles TechnologyProfile[]
+
+  @@index([active])
+  @@index([sortOrder])
+}
+
+// The trusted official origin an update legitimately comes from — the
+// provenance concept that makes Technology Knowledge Base updates auditable
+// (domain-model.md §2). Deliberately distinct from the AI Providers category:
+// a Source is curation provenance, an AI Providers profile is curated content.
+model TechnologySource {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  code    String @unique
+  name    String
+  summary String
+
+  // Where the source officially publishes — announcement feed, model cards,
+  // documentation. Structured records rather than a blob, so a proposal can
+  // cite which channel it derives from.
+  officialChannels Json
+
+  active   Boolean @default(true)
+  revision Int     @default(0)
+
+  updatedByUserId String?
+  updatedBy       User?   @relation("TechnologySourceCuratedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([active])
+}
+
+// One AI technology, tool, or model. Classified under **exactly one**
+// Technology Category — an explicit documented invariant, not a modeling
+// convenience (domain-model.md §2, §4.2, §8; architecture.md §9.2), which is
+// why `categoryCode` is a required relation rather than a nullable list.
+//
+// The content facets are exactly the four the documentation names: role,
+// strengths, limitations, suitability. They are stored as one validated Json
+// `details` payload paired with a Zod schema in `shared/` (architecture.md §6).
+model TechnologyProfile {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  code String @unique
+
+  categoryCode String
+  category     TechnologyCategory @relation(fields: [categoryCode], references: [code], onDelete: Restrict, onUpdate: Cascade)
+
+  title   String
+  summary String
+  details Json
+
+  // The curated vocabulary that resolves a stage's free text into this
+  // profile's code. It seeds retrieval; it is never matched against prose.
+  matchTerms Json
+
+  // A weak, additional retrieval signal. Tags never select a profile alone.
+  tags Json
+
+  status    TechnologyProfileStatus @default(active)
+  sortOrder Int                     @default(0)
+
+  // Where this profile's current content came from. The default is the weaker
+  // claim on purpose: `product_seed` asserts no approval, so a row that somehow
+  // arrived without going through the curator can never read as approved.
+  origin TechnologyProfileOrigin @default(product_seed)
+
+  // The official origins the product attributes its **seeded** content to.
+  // Populated only while `origin` is `product_seed`; the curator's apply path
+  // clears it and hands the question to the Technology Update History, so the
+  // declaration and the audit record can never disagree.
+  originSourceCodes Json
+
+  // Bumped by each applied change, so a reader can tell how often a profile
+  // has moved. It is written only by the curator's apply path.
+  revision Int @default(0)
+
+  historyEntries TechnologyUpdateHistory[]
+
+  @@index([categoryCode])
+  @@index([status])
+  @@index([categoryCode, status])
+  @@index([origin])
+}
+
+// The governance record of a *proposed* curation change, approved or rejected
+// (domain-model.md §2). It is deliberately **not** an Analysis Run: an Analysis
+// Run always belongs to an engagement, and curation belongs to none.
+model TechnologyUpdateProposal {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  changeKind TechnologyChangeKind
+
+  // Which profile the change targets, and under which category. Held as codes
+  // rather than relations because a `create` names a profile that does not
+  // exist yet, and because a decided proposal must keep saying what it said
+  // even if the profile is later retired.
+  profileCode  String
+  categoryCode String
+
+  // The profile as the curator proposes it should read. Null for a
+  // `deprecate`, which retires a profile rather than restating it.
+  proposedProfile Json?
+
+  rationale   String
+  assumptions Json
+  gaps        Json
+
+  // The trusted official origins this proposal derives from — at least one,
+  // enforced by the schema in `shared/`. A proposal without a source is
+  // unattributable (architecture.md §9.3).
+  sourceCodes Json
+
+  status TechnologyProposalStatus @default(pending)
+
+  createdByUserId String?
+  createdBy       User?   @relation("TechnologyProposalCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  // The explicit human decision. Nothing reaches the knowledge base without it.
+  decidedAt       DateTime?
+  decidedByUserId String?
+  decidedBy       User?     @relation("TechnologyProposalDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+  decisionNote    String?
+
+  // When the approved change actually reached the knowledge base. Recorded
+  // separately from the approval so "approved but not applied" is never
+  // mistaken for "applied".
+  appliedAt DateTime?
+
+  historyEntries TechnologyUpdateHistory[]
+
+  @@index([status])
+  @@index([profileCode])
+  @@index([createdAt])
+}
+
+// The append-only audit log of **approved, applied** revisions only
+// (domain-model.md §2; architecture.md §9.3).
+//
+// Append-only by construction, exactly as AuditTrail is: the repository exposes
+// append and read only, and there is no update or delete path in code. It has
+// no `updatedAt` column for the same reason — an entry is never rewritten.
+//
+// It never records a rejected proposal, and it is separate from the
+// engagement-scoped Analysis Run and the workspace-scoped Audit Trail. Three
+// logs, three purposes, never merged.
+model TechnologyUpdateHistory {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  // The approved proposal this entry originates from. Exactly one.
+  proposalId String
+  proposal   TechnologyUpdateProposal @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+
+  profileCode String
+  profile     TechnologyProfile @relation(fields: [profileCode], references: [code], onDelete: Restrict, onUpdate: Cascade)
+
+  categoryCode String
+  changeKind   TechnologyChangeKind
+
+  // The Technology Source references, **preserved here** rather than read back
+  // through the proposal: the history has to keep answering "from which
+  // official origin did this come?" even if the registry later changes.
+  sourceCodes Json
+
+  // What the profile read as immediately after the change was applied.
+  appliedProfile Json
+
+  approvedByUserId String?
+  approvedBy       User?   @relation("TechnologyHistoryApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+
+  appliedAt DateTime @default(now())
+
+  @@index([profileCode])
+  @@index([categoryCode])
+  @@index([appliedAt])
+  @@index([proposalId])
+}
+
 model AnalysisRun {
   id String @id @default(cuid())
 
@@ -547,6 +804,16 @@ model User {
   notifications               Notification[]
   auditTrails                 AuditTrail[]
   curatedKnowledgeEntries     ConsultingKnowledgeEntry[] @relation("ConsultingKnowledgeCuratedBy")
+
+  // The Technology Knowledge Base's curation trail (roadmap Phase 5A). A user
+  // is referenced by what they curated, proposed, decided, and approved; every
+  // relation is SET NULL on delete, so removing a user never removes curated
+  // knowledge or rewrites an append-only history entry.
+  curatedTechnologyCategories TechnologyCategory[]       @relation("TechnologyCategoryCuratedBy")
+  curatedTechnologySources    TechnologySource[]         @relation("TechnologySourceCuratedBy")
+  createdTechnologyProposals  TechnologyUpdateProposal[] @relation("TechnologyProposalCreatedBy")
+  decidedTechnologyProposals  TechnologyUpdateProposal[] @relation("TechnologyProposalDecidedBy")
+  approvedTechnologyHistory   TechnologyUpdateHistory[]  @relation("TechnologyHistoryApprovedBy")
 
   @@unique([workspaceId, email])
   @@index([workspaceId])

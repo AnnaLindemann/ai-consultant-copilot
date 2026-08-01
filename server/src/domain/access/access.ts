@@ -98,6 +98,14 @@ export type AccessAction =
   | "organization.create"
   | "knowledge.read"
   | "knowledge.curate"
+  // The Technology Knowledge Base and its Technology Curator (Phase 5A).
+  // `curate` maintains the registries and *drafts* a proposal; `decide` is the
+  // human-approval gate itself. They are separate actions because they are
+  // separate authorities: drafting changes nothing, deciding changes the
+  // knowledge base (architecture.md §9.3).
+  | "technology_knowledge.read"
+  | "technology_knowledge.curate"
+  | "technology_proposal.decide"
   // Workspace administration.
   | "workspace.manage"
   | "invitation.issue"
@@ -183,6 +191,16 @@ const ROLES_PERMITTED: Record<AccessAction, readonly UserRole[]> = {
   "organization.create": ["ADMIN", "MANAGER"],
   "knowledge.read": ["ADMIN", "MANAGER"],
   "knowledge.curate": ["ADMIN"],
+
+  // The Technology Knowledge Base is administered by an Administrator alone.
+  // Deny-by-default decides this: the approved screen inventory has no Manager
+  // technology surface (A10/A11/A12 are Administrator screens), and
+  // `role-permissions.csv` leaves managing knowledge bases to the
+  // Administrator. A Manager meets curated technology knowledge indirectly, as
+  // grounding carried inside a Recommendation, not by browsing the registry.
+  "technology_knowledge.read": ["ADMIN"],
+  "technology_knowledge.curate": ["ADMIN"],
+  "technology_proposal.decide": ["ADMIN"],
 
   // Workspace administration is the Administrator's, without exception — a
   // Manager cannot widen their own reach (domain-model.md §3A.2).

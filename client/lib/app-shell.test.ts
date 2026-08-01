@@ -64,6 +64,9 @@ const ROUTE_SHELLS: Record<string, "ManagerShell" | "ClientPortalShell" | "Publi
   "/engagements/[id]": "ManagerShell",
   "/engagements/[id]/discovery": "ManagerShell",
   "/knowledge": "ManagerShell",
+  "/technology": "ManagerShell",
+  "/technology/proposals": "ManagerShell",
+  "/technology/history": "ManagerShell",
   "/portal/engagements/[id]": "ClientPortalShell",
   "/auth": "PublicShell",
 }
@@ -160,7 +163,9 @@ test("breadcrumbs appear wherever the route is deeper than one level", () => {
 test("no internal page is a dead end", () => {
   // Every workbench page either carries breadcrumbs or is a top-level entry
   // that the sidebar itself marks as current.
-  const topLevel = ["/", "/engagements", "/knowledge"]
+  // `/technology` is a sidebar entry of its own; the curator's two surfaces
+  // under it carry breadcrumbs back to it rather than standing alone.
+  const topLevel = ["/", "/engagements", "/knowledge", "/technology"]
 
   for (const file of routeFiles()) {
     const route = routePath(file)

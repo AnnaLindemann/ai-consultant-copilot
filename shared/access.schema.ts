@@ -65,6 +65,14 @@ export const auditEventTypeSchema = z.enum([
   "ownership_transferred",
   "role_changed",
   "denied_permission",
+  // Technology Knowledge Base curation (Phase 5A). These record *who did what*
+  // to the curation workflow and belong to the workspace Audit Trail. They are
+  // deliberately not the Technology Update History, which records what the
+  // knowledge base itself came to say and belongs to no workspace — three
+  // governance logs, three purposes, never merged (architecture.md §7A.8, §9.3).
+  "technology_proposal_created",
+  "technology_proposal_approved",
+  "technology_proposal_rejected",
 ])
 
 export type UserRole = z.infer<typeof userRoleSchema>

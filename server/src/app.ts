@@ -8,6 +8,7 @@ import engagementsRouter from "./routes/engagements.js"
 import knowledgeRouter from "./routes/knowledge.js"
 import organizationsRouter from "./routes/organizations.js"
 import portalRouter from "./routes/portal.js"
+import technologyRouter from "./routes/technology.js"
 
 const app = express()
 app.use(
@@ -34,6 +35,7 @@ app.use("/auth", authRouter)
 app.use("/organizations", organizationsRouter)
 app.use("/engagements", engagementsRouter)
 app.use("/knowledge", knowledgeRouter)
+app.use("/technology", technologyRouter)
 app.use("/portal", portalRouter)
 
 export default app

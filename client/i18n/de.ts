@@ -136,6 +136,9 @@ const uiMessages = {
   "common.state.working": "Bitte warten …",
   "common.state.saving": "Speichere …",
   "common.state.saved": "Gespeichert",
+  "common.state.loading": "Wird geladen …",
+  "common.action.cancel": "Abbrechen",
+  "common.action.close": "Schließen",
   "common.value.valid": "gültig",
   "common.value.invalid": "ungültig",
   "common.currency.eur": "Euro",
@@ -1114,6 +1117,8 @@ const uiMessages = {
   "shell.nav.new_engagement": "Neues Engagement",
   "shell.nav.engagements": "Engagements",
   "shell.nav.knowledge_base": "Consulting Knowledge Base",
+  "shell.nav.technology": "Technologien",
+  "shell.nav.technology_updates": "Aktualisierungen",
   "shell.breadcrumbs.aria_label": "Navigationspfad",
   "shell.user.unknown": "Unbekannt",
   "shell.user.role.unknown": "Rolle unbekannt",
@@ -1356,6 +1361,197 @@ const uiMessages = {
     "Was muss noch bekannt sein, um das beurteilen zu können?",
   "assessment.hint.requirements":
     "Jedes Ergebnis braucht einen Titel, eine Erläuterung, eine Zuversicht und – je nach Grundlage – mindestens eine belegende Tatsache oder eine Annahme.",
+
+  // --- Technology Knowledge Base (screens A10, A11, A12) ------------------
+  //
+  // The identifiers behind these labels — `create`, `revise`, `deprecate`,
+  // `pending`, `approved`, `rejected`, `active`, `deprecated` — stay English
+  // everywhere they are stored, queried, or contracted. Only what a curator
+  // reads is German.
+
+  // The outcomes the technology endpoints report. The server sends an
+  // identifier and structured parameters, never prose (coding-standards.md
+  // §12A), and every identifier it can send is rendered here.
+  "technology.message.loaded": "Geladen",
+  "technology.message.category_saved": "Kategorie gespeichert",
+  "technology.message.source_saved": "Quelle gespeichert",
+  "technology.message.proposal_created":
+    "Vorschlag eingereicht. Die Wissensbasis ist bis zur Genehmigung unverändert.",
+  "technology.message.proposal_approved":
+    "Vorschlag genehmigt und angewendet. Die Änderung ist im Verlauf festgehalten.",
+  "technology.message.proposal_rejected":
+    "Vorschlag abgelehnt. Es wurde nichts geändert.",
+  "technology.message.retrieval_previewed": "Vorschau erstellt",
+  "technology.error.invalid_input":
+    "Die Angaben sind unvollständig oder ungültig.",
+  "technology.error.not_found": "Dieser Eintrag wurde nicht gefunden.",
+  "technology.error.duplicate_code":
+    "Diese Kennung ist bereits vergeben. Bestehende Einträge werden nicht überschrieben.",
+  "technology.error.conflict":
+    "Der Eintrag wurde zwischenzeitlich geändert. Bitte neu laden und erneut speichern.",
+  "technology.error.unknown_category":
+    "Diese Kategorie gibt es nicht oder sie ist zurückgezogen. Jedes Profil gehört zu genau einer gültigen Kategorie.",
+  "technology.error.unknown_source":
+    "Der Vorschlag zitiert eine Quelle, die nicht im Verzeichnis vertrauenswürdiger Herkünfte steht.",
+  "technology.error.profile_exists":
+    "Dieses Profil gibt es bereits. Schlagen Sie eine Überarbeitung statt einer Neuanlage vor.",
+  "technology.error.profile_missing":
+    "Dieses Profil gibt es nicht. Schlagen Sie eine Neuanlage statt einer Überarbeitung vor.",
+  "technology.error.proposal_content_required":
+    "Für eine Neuanlage oder Überarbeitung fehlt der vorgeschlagene Profilinhalt.",
+  "technology.error.proposal_content_not_allowed":
+    "Eine Abkündigung darf den Profilinhalt nicht zugleich neu fassen.",
+  "technology.error.proposal_category_mismatch":
+    "Der Profilinhalt nennt eine andere Kategorie als der Vorschlag.",
+  "technology.error.proposal_code_mismatch":
+    "Der Profilinhalt nennt eine andere Kennung als der Vorschlag.",
+  "technology.error.already_decided":
+    "Über diesen Vorschlag wurde bereits entschieden. Eine Entscheidung ist endgültig.",
+  "technology.error.apply_failed":
+    "Die Wissensbasis hat sich seit dem Vorschlag verändert, sodass er nicht mehr angewendet werden kann. Bitte neu vorschlagen.",
+  "technology.error.internal":
+    "Unerwarteter Serverfehler. Die Technology Knowledge Base wurde nicht verändert.",
+
+  "technology.access_denied":
+    "Die Technology Knowledge Base wird ausschließlich von Administratoren gepflegt. Ihre Rolle hat darauf keinen Zugriff.",
+
+  "technology.library.title": "Technology Knowledge Base",
+  "technology.library.intro":
+    "Kuratierte Technologie- und Modellprofile, nach Kategorien geordnet. Sie begründen später die Technologien, die eine Empfehlung benennt.",
+  "technology.library.error":
+    "Die Technology Knowledge Base konnte nicht geladen werden.",
+  "technology.library.filter.title": "Filter",
+  "technology.library.filter.category": "Kategorie",
+  "technology.library.filter.all_categories": "Alle Kategorien",
+  "technology.library.filter.query": "Suche",
+  "technology.library.filter.apply": "Anwenden",
+  "technology.library.propose_new": "Neues Profil vorschlagen",
+  "technology.library.propose_revision": "Überarbeitung vorschlagen",
+  "technology.library.propose_deprecation": "Abkündigung vorschlagen",
+  "technology.library.profiles.title": "Technologieprofile",
+  "technology.library.profiles.hint":
+    "Jedes Profil gehört zu genau einer Kategorie. Änderungen erreichen die Wissensbasis nur über einen genehmigten Vorschlag.",
+  "technology.library.empty.title": "Keine Profile gefunden",
+  "technology.library.empty.description":
+    "Passen Sie den Filter an oder schlagen Sie ein neues Technologieprofil vor.",
+  "technology.library.sources.title": "Offizielle Quellen",
+  "technology.library.sources.hint":
+    "Das Verzeichnis vertrauenswürdiger Herkünfte. Ein Vorschlag darf nur Quellen zitieren, die hier geführt sind.",
+
+  "technology.status.active": "Aktiv",
+  "technology.status.deprecated": "Abgekündigt",
+
+  "technology.change_kind.create": "Neu",
+  "technology.change_kind.revise": "Überarbeitung",
+  "technology.change_kind.deprecate": "Abkündigung",
+
+  "technology.proposal_status.pending": "Offen",
+  "technology.proposal_status.approved": "Genehmigt",
+  "technology.proposal_status.rejected": "Abgelehnt",
+
+  "technology.profile.role": "Rolle",
+  "technology.profile.strengths": "Stärken",
+  "technology.profile.limitations": "Grenzen",
+  "technology.profile.suitability": "Eignung",
+  "technology.profile.revision": "Revision {revision}",
+
+  // Origin metadata, deliberately worded so it can never be read as approval:
+  // the seeded wording names the official source and says outright that no
+  // approval has taken place.
+  "technology.profile.origin.product_seed":
+    "Erstbestand des Produkts, Quelle: {sources} — bisher ohne genehmigte Aktualisierung.",
+  "technology.profile.origin.curator":
+    "Durch eine genehmigte Aktualisierung gepflegt; die Herkunft steht im Änderungsverlauf.",
+  "technology.origin.product_seed": "Erstbestand",
+  "technology.origin.curator": "Kuratiert",
+
+  "technology.field.title": "Titel",
+  "technology.field.summary": "Zusammenfassung",
+  "technology.field.categoryCode": "Kategorie",
+  "technology.field.status": "Status",
+  "technology.field.role": "Rolle",
+  "technology.field.strengths": "Stärken",
+  "technology.field.limitations": "Grenzen",
+  "technology.field.suitability": "Eignung",
+  "technology.field.matchTerms": "Suchbegriffe",
+  "technology.field.tags": "Schlagworte",
+
+  "technology.proposal.title": "Änderung vorschlagen",
+  "technology.proposal.gate_hint":
+    "Ein Vorschlag ändert noch nichts. Er wird von einer Administratorin oder einem Administrator geprüft und erst mit der Genehmigung wirksam.",
+  "technology.proposal.change_kind": "Art der Änderung",
+  "technology.proposal.profile_code": "Profilkennung",
+  "technology.proposal.category": "Kategorie",
+  "technology.proposal.profile_title": "Titel",
+  "technology.proposal.summary": "Zusammenfassung",
+  "technology.proposal.match_terms": "Suchbegriffe",
+  "technology.proposal.tags": "Schlagworte",
+  "technology.proposal.rationale": "Begründung",
+  "technology.proposal.assumptions": "Annahmen",
+  "technology.proposal.gaps": "Offene Punkte",
+  "technology.proposal.sources": "Offizielle Quellen",
+  "technology.proposal.sources_hint":
+    "Mindestens eine Quelle ist erforderlich. Ohne belegte Herkunft ist eine Änderung nicht nachvollziehbar.",
+  "technology.proposal.submit": "Vorschlag einreichen",
+  "technology.proposal.submitted":
+    "Der Vorschlag wurde eingereicht und wartet auf Genehmigung. Die Wissensbasis ist unverändert.",
+  "technology.proposal.validation":
+    "Profilkennung, Begründung und mindestens eine offizielle Quelle sind erforderlich.",
+
+  "technology.proposals.title": "Technologie-Aktualisierungen",
+  "technology.proposals.intro":
+    "Vorgeschlagene Änderungen an der Technology Knowledge Base, mit ihrer Herkunft und ihren offenen Punkten.",
+  "technology.proposals.hint":
+    "Eine Änderung wird erst mit der ausdrücklichen Genehmigung wirksam. Eine Ablehnung verändert nichts und erzeugt keinen Verlaufseintrag.",
+  "technology.proposals.error":
+    "Die Vorschläge konnten nicht geladen werden.",
+  "technology.proposals.filter.status": "Status",
+  "technology.proposals.filter.all": "Alle",
+  "technology.proposals.empty.title": "Keine Vorschläge",
+  "technology.proposals.empty.description":
+    "Es liegt derzeit kein Vorschlag mit diesem Status vor.",
+  "technology.proposals.decided": "Die Entscheidung wurde festgehalten.",
+
+  "technology.review.title": "Vorschlag prüfen",
+  "technology.review.profile": "Profil",
+  "technology.review.category": "Kategorie",
+  "technology.review.change_kind": "Art der Änderung",
+  "technology.review.created": "Eingereicht",
+  "technology.review.rationale": "Begründung",
+  "technology.review.assumptions": "Annahmen",
+  "technology.review.gaps": "Offene Punkte",
+  "technology.review.none_stated": "Keine angegeben.",
+  "technology.review.sources": "Offizielle Quellen",
+  "technology.review.diff": "Gegenüberstellung",
+  "technology.review.diff.field": "Feld",
+  "technology.review.diff.before": "Bisher",
+  "technology.review.diff.after": "Vorgeschlagen",
+  "technology.review.diff.empty": "—",
+  "technology.review.note": "Anmerkung zur Entscheidung",
+  "technology.review.gate_hint":
+    "Mit der Genehmigung wird die Änderung angewendet und im Verlauf festgehalten. Beides geschieht gemeinsam oder gar nicht.",
+  "technology.review.approve": "Genehmigen und anwenden",
+  "technology.review.reject": "Ablehnen",
+  "technology.review.already_decided":
+    "Dieser Vorschlag wurde bereits entschieden: {status}.",
+
+  "technology.history.title": "Änderungsverlauf",
+  "technology.history.intro":
+    "Der fortschreibende Nachweis genehmigter und angewendeter Änderungen an der Technology Knowledge Base.",
+  "technology.history.hint":
+    "Einträge werden ausschließlich angefügt. Sie werden nie überschrieben oder gelöscht, und abgelehnte Vorschläge erscheinen hier nicht.",
+  "technology.history.error":
+    "Der Änderungsverlauf konnte nicht geladen werden.",
+  "technology.history.empty.title": "Noch keine genehmigten Änderungen",
+  "technology.history.empty.description":
+    "Sobald ein Vorschlag genehmigt und angewendet wurde, erscheint er hier.",
+  "technology.history.column.applied_at": "Angewendet",
+  "technology.history.column.profile": "Profil",
+  "technology.history.column.change": "Änderung",
+  "technology.history.column.sources": "Quellen",
+  "technology.history.column.approver": "Genehmigt von",
+  "technology.history.no_sources": "Keine",
+  "technology.history.unknown_approver": "Unbekannt",
 
   "opportunity.hint.pipe": "Einträge mit senkrechtem Strich (|) trennen.",
   "opportunity.hint.requirements":

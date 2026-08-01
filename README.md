@@ -253,6 +253,87 @@ curated changes are safe across restarts.
 responses carry no knowledge package, no guidance, and no internal frameworks
 or AI-readiness criteria; the portal has no knowledge route at all.
 
+## Curated Technology Knowledge Base (Phase 5A)
+
+The **Technology Knowledge Base** is the second curated asset: reusable,
+engagement-independent knowledge about the AI technologies and models a solution
+might use. It is kept separate from the Consulting Knowledge Base because
+technologies churn far faster than consulting methodology, and it is
+**product-level and shared across workspaces** for the same reason the
+Consulting Knowledge Base is — its five tables carry no workspace column and no
+engagement reference.
+
+It holds four record kinds:
+
+- **Technology Categories** — the 13 approved categories (AI Models, AI
+  Providers, Embedding Models, Speech, OCR, Vector Databases, Rerankers, MCP
+  Servers, Browser / Computer Use, Workflow Engines, Evaluation Frameworks,
+  Monitoring, Deployment Patterns), held as curated data rather than hard-coded
+  types. Flat: nesting arrives only if a real second level does.
+- **Technology Profiles** — one AI technology or model each, classified under
+  **exactly one** category (a documented invariant, enforced by a `NOT NULL`
+  foreign key), describing its **role, strengths, limitations, and suitability**.
+- **Technology Sources** — the registry of trusted official origins a proposal
+  may cite.
+- **Technology Update Proposals** and the append-only **Technology Update
+  History** — the subsystem's two governance records.
+
+### Governance: what the approval gate covers, and what it does not
+
+**No Technology *Profile* changes without an approved proposal.** The flow is
+detect → propose → **explicit human approval** → apply → append history, and the
+profile write, the proposal decision, and the history entry land in one
+transaction or not at all. There is no route that writes a profile directly, no
+engagement-reachable path, and no autonomous path. Detection is manual in this
+phase: there is no vendor watcher, no scheduled fetch, and no crawling.
+
+**Technology Categories and Technology Sources are curated registries** and are
+maintained directly by an Administrator, with revision checks and audit entries
+but without a proposal. This is a deliberate, reviewed interpretation, recorded
+because the documentation can bear two readings:
+
+- The gate as written is broad — *"every update to the Technology Knowledge Base
+  flows through a Technology Update Proposal"* (roadmap Phase 5A).
+- It is applied to Profiles only because **a proposal can structurally target
+  nothing else** (`domain-model.md` §2 defines a proposal as targeting *"a
+  specific Technology Profile within a Technology Category"*), because the
+  documentation calls these two **curated registries** maintained *"through
+  curation"* (`architecture.md` Assumptions; `domain-model.md` §2), and because
+  **the gate could not bootstrap otherwise**: every proposal must cite an
+  existing source, so a proposal that adds one could never satisfy its own
+  precondition.
+
+Extending the gate to the registries would need new proposal semantics and a new
+exemption for source bootstrapping — a documentation decision, not an
+implementation choice. See the note at the head of
+`server/src/repositories/technology-knowledge.repository.ts`.
+
+### Provenance: origin metadata is not approval history
+
+Two separate records, deliberately never merged:
+
+- **Technology Update History** — append-only, and reserved **exclusively** for
+  approved curator changes. It records what changed, the approving proposal, the
+  Technology Sources preserved for auditability, the approver, and when. It has
+  no `updatedAt` column and no update or delete path in code.
+- **Origin metadata on the profile** (`origin`, `originSourceCodes`) — the
+  product's own declaration about content it shipped. A seeded profile reports
+  `origin: product_seed` with its official source, and an explicitly `null`
+  proposal and applied-at, so it states where the information came from without
+  ever implying that a human approved it.
+
+The two are mutually exclusive: the first approved change sets `origin` to
+`curator` and clears the declaration, so the history becomes the single source
+of truth and the two can never disagree. **The seed writes no history entry.**
+
+Retrieval is deterministic and category-scoped, excludes deprecated profiles,
+returns stable profile codes with their provenance, and is exercised through an
+Administrator preview endpoint. It is not wired into any recommendation path —
+that is Phase 6.
+
+**Administrator-only.** A Manager and a Client are refused every technology
+route by deny-by-default, and every denial is audited.
+
 ## Access control (Phase 3A)
 
 The workbench is multi-user and partitioned by **Workspace**. Every

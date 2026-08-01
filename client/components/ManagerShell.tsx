@@ -240,6 +240,23 @@ function SidebarIcon({ kind }: { kind: NavIconKind | "brand" }) {
           <path d="M6 4v14" />
         </svg>
       )
+    case "technology":
+      return (
+        <svg {...common}>
+          <rect x="4" y="7" width="16" height="10" rx="2" />
+          <path d="M9 7V5" />
+          <path d="M15 7V5" />
+          <path d="M9 17v2" />
+          <path d="M15 17v2" />
+        </svg>
+      )
+    case "updates":
+      return (
+        <svg {...common}>
+          <path d="M20 12a8 8 0 1 1-2.3-5.6" />
+          <path d="M20 4v5h-5" />
+        </svg>
+      )
   }
 }
 

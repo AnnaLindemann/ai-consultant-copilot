@@ -17,6 +17,7 @@ import { discoveryMessageIds } from "../../shared/discovery-messages.ts"
 import { opportunityMessageIds } from "../../shared/opportunity-messages.ts"
 import { workbenchMessageIds } from "../../shared/workbench-messages.ts"
 import { consultingKnowledgeMessageIds } from "../../shared/consulting-knowledge-messages.ts"
+import { technologyKnowledgeMessageIds } from "../../shared/technology-knowledge-messages.ts"
 import {
   businessImpactCategorySchema,
   dataSourceKindSchema,
@@ -33,6 +34,18 @@ import {
   KNOWLEDGE_KINDS,
   KNOWLEDGE_STAGES,
 } from "../lib/knowledge-options.ts"
+import {
+  technologyChangeKindSchema,
+  technologyProfileOriginSchema,
+  technologyProfileStatusSchema,
+  technologyProposalStatusSchema,
+} from "../../shared/technology-knowledge.schema.ts"
+import {
+  TECHNOLOGY_CHANGE_KINDS,
+  TECHNOLOGY_PROFILE_ORIGINS,
+  TECHNOLOGY_PROFILE_STATUSES,
+  TECHNOLOGY_PROPOSAL_STATUSES,
+} from "../lib/technology-options.ts"
 import {
   DISCOVERY_SECTIONS,
   discoveryActorSchema,
@@ -175,6 +188,77 @@ test("the curation surface offers exactly the knowledge kinds and stages the dom
 test("every Consulting Knowledge outcome the server reports has a German message", () => {
   for (const messageId of consultingKnowledgeMessageIds) {
     assert.equal(has(messageId), true, `${messageId} has no German message`)
+  }
+})
+
+test("every Technology Knowledge outcome the server reports has a German message", () => {
+  for (const messageId of technologyKnowledgeMessageIds) {
+    assert.equal(has(messageId), true, `${messageId} has no German message`)
+  }
+})
+
+// The technology surfaces repeat their identifiers locally for the same reason
+// the knowledge surface does: a client file may import from `shared/` type-only.
+test("the technology surfaces offer exactly the identifiers the domain defines", () => {
+  assert.deepEqual(
+    [...TECHNOLOGY_CHANGE_KINDS],
+    [...technologyChangeKindSchema.options],
+  )
+  assert.deepEqual(
+    [...TECHNOLOGY_PROFILE_STATUSES],
+    [...technologyProfileStatusSchema.options],
+  )
+  assert.deepEqual(
+    [...TECHNOLOGY_PROPOSAL_STATUSES],
+    [...technologyProposalStatusSchema.options],
+  )
+  assert.deepEqual(
+    [...TECHNOLOGY_PROFILE_ORIGINS],
+    [...technologyProfileOriginSchema.options],
+  )
+})
+
+test("every technology identifier the interface renders has a German label", () => {
+  // A status or change kind that reaches a screen without a label would render
+  // as its English identifier, which is exactly what §12A forbids.
+  for (const kind of technologyChangeKindSchema.options) {
+    assert.equal(
+      has(`technology.change_kind.${kind}`),
+      true,
+      `technology.change_kind.${kind} has no German label`,
+    )
+  }
+
+  for (const status of technologyProposalStatusSchema.options) {
+    assert.equal(
+      has(`technology.proposal_status.${status}`),
+      true,
+      `technology.proposal_status.${status} has no German label`,
+    )
+  }
+
+  for (const status of technologyProfileStatusSchema.options) {
+    assert.equal(
+      has(`technology.status.${status}`),
+      true,
+      `technology.status.${status} has no German label`,
+    )
+  }
+
+  // Origin is shown to a curator two ways: as a short label, and as the
+  // sentence on the profile detail. Both must exist for both origins, or a
+  // profile would report its provenance as a bare English identifier.
+  for (const origin of technologyProfileOriginSchema.options) {
+    assert.equal(
+      has(`technology.origin.${origin}`),
+      true,
+      `technology.origin.${origin} has no German label`,
+    )
+    assert.equal(
+      has(`technology.profile.origin.${origin}`),
+      true,
+      `technology.profile.origin.${origin} has no German sentence`,
+    )
   }
 })
 
