@@ -391,8 +391,58 @@ Technical improvements are introduced only when they directly support business v
 - Earlier report versions remain intact as a faithful record of what was delivered.
 
 ---
+## Phase 10 — Security, Privacy & AI Compliance
 
-## Phase 10 — RAG Enhancement over the Consulting Knowledge Base
+**Goal.** Protect client information, govern AI usage responsibly, and ensure the workbench operates in accordance with applicable data protection and AI regulations.
+
+**Business capability.** Operate engagements under a unified **Security, Privacy & AI Compliance** framework that protects confidential information, governs AI processing, and provides complete traceability, auditability, and regulatory readiness.
+
+**Scope.**
+- Introduce a unified **Compliance Policy** for each Workspace, defining how client data may be stored, processed, shared, retained, exported, and used by AI-assisted functionality.
+- Support **Data Classification** for engagement content, documents, and generated outputs, including classifications such as Public, Internal, Confidential, Strictly Confidential, Personal Data (GDPR), and AI Restricted.
+- Allow Workspace administrators to define **AI Policies**, including:
+  - whether AI processing is permitted,
+  - approved AI providers,
+  - approved AI models,
+  - whether confidential information may be processed,
+  - whether human approval is required before AI-generated outputs become accepted engagement content.
+- Support **AI Consent** at the engagement level so consultants can explicitly allow, restrict, or completely prohibit AI processing for a particular engagement.
+- Automatically **detect and anonymize personally identifiable information (PII)** before AI processing where required by Workspace policy, including names, email addresses, telephone numbers, postal addresses, contract identifiers, and other configurable personal identifiers.
+- Ensure AI processing never bypasses Workspace policy or engagement-specific restrictions.
+- Support encryption of engagement data and uploaded documents both **at rest** and **in transit**.
+- Protect uploaded documents using secure storage and controlled access mechanisms, including expiring signed URLs where appropriate.
+- Expand the Audit Trail to include security- and compliance-relevant events, including:
+  - access to confidential information,
+  - document downloads,
+  - exports,
+  - AI policy decisions,
+  - anonymization actions,
+  - denied AI requests,
+  - compliance-related administrative actions.
+- Record compliance metadata for every AI-assisted Analysis Run, including provider, model, purpose, prompt version, input classification, output classification, anonymization status, and human review status.
+- Introduce configurable **Data Retention Policies**, allowing Workspace administrators to define retention periods for engagements, documents, audit records, and AI-generated artifacts.
+- Support GDPR rights including complete client-data export and permanent deletion in accordance with configured retention and legal obligations.
+- Provide administrators with a **Compliance Dashboard** summarizing confidential engagements, AI-restricted engagements, policy violations, anonymization failures, retention status, and other operational compliance indicators.
+- Design the compliance framework around current European regulations, including **GDPR**, the **EU AI Act**, and future jurisdiction-specific implementation requirements, while keeping regulatory rules configurable rather than hard-coded.
+
+**Definition of Done.**
+- Every engagement operates under an explicit Workspace Compliance Policy.
+- Confidential information is classified, protected, and handled according to Workspace policy.
+- AI processing respects Workspace policy, engagement restrictions, and AI consent before any request is sent to an external provider.
+- Personal data can be automatically anonymized before AI processing where required.
+- Compliance-relevant actions are fully auditable.
+- Workspace administrators can configure AI usage, retention policies, and data protection rules without changing application code.
+- Client data can be exported or permanently removed in accordance with applicable privacy regulations.
+
+**Success Criteria**
+- Consultants can confidently work with confidential customer information while maintaining regulatory compliance.
+- Organizations can define and enforce their own AI governance policies.
+- Every AI interaction involving customer data is traceable and auditable.
+- Sensitive information is protected before, during, and after AI processing.
+- The platform is prepared for evolving European AI and privacy regulations without requiring architectural redesign.
+
+---
+## Phase 11 — RAG Enhancement over the Consulting Knowledge Base
 
 **Goal.** Enhance grounding with semantic retrieval once the curated Consulting Knowledge Base holds meaningful content.
 
@@ -415,7 +465,7 @@ Technical improvements are introduced only when they directly support business v
 
 ---
 
-## Phase 11 — Production Readiness
+## Phase 12 — Production Readiness
 
 > **Revision 1.2 — refocused.** Authentication, authorization, roles, workspace isolation, and server-side permission enforcement are **no longer part of this phase**; they are delivered in **Phase 3A**, where they are needed to make multi-user and client collaboration safe. Phase 11 is now about **operating** the product: deployment, monitoring, operational security, backup, recovery, and performance. It hardens and operates the access control built in Phase 3A; it does not introduce it.
 
