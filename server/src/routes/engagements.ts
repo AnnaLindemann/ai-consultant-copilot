@@ -75,6 +75,10 @@ import {
   saveRecommendationsSchema,
 } from "../schemas/recommendations.schema.js"
 import {
+  generateRoadmapSchema,
+  saveRoadmapSchema,
+} from "../schemas/implementation-roadmap.schema.js"
+import {
   generateRecommendations,
   getRecommendationStageState,
   listRecommendationVersions,
@@ -83,6 +87,15 @@ import {
   type SaveRecommendationsFailure,
 } from "../services/recommendations.service.js"
 import { getRecommendationVersionById } from "../repositories/recommendation-version.repository.js"
+import {
+  generateImplementationRoadmap,
+  getRoadmapStageState,
+  listRoadmapVersions,
+  saveImplementationRoadmap,
+  type GenerateRoadmapFailure,
+  type SaveRoadmapFailure,
+} from "../services/implementation-roadmap.service.js"
+import { getRoadmapVersionById } from "../repositories/implementation-roadmap-version.repository.js"
 import { retrieveKnowledgePackage } from "../services/consulting-knowledge.service.js"
 import { failureIdentity } from "../lib/failure-identity.js"
 
@@ -167,6 +180,25 @@ const recommendationsFailureStatus: Record<
   ai_step_failed: 502,
   version_conflict: 409,
   persistence_failed: 500,
+}
+
+const roadmapFailureStatus: Record<GenerateRoadmapFailure, number> = {
+  recommendations_not_ready: 422,
+  knowledge_unavailable: 422,
+  consultant_edits_protected: 409,
+  ai_output_invalid: 422,
+  ai_output_ungrounded: 422,
+  ai_step_failed: 502,
+  version_conflict: 409,
+  persistence_failed: 500,
+}
+
+const saveRoadmapFailureStatus: Record<SaveRoadmapFailure, number> = {
+  recommendations_not_ready: 422,
+  ai_output_ungrounded: 422,
+  version_not_found: 404,
+  historical_version_readonly: 409,
+  stale_update: 409,
 }
 
 const saveRecommendationsFailureStatus: Record<
@@ -257,6 +289,10 @@ router.get("/:id", async (req, res) => {
       authorized.resource,
       authorized.scope,
     )
+    const roadmap = await getRoadmapStageState(
+      authorized.resource,
+      authorized.scope,
+    )
 
     return res.json({
       status: true,
@@ -265,6 +301,7 @@ router.get("/:id", async (req, res) => {
         ...withDiscoveryState(authorized.resource),
         opportunities,
         recommendations,
+        roadmap,
         knowledgePackage,
       },
     })
@@ -1064,6 +1101,209 @@ router.get("/:id/recommendations/versions/:versionId", async (req, res) => {
     return res.status(500).json({
       status: false,
       message: "recommendation.error.internal",
+    })
+  }
+})
+
+router.post("/:id/roadmap", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "engagement.generate",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  const parseResult = generateRoadmapSchema.safeParse(req.body ?? {})
+  if (!parseResult.success) {
+    return res.status(400).json({
+      status: false,
+      message: "roadmap.error.invalid_input",
+      errors: parseResult.error.flatten(),
+    })
+  }
+
+  try {
+    const result = await generateImplementationRoadmap(
+      authorized.resource,
+      authorized.scope,
+      {
+        replaceConsultantEdits:
+          parseResult.data.replaceConsultantEdits ?? false,
+      },
+    )
+
+    if (!result.success) {
+      return res.status(roadmapFailureStatus[result.failure]).json({
+        status: false,
+        message: result.messageId,
+        data: {
+          failure: result.failure,
+          evaluation: result.evaluation,
+          unknownRecommendationIds: result.unknownRecommendationIds,
+          missingRecommendationIds: result.missingRecommendationIds,
+          unknownImplementationPatternCodes:
+            result.unknownImplementationPatternCodes,
+          nonImplementationPatternCodes: result.nonImplementationPatternCodes,
+          dependencyErrors: result.dependencyErrors,
+          dispositionErrors: result.dispositionErrors,
+        },
+      })
+    }
+
+    return res.status(201).json({
+      status: true,
+      message: "roadmap.message.generated",
+      data: {
+        version: result.version,
+        evaluation: result.evaluation,
+      },
+    })
+  } catch (error) {
+    console.error("GENERATE_ROADMAP_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "roadmap.error.internal",
+    })
+  }
+})
+
+router.patch("/:id/roadmap", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "engagement.update",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  const parseResult = saveRoadmapSchema.safeParse(req.body)
+  if (!parseResult.success) {
+    return res.status(400).json({
+      status: false,
+      message: "roadmap.error.invalid_input",
+      errors: parseResult.error.flatten(),
+    })
+  }
+
+  try {
+    const result = await saveImplementationRoadmap(
+      authorized.resource,
+      authorized.scope,
+      {
+        versionId: parseResult.data.versionId,
+        expectedRevision: parseResult.data.expectedRevision,
+        roadmap: parseResult.data.roadmap,
+        reviewState: parseResult.data.reviewState ?? "consultant_edited",
+      },
+    )
+
+    if (!result.success) {
+      return res.status(saveRoadmapFailureStatus[result.failure]).json({
+        status: false,
+        message: result.messageId,
+        data: {
+          failure: result.failure,
+          currentRevision: result.currentRevision,
+          unknownRecommendationIds: result.unknownRecommendationIds,
+          missingRecommendationIds: result.missingRecommendationIds,
+          unknownImplementationPatternCodes:
+            result.unknownImplementationPatternCodes,
+          nonImplementationPatternCodes: result.nonImplementationPatternCodes,
+          dependencyErrors: result.dependencyErrors,
+          dispositionErrors: result.dispositionErrors,
+        },
+      })
+    }
+
+    return res.json({
+      status: true,
+      message:
+        result.version.reviewState === "accepted"
+          ? "roadmap.message.accepted"
+          : "roadmap.message.saved",
+      data: { version: result.version },
+    })
+  } catch (error) {
+    console.error("SAVE_ROADMAP_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "roadmap.error.internal",
+    })
+  }
+})
+
+router.get("/:id/roadmap/versions", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "engagement.read",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  try {
+    const versions = await listRoadmapVersions(req.params.id, authorized.scope)
+
+    return res.json({
+      status: true,
+      message: "roadmap.message.versions_loaded",
+      data: { versions },
+    })
+  } catch (error) {
+    console.error("LOAD_ROADMAP_VERSIONS_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "roadmap.error.internal",
+    })
+  }
+})
+
+router.get("/:id/roadmap/versions/:versionId", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "engagement.read",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  try {
+    const version = await getRoadmapVersionById(
+      req.params.versionId,
+      req.params.id,
+      authorized.scope,
+    )
+
+    if (!version) {
+      return res.status(404).json({
+        status: false,
+        message: "roadmap.error.version_not_found",
+      })
+    }
+
+    return res.json({
+      status: true,
+      message: "roadmap.message.loaded",
+      data: { version },
+    })
+  } catch (error) {
+    console.error("LOAD_ROADMAP_VERSION_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "roadmap.error.internal",
     })
   }
 })

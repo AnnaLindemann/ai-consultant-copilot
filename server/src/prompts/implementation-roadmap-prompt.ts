@@ -1,0 +1,3 @@
+import { IMPLEMENTATION_ROADMAP_PROMPT_V1 } from "./implementation-roadmap-prompt.v1.js"
+
+export const IMPLEMENTATION_ROADMAP_PROMPT = IMPLEMENTATION_ROADMAP_PROMPT_V1

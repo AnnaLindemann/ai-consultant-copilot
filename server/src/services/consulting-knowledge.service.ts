@@ -24,6 +24,7 @@ import type { ActingUser } from "../domain/access/access.js"
 import type { EngagementWithOrganization } from "../repositories/engagement.repository.js"
 import type { Assessment } from "../../../shared/assessment.schema.js"
 import type { OpportunityPrioritization } from "../../../shared/opportunity.schema.js"
+import type { RecommendationSet } from "../../../shared/recommendation.schema.js"
 
 // The **only** boundary through which an engagement stage reaches curated
 // knowledge (roadmap Phase 5; architecture.md §9.4). Two things live here and
@@ -51,6 +52,7 @@ export type KnowledgeRetrievalSources = {
   // The prioritized Opportunities, for solution matching: what the consultant
   // decided to work on is what the recommendations should be grounded against.
   opportunities?: OpportunityPrioritization | null
+  recommendations?: RecommendationSet | null
 }
 
 // Retrieve the curated knowledge package for one engagement at one consulting
@@ -104,6 +106,7 @@ const engagementKnowledgeContext = (
     // matching is grounded against the problems the engagement actually chose
     // to pursue rather than against everything discovery ever mentioned.
     ...opportunityText(sources.opportunities ?? null),
+    ...recommendationText(sources.recommendations ?? null),
   ].filter(
     (value): value is string =>
       typeof value === "string" && value.trim().length > 0,
@@ -121,6 +124,25 @@ const opportunityText = (
       opportunity.title,
       opportunity.problem,
       opportunity.improvement,
+    ]),
+  ]
+}
+
+const recommendationText = (
+  recommendationSet: RecommendationSet | null,
+): string[] => {
+  if (recommendationSet === null) return []
+
+  return [
+    recommendationSet.summary,
+    ...recommendationSet.recommendations.flatMap((recommendation) => [
+      recommendation.title,
+      recommendation.approach,
+      recommendation.rationale,
+      recommendation.expectedValue.summary,
+      recommendation.effort.rationale,
+      ...recommendation.expectedValue.drivers,
+      ...recommendation.assumptions,
     ]),
   ]
 }
@@ -158,12 +180,15 @@ const textList = (value: unknown): string[] =>
 // excluded: a retired entry stays citable by whatever already referenced it, but
 // is never chosen anew.
 export const listCitableKnowledge = async (): Promise<
-  Map<string, { kind: ConsultingKnowledgeKind; title: string }>
+  Map<string, { kind: ConsultingKnowledgeKind; title: string; summary: string }>
 > => {
   const entries = await listConsultingKnowledgeEntries({ domainCode: DOMAIN_CODE })
 
   return new Map(
-    entries.map((entry) => [entry.code, { kind: entry.kind, title: entry.title }]),
+    entries.map((entry) => [
+      entry.code,
+      { kind: entry.kind, title: entry.title, summary: entry.summary },
+    ]),
   )
 }
 

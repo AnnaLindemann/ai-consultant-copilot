@@ -69,6 +69,7 @@ export const REQUIRED_KINDS: Record<
   // follow-up templates are Phase 8's; retrieving them here would be building
   // ahead of the phase in front of us (architecture.md §1.6).
   solution_matching: ["ai_use_case", "solution_pattern"],
+  roadmap: ["implementation_pattern"],
 }
 
 // How much each *typed* relationship to an anchor is worth. The weights are

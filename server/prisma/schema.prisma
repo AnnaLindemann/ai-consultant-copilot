@@ -196,6 +196,17 @@ enum RecommendationVersionStatus {
   superseded
 }
 
+enum RoadmapReviewState {
+  ai_draft
+  consultant_edited
+  accepted
+}
+
+enum RoadmapVersionStatus {
+  active
+  superseded
+}
+
 // Where an engagement currently stands in the consulting methodology
 // (domain-model.md §3). Phase 1 only tracks the stage marker; later phases
 // add the content each stage produces. `discovery` is the first stage, so a
@@ -351,6 +362,7 @@ model Engagement {
   // Grounded Recommendations (roadmap Phase 6), versioned for the same reason
   // the Opportunities are.
   recommendationVersions RecommendationVersion[]
+  roadmapVersions        ImplementationRoadmapVersion[]
 
   invitations       ClientInvitation[]
   discoveryAccesses DiscoveryAccess[]
@@ -709,10 +721,57 @@ model AnalysisRun {
 
   opportunityVersions    OpportunityVersion[]
   recommendationVersions RecommendationVersion[]
+  roadmapVersions        ImplementationRoadmapVersion[]
 
   @@index([engagementId])
   @@index([workspaceId])
   @@index([provider, model])
+  @@index([createdAt])
+}
+
+// One immutable, versioned snapshot of the engagement's Implementation Roadmap
+// (roadmap Phase 7). It mirrors RecommendationVersion narrowly: generation
+// creates a new active version, older versions are superseded and readable, and
+// consultant edits autosave into the active version behind optimistic
+// concurrency. The roadmap references Recommendation identities and copied
+// Implementation Pattern reasoning; it never mutates either source.
+model ImplementationRoadmapVersion {
+  id String @id @default(cuid())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  versionNumber Int
+  status        RoadmapVersionStatus @default(active)
+
+  content     Json
+  reviewState RoadmapReviewState @default(ai_draft)
+
+  sourceRecommendationVersionId     String
+  sourceRecommendationVersion       RecommendationVersion @relation(fields: [sourceRecommendationVersionId], references: [id], onDelete: Cascade)
+  sourceRecommendationVersionNumber Int
+  sourceRecommendationFingerprint   String
+
+  analysisRunId String?
+  analysisRun   AnalysisRun? @relation(fields: [analysisRunId], references: [id], onDelete: SetNull)
+
+  createdAt       DateTime @default(now())
+  createdByUserId String?
+  createdBy       User?    @relation("RoadmapVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  lastModifiedAt       DateTime @default(now())
+  lastModifiedByUserId String?
+  lastModifiedBy       User?    @relation("RoadmapVersionLastModifiedBy", fields: [lastModifiedByUserId], references: [id], onDelete: SetNull)
+
+  revision Int @default(0)
+
+  @@unique([engagementId, versionNumber])
+  @@index([engagementId, status])
+  @@index([workspaceId])
+  @@index([sourceRecommendationVersionId])
   @@index([createdAt])
 }
 
@@ -847,6 +906,8 @@ model RecommendationVersion {
   // and is refused if the version has moved on since (architecture.md §13).
   revision Int @default(0)
 
+  roadmapVersions ImplementationRoadmapVersion[]
+
   // As with the Opportunity versions, the migration adds a partial unique index
   // enforcing at most one *active* version per engagement — a guarantee Prisma's
   // schema language cannot yet express, so it lives in the migration alongside
@@ -871,6 +932,7 @@ model Workspace {
   analysisRuns           AnalysisRun[]
   opportunityVersions    OpportunityVersion[]
   recommendationVersions RecommendationVersion[]
+  roadmapVersions        ImplementationRoadmapVersion[]
   invitations            ClientInvitation[]
   discoveryAccesses      DiscoveryAccess[]
   notifications          Notification[]
@@ -912,6 +974,8 @@ model User {
   modifiedOpportunityVersions    OpportunityVersion[]       @relation("OpportunityVersionLastModifiedBy")
   createdRecommendationVersions  RecommendationVersion[]    @relation("RecommendationVersionCreatedBy")
   modifiedRecommendationVersions RecommendationVersion[]    @relation("RecommendationVersionLastModifiedBy")
+  createdRoadmapVersions         ImplementationRoadmapVersion[] @relation("RoadmapVersionCreatedBy")
+  modifiedRoadmapVersions        ImplementationRoadmapVersion[] @relation("RoadmapVersionLastModifiedBy")
   notifications                  Notification[]
   auditTrails                    AuditTrail[]
   curatedKnowledgeEntries        ConsultingKnowledgeEntry[] @relation("ConsultingKnowledgeCuratedBy")

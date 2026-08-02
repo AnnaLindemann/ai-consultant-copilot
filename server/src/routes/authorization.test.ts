@@ -114,6 +114,12 @@ type AuditEntry = {
 
 // Every audit entry the routes appended during a test.
 let auditEntries: AuditEntry[] = []
+let roadmapGenerateResult: unknown = {
+  success: true,
+  version: null,
+  evaluation: {},
+}
+let roadmapSaveResult: unknown = { success: true, version: null }
 
 // Which audit writes the store refuses, so the "the entry could not be stored"
 // paths can be driven the way a real constraint violation would drive them.
@@ -331,6 +337,29 @@ mock.module("../services/recommendations.service.js", {
   },
 })
 
+mock.module("../services/implementation-roadmap.service.js", {
+  namedExports: {
+    generateImplementationRoadmap: async () => roadmapGenerateResult,
+    saveImplementationRoadmap: async () => roadmapSaveResult,
+    getRoadmapStageState: async () => ({
+      activeVersion: null,
+      stale: false,
+      acceptedRecommendationVersionId: null,
+      acceptedRecommendationVersionNumber: null,
+      acceptedRecommendationFingerprint: null,
+      acceptedRecommendationsAvailable: false,
+      implementationPatternOptions: [],
+    }),
+    listRoadmapVersions: async () => [],
+  },
+})
+
+mock.module("../repositories/implementation-roadmap-version.repository.js", {
+  namedExports: {
+    getRoadmapVersionById: async () => null,
+  },
+})
+
 mock.module("../services/access.service.js", {
   namedExports: {
     listWorkspaceUsers: async () => [],
@@ -396,6 +425,12 @@ beforeEach(() => {
   signedInAs = users.administrator
   auditEntries = []
   auditFailureLogs = []
+  roadmapGenerateResult = {
+    success: true,
+    version: null,
+    evaluation: {},
+  }
+  roadmapSaveResult = { success: true, version: null }
   rejectAuditEntry = () => false
   discoveryAccessRows = [
     {
@@ -421,9 +456,58 @@ const request = async (path: string, call: Call = {}) => {
 
   return {
     status: response.status,
-    body: (await response.json()) as { status: boolean; message: string },
+    body: (await response.json()) as {
+      status: boolean
+      message: string
+      data?: Record<string, unknown>
+    },
   }
 }
+
+const ungroundedRoadmapResult = () => ({
+  success: false,
+  failure: "ai_output_ungrounded",
+  messageId: "roadmap.error.ai_output_ungrounded",
+  unknownRecommendationIds: ["rec_unknown"],
+  missingRecommendationIds: ["rec_missing"],
+  unknownImplementationPatternCodes: ["pattern_unknown"],
+  nonImplementationPatternCodes: ["pattern_wrong_kind"],
+  dependencyErrors: ["dependency_cycle"],
+  dispositionErrors: ["included_recommendation_not_linked"],
+})
+
+const validRoadmapSaveRequest = () => ({
+  versionId: "roadmap_version_1",
+  expectedRevision: 0,
+  roadmap: {
+    summary: "Roadmap summary",
+    recommendationDispositions: [
+      { recommendationId: "rec_1", disposition: "included" },
+    ],
+    assumptions: [],
+    gaps: [],
+    phases: [
+      {
+        id: "phase_1",
+        sequenceOrder: 1,
+        title: "Phase 1",
+        objective: "Prepare the implementation",
+        scope: ["Prepare"],
+        expectedOutcome: "Preparation complete",
+        linkedRecommendationIds: ["rec_1"],
+        dependencyPhaseIds: [],
+        explicitPrerequisites: [],
+        readinessConsiderations: [],
+        risks: [],
+        assumptions: [],
+        effort: null,
+        sequencingRationale: "This phase starts the roadmap.",
+        implementationPatternGrounding: [],
+      },
+    ],
+  },
+  reviewState: "consultant_edited",
+})
 
 // The workbench routes that name one engagement, so each can be checked for
 // every caller rather than one being checked and the rest assumed.
@@ -467,6 +551,25 @@ const engagementRoutes = (id: string): [string, Call][] => [
   ],
   [`/engagements/${id}/recommendations/versions`, {}],
   [`/engagements/${id}/recommendations/versions/version_1`, {}],
+  [`/engagements/${id}/roadmap`, { method: "POST", body: {} }],
+  [
+    `/engagements/${id}/roadmap`,
+    {
+      method: "PATCH",
+      body: {
+        versionId: "version_1",
+        expectedRevision: 0,
+        roadmap: {
+          summary: "No roadmap yet.",
+          phases: [],
+          assumptions: [],
+          gaps: [],
+        },
+      },
+    },
+  ],
+  [`/engagements/${id}/roadmap/versions`, {}],
+  [`/engagements/${id}/roadmap/versions/version_1`, {}],
   [
     `/engagements/${id}/discovery`,
     { method: "PATCH", body: { profile: {}, contributor: "consultant" } },
@@ -605,6 +708,50 @@ test("a Manager cannot transfer ownership of an engagement they own", async () =
   )
 
   assert.equal(status, 404)
+})
+
+test("roadmap generation preserves structured disposition validation details", async () => {
+  signedInAs = users.owner
+  roadmapGenerateResult = ungroundedRoadmapResult()
+
+  const { status, body } = await request(`/engagements/${ownedByOwner.id}/roadmap`, {
+    method: "POST",
+    body: {},
+  })
+
+  assert.equal(status, 422)
+  assert.equal(body.message, "roadmap.error.ai_output_ungrounded")
+  assert.deepEqual(body.data?.unknownRecommendationIds, ["rec_unknown"])
+  assert.deepEqual(body.data?.missingRecommendationIds, ["rec_missing"])
+  assert.deepEqual(body.data?.unknownImplementationPatternCodes, [
+    "pattern_unknown",
+  ])
+  assert.deepEqual(body.data?.dependencyErrors, ["dependency_cycle"])
+  assert.deepEqual(body.data?.dispositionErrors, [
+    "included_recommendation_not_linked",
+  ])
+})
+
+test("roadmap save preserves structured disposition validation details", async () => {
+  signedInAs = users.owner
+  roadmapSaveResult = ungroundedRoadmapResult()
+
+  const { status, body } = await request(`/engagements/${ownedByOwner.id}/roadmap`, {
+    method: "PATCH",
+    body: validRoadmapSaveRequest(),
+  })
+
+  assert.equal(status, 422)
+  assert.equal(body.message, "roadmap.error.ai_output_ungrounded")
+  assert.deepEqual(body.data?.unknownRecommendationIds, ["rec_unknown"])
+  assert.deepEqual(body.data?.missingRecommendationIds, ["rec_missing"])
+  assert.deepEqual(body.data?.unknownImplementationPatternCodes, [
+    "pattern_unknown",
+  ])
+  assert.deepEqual(body.data?.dependencyErrors, ["dependency_cycle"])
+  assert.deepEqual(body.data?.dispositionErrors, [
+    "included_recommendation_not_linked",
+  ])
 })
 
 // --- Client portal isolation -------------------------------------------------
