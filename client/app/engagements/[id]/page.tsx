@@ -5,6 +5,8 @@ import EngagementStageControl from "../../../components/EngagementStageControl"
 import AssessmentPanel from "../../../components/AssessmentPanel"
 import OpportunityPanel from "../../../components/OpportunityPanel"
 import RecommendationPanel from "../../../components/RecommendationPanel"
+import RoadmapPanel from "../../../components/RoadmapPanel"
+import ConsultantReportPanel from "../../../components/ConsultantReportPanel"
 import ManagerShell from "../../../components/ManagerShell"
 import {
   stageEyebrowStyle,
@@ -32,6 +34,8 @@ import type {
 } from "../../../../shared/assessment.schema"
 import type { OpportunityVersionState } from "../../../../shared/opportunity.schema"
 import type { RecommendationStageState } from "../../../../shared/recommendation.schema"
+import type { RoadmapStageState } from "../../../../shared/implementation-roadmap.schema"
+import type { ReportStageState } from "../../../../shared/consultant-report.schema"
 
 type EngagementDetails = {
   id: string
@@ -50,6 +54,8 @@ type EngagementDetails = {
   assessmentReviewState: AssessmentReviewState | null
   opportunities: OpportunityVersionState
   recommendations: RecommendationStageState
+  roadmap: RoadmapStageState
+  report: ReportStageState
   createdAt: string
   updatedAt: string
   organization: {
@@ -242,6 +248,22 @@ export default async function EngagementDetailsPage({
           engagementId={engagement.id}
           initialStageState={engagement.recommendations}
           opportunities={engagement.opportunities}
+        />
+        <RoadmapPanel
+          key={`${engagement.roadmap.activeVersion?.id ?? "none"}:${engagement.roadmap.activeVersion?.revision ?? "0"}:${engagement.roadmap.acceptedRecommendationVersionId ?? "none"}:${engagement.roadmap.stale ? "1" : "0"}`}
+          engagementId={engagement.id}
+          initialStageState={engagement.roadmap}
+          recommendations={
+            engagement.recommendations.activeVersion?.reviewState === "accepted"
+              ? engagement.recommendations.activeVersion.recommendationSet
+                  .recommendations
+              : []
+          }
+        />
+        <ConsultantReportPanel
+          key={`${engagement.report.activeVersion?.id ?? "none"}:${engagement.report.activeVersion?.revision ?? "0"}:${engagement.report.stale ? "1" : "0"}:${engagement.report.activePublication?.id ?? "none"}`}
+          engagementId={engagement.id}
+          initialStageState={engagement.report}
         />
         <EngagementAnalysisPanel
           engagementId={engagement.id}

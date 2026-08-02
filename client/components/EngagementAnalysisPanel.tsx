@@ -3,7 +3,7 @@
 import { useState } from "react"
 
 import { formatDateTime, t, translateServerMessage } from "../i18n"
-import type { ConsultantReport } from "../../shared/consultant-report.schema"
+import type { AnalysisReport } from "../../shared/analysis-report.schema"
 import AnalysisReportView from "./AnalysisReportView"
 import {
   stageHeaderStyle,
@@ -43,7 +43,7 @@ type AnalyzeResponse = {
   status: boolean
   message: string
   data?: {
-    report?: ConsultantReport
+    report?: AnalysisReport
     evaluation?: unknown
   }
 }

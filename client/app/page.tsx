@@ -5,7 +5,7 @@ import Link from "next/link"
 
 import { formatDateTime, t, translateServerMessage } from "../i18n"
 import type { MessageKey } from "../i18n/de"
-import type { ConsultantReport } from "../../shared/consultant-report.schema"
+import type { AnalysisReport } from "../../shared/analysis-report.schema"
 import AnalysisReportView from "../components/AnalysisReportView"
 import ManagerShell from "../components/ManagerShell"
 import {
@@ -55,7 +55,7 @@ type AnalyzeResponse = {
   status: boolean
   message: string
   data?: {
-    report?: ConsultantReport
+    report?: AnalysisReport
     evaluation?: unknown
   }
 }

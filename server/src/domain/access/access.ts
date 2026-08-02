@@ -94,6 +94,13 @@ export type AccessAction =
   | "discovery.submit"
   | "discovery.review"
   | "analysis_run.read"
+  | "report.read"
+  | "report.generate"
+  | "report.update"
+  | "report.approve"
+  | "report.publish"
+  | "report.revoke_publication"
+  | "report.export_pdf"
   | "organization.read"
   | "organization.create"
   | "knowledge.read"
@@ -118,6 +125,8 @@ export type AccessAction =
   | "portal.discovery.read"
   | "portal.discovery.save"
   | "portal.discovery.submit"
+  | "portal.documents.read"
+  | "portal.documents.download"
 
 // What the action is aimed at. The kind decides how a refusal is disclosed: a
 // refusal about a named resource must be indistinguishable from that resource
@@ -134,6 +143,11 @@ export type AccessTarget =
       engagementId: string
       workspaceId: string
       discoveryAccess: DiscoveryAccessFacts | null
+    }
+  | {
+      kind: "portal_document"
+      engagementId: string
+      workspaceId: string
     }
 
 // The facts that make Discovery Access valid: it names one client and one
@@ -187,6 +201,13 @@ const ROLES_PERMITTED: Record<AccessAction, readonly UserRole[]> = {
   "discovery.submit": ["ADMIN", "MANAGER"],
   "discovery.review": ["ADMIN", "MANAGER"],
   "analysis_run.read": ["ADMIN", "MANAGER"],
+  "report.read": ["ADMIN", "MANAGER"],
+  "report.generate": ["ADMIN", "MANAGER"],
+  "report.update": ["ADMIN", "MANAGER"],
+  "report.approve": ["ADMIN", "MANAGER"],
+  "report.publish": ["ADMIN", "MANAGER"],
+  "report.revoke_publication": ["ADMIN", "MANAGER"],
+  "report.export_pdf": ["ADMIN", "MANAGER"],
   "organization.read": ["ADMIN", "MANAGER"],
   "organization.create": ["ADMIN", "MANAGER"],
   "knowledge.read": ["ADMIN", "MANAGER"],
@@ -217,6 +238,8 @@ const ROLES_PERMITTED: Record<AccessAction, readonly UserRole[]> = {
   "portal.discovery.read": ["CLIENT"],
   "portal.discovery.save": ["CLIENT"],
   "portal.discovery.submit": ["CLIENT"],
+  "portal.documents.read": ["CLIENT"],
+  "portal.documents.download": ["CLIENT"],
 }
 
 // The one decision point, in the fixed documented order:
@@ -262,6 +285,10 @@ export const decideAccess = (
       return denied("no_active_discovery_access", "not_found")
     }
 
+    return { permitted: true }
+  }
+
+  if (target.kind === "portal_document") {
     return { permitted: true }
   }
 

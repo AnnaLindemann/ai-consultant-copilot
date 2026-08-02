@@ -96,6 +96,7 @@ mock.module("../repositories/access.repository.js", {
     appendAuditTrail: async () => ({}),
     getDiscoveryAccessForClient: async () => null,
     getActiveDiscoveryAccessByEngagement: async () => null,
+    getWorkspaceUserById: async () => null,
     createNotification: async () => ({}),
   },
 })

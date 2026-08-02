@@ -10,6 +10,7 @@ import {
   type KnowledgeRetrievalStage,
   type KnowledgeSelection,
 } from "../../../../shared/consulting-knowledge.schema.js"
+import { createSha256Hash } from "../../lib/create-sha256-hash.js"
 
 // The Consulting Knowledge Base's deterministic retrieval (roadmap Phase 5).
 //
@@ -70,6 +71,7 @@ export const REQUIRED_KINDS: Record<
   // ahead of the phase in front of us (architecture.md §1.6).
   solution_matching: ["ai_use_case", "solution_pattern"],
   roadmap: ["implementation_pattern"],
+  report: ["follow_up_template"],
 }
 
 // How much each *typed* relationship to an anchor is worth. The weights are
@@ -324,6 +326,8 @@ export const buildKnowledgePackage = (
       kind: item.entry.kind,
       title: item.entry.title,
       summary: item.entry.summary,
+      revision: item.entry.revision,
+      fingerprint: knowledgeEntryFingerprint(item.entry),
       details: item.entry.details,
       reasons: item.reasons,
       score: item.score,
@@ -340,6 +344,29 @@ export const buildKnowledgePackage = (
     fallback,
   })
 }
+
+const knowledgeEntryFingerprint = (entry: ConsultingKnowledgeEntry): string =>
+  createSha256Hash(
+    JSON.stringify({
+      code: entry.code,
+      kind: entry.kind,
+      domainCode: entry.domainCode,
+      title: entry.title,
+      summary: entry.summary,
+      tags: entry.tags,
+      matchTerms: entry.matchTerms,
+      stageScopes: entry.stageScopes,
+      taxonomyCodes: entry.taxonomyCodes,
+      processCodes: entry.processCodes,
+      problemCodes: entry.problemCodes,
+      useCaseCodes: entry.useCaseCodes,
+      relatedCodes: entry.relatedCodes,
+      details: entry.details,
+      sortOrder: entry.sortOrder,
+      active: entry.active,
+      revision: entry.revision,
+    }),
+  )
 
 // --- The curation browser --------------------------------------------------
 //

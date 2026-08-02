@@ -10,6 +10,7 @@ import { requireActingUser } from "../lib/auth-context.js"
 import { failureIdentity } from "../lib/failure-identity.js"
 import { appendAuditTrail } from "../repositories/access.repository.js"
 import {
+  authorizePortalDocumentAction,
   authorizePortalDiscoveryAction,
   denyRequest,
 } from "../services/authorization.service.js"
@@ -22,6 +23,10 @@ import {
   saveDiscoveryProfile,
   transitionDiscovery,
 } from "../services/discovery.service.js"
+import {
+  getPublishedPortalDocument,
+  renderPublishedReportPdf,
+} from "../services/consultant-report.service.js"
 
 const router = Router()
 
@@ -181,6 +186,105 @@ router.post("/engagements/:id/discovery/submit", async (req, res) => {
     return res.status(500).json({
       status: false,
       message: "discovery.error.internal",
+    })
+  }
+})
+
+router.get("/engagements/:id/documents", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizePortalDocumentAction(
+    actingUser,
+    "portal.documents.read",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  try {
+    const publication = await getPublishedPortalDocument(
+      req.params.id,
+      authorized.scope,
+    )
+
+    return res.json({
+      status: true,
+      data: {
+        documents: publication
+          ? [
+              {
+                id: publication.id,
+                title: publication.title,
+                managerMessage: publication.managerMessage,
+                reportVersionId: publication.reportVersionId,
+                reportVersionNumber: publication.reportVersionNumber,
+                publishedAt: publication.publishedAt,
+              },
+            ]
+          : [],
+      },
+    })
+  } catch (error) {
+    console.error("PORTAL_DOCUMENTS_FAILED", {
+      engagementId: req.params.id,
+      ...failureIdentity(error),
+    })
+
+    return res.status(500).json({
+      status: false,
+      message: "portal.error.internal",
+    })
+  }
+})
+
+router.get("/engagements/:id/documents/:versionId/pdf", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizePortalDocumentAction(
+    actingUser,
+    "portal.documents.download",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  try {
+    const pdf = await renderPublishedReportPdf(
+      req.params.versionId,
+      req.params.id,
+      authorized.scope,
+    )
+
+    if (!pdf) {
+      return res.status(404).json({
+        status: false,
+        message: "auth.error.not_found",
+      })
+    }
+
+    await appendAuditTrail({
+      workspaceId: authorized.scope.workspaceId,
+      userId: actingUser.id,
+      engagementId: req.params.id,
+      eventType: "document_downloaded",
+      payload: { reportVersionId: req.params.versionId },
+    })
+
+    res.setHeader("content-type", "application/pdf")
+    res.setHeader(
+      "content-disposition",
+      `inline; filename="report-${req.params.versionId}.pdf"`,
+    )
+    return res.send(pdf)
+  } catch (error) {
+    console.error("PORTAL_DOCUMENT_PDF_FAILED", {
+      engagementId: req.params.id,
+      ...failureIdentity(error),
+    })
+
+    return res.status(500).json({
+      status: false,
+      message: "portal.error.internal",
     })
   }
 })

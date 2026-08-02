@@ -356,7 +356,48 @@ mock.module("../services/implementation-roadmap.service.js", {
 
 mock.module("../repositories/implementation-roadmap-version.repository.js", {
   namedExports: {
+    getActiveRoadmapVersion: async () => null,
     getRoadmapVersionById: async () => null,
+  },
+})
+
+mock.module("../repositories/consultant-report-version.repository.js", {
+  namedExports: {
+    createReportVersion: async () => ({ created: false, reason: "version_conflict" }),
+    getActivePublication: async () => null,
+    getActiveReportVersion: async () => null,
+    getReportVersions: async () => [],
+    getReportVersionById: async () => null,
+    linkReportVersionAnalysisRun: async () => undefined,
+    markPublicationEmailAttempt: async () => null,
+    publishReportVersion: async () => ({ published: false, reason: "version_not_found" }),
+    revokeActivePublication: async () => ({ revoked: false, reason: "no_active_publication" }),
+    saveReportVersion: async () => ({ saved: false, reason: "version_not_found" }),
+  },
+})
+
+mock.module("../services/consultant-report.service.js", {
+  namedExports: {
+    approveConsultantReport: async () => ({ success: false, failure: "version_not_found" }),
+    generateConsultantReport: async () => ({ success: false, failure: "sources_not_ready" }),
+    getPublishedPortalDocument: async () => null,
+    getReportStageState: async () => ({
+      activeVersion: null,
+      stale: false,
+      eligible: false,
+      missingAcceptedSources: [],
+      currentSourceSnapshot: null,
+      followUpTemplateOptions: [],
+      activePublication: null,
+      publicationRecipient: null,
+    }),
+    listReportVersions: async () => [],
+    publishConsultantReport: async () => ({ success: false, failure: "version_not_found" }),
+    renderPublishedReportPdf: async () => null,
+    renderReportVersionPdf: async () => null,
+    retryPublicationNotification: async () => ({ success: false, failure: "no_active_publication" }),
+    revokeConsultantReportPublication: async () => ({ success: false, failure: "no_active_publication" }),
+    saveConsultantReport: async () => ({ success: false, failure: "version_not_found" }),
   },
 })
 
@@ -509,6 +550,69 @@ const validRoadmapSaveRequest = () => ({
   reviewState: "consultant_edited",
 })
 
+const validReportSaveRequest = () => ({
+  versionId: "report_version_1",
+  expectedRevision: 0,
+  report: {
+    title: "Consultant Report",
+    executiveSummary: "Report summary.",
+    engagementContext: {
+      organizationName: "Example Org",
+      engagementTitle: "AI review",
+      department: "Operations",
+      statedProblem: "Slow support handling.",
+      desiredOutcome: "Faster routing.",
+      businessImpact: "Customer waiting time.",
+    },
+    assessmentSummary: "The engagement is ready for a bounded pilot.",
+    prioritizedProblems: [
+      {
+        opportunityId: "opp_1",
+        title: "Manual triage",
+        problem: "Tickets wait for manual routing.",
+        priorityRank: 1,
+        rationale: "This is the main delay.",
+      },
+    ],
+    recommendations: [
+      {
+        recommendationId: "rec_1",
+        title: "Triage assistant",
+        approach: "Classify tickets before routing.",
+        rationale: "It matches the prioritized problem.",
+        expectedValue: "Faster first response.",
+        effort: { level: "medium", rationale: "Requires helpdesk integration." },
+        confidence: "medium",
+      },
+    ],
+    deferredRecommendations: [],
+    roadmapSummary: "Pilot before expansion.",
+    roadmapPhases: [
+      {
+        phaseId: "phase_1",
+        sequenceOrder: 1,
+        title: "Pilot",
+        objective: "Validate routing quality.",
+        expectedOutcome: "Known routing precision.",
+      },
+    ],
+    assumptions: ["Helpdesk export is available."],
+    risks: ["Routing errors need review."],
+    nextSteps: ["Confirm pilot owner."],
+    followUpQuestions: [
+      {
+        question: "Who owns pilot review?",
+        sourceType: "assessment_gap",
+        sourceDescription: "Confirm pilot owner",
+        templateCode: null,
+        rationale: "Ownership is needed before launch.",
+        status: "draft",
+      },
+    ],
+  },
+  reviewState: "draft",
+})
+
 // The workbench routes that name one engagement, so each can be checked for
 // every caller rather than one being checked and the rest assumed.
 const engagementRoutes = (id: string): [string, Call][] => [
@@ -570,6 +674,30 @@ const engagementRoutes = (id: string): [string, Call][] => [
   ],
   [`/engagements/${id}/roadmap/versions`, {}],
   [`/engagements/${id}/roadmap/versions/version_1`, {}],
+  [`/engagements/${id}/report`, { method: "POST", body: {} }],
+  [`/engagements/${id}/report`, { method: "PATCH", body: validReportSaveRequest() }],
+  [
+    `/engagements/${id}/report/versions/report_version_1/approve`,
+    { method: "POST", body: { expectedRevision: 0 } },
+  ],
+  [`/engagements/${id}/report/versions`, {}],
+  [`/engagements/${id}/report/versions/report_version_1`, {}],
+  [`/engagements/${id}/report/versions/report_version_1/pdf`, {}],
+  [
+    `/engagements/${id}/report/versions/report_version_1/publish`,
+    {
+      method: "POST",
+      body: {
+        title: "Client Report",
+        managerMessage: "Please review the published report.",
+      },
+    },
+  ],
+  [`/engagements/${id}/report/publication/revoke`, { method: "POST" }],
+  [
+    `/engagements/${id}/report/publication/notify`,
+    { method: "POST", body: { requestKey: "retry_1" } },
+  ],
   [
     `/engagements/${id}/discovery`,
     { method: "PATCH", body: { profile: {}, contributor: "consultant" } },

@@ -645,7 +645,7 @@ const implementationPatterns: GenericSeed[] = [
     "Jede schreibende Aktion und jeder relevante Übergang bekommt ein nachvollziehbares Protokoll.",
     ["audit", "traceability"],
     ["account-and-access-actions", "transaction-and-dispute-resolution"],
-    ["roadmap", "report"],
+    ["roadmap"],
     {
       objective: "Nachvollziehbarkeit und Review sichern.",
       applicability: ["Alle Schreibaktionen"],
@@ -1075,7 +1075,7 @@ const followUpTemplates: GenericSeed[] = [
     "Fragen, die klären, wie oft ein Problem auftritt und wie es heute verteilt ist.",
     ["follow-up", "volume"],
     ["customer-inbound-support", "case-management-and-triage"],
-    ["discovery"],
+    ["report"],
     {
       objective: "Fehlendes Volumen oder Häufigkeitsschätzung einholen.",
       applicability: ["Wiederkehrende Anfragen"],
@@ -1097,7 +1097,7 @@ const followUpTemplates: GenericSeed[] = [
     "Fragen, die aus einer vagen Aussage eine belastbare Kennzahl machen.",
     ["follow-up", "measurement"],
     ["transaction-and-dispute-resolution", "proactive-recovery-and-retention"],
-    ["discovery"],
+    ["report"],
     {
       objective: "Basiswert und Messmethode erfragen.",
       applicability: ["Business impact", "KPI", "Target metric"],
@@ -1119,7 +1119,7 @@ const followUpTemplates: GenericSeed[] = [
     "Fragen, die klären, wer wann entscheiden darf und welche Ausnahmefälle existieren.",
     ["follow-up", "approval"],
     ["account-and-access-actions", "transaction-and-dispute-resolution"],
-    ["assessment"],
+    ["report"],
     {
       objective: "Freigabekette präzisieren.",
       applicability: ["Unlock", "Refund", "Rebooking"],
@@ -1141,7 +1141,7 @@ const followUpTemplates: GenericSeed[] = [
     "Fragen, die klären, welche Systeme gelesen oder geschrieben werden dürfen.",
     ["follow-up", "integration"],
     ["customer-inbound-support", "case-management-and-triage"],
-    ["assessment"],
+    ["report"],
     {
       objective: "Integrations- und Zugriffsgrenzen klären.",
       applicability: ["API", "Backend", "Legacy"],
@@ -1463,7 +1463,7 @@ const businessDomain: GenericSeed = {
     "transaction-and-dispute-resolution",
     "proactive-recovery-and-retention",
   ],
-  stageScopes: ["discovery", "assessment", "prioritization", "solution_matching", "roadmap", "report"],
+  stageScopes: ["discovery", "assessment", "prioritization", "solution_matching", "roadmap"],
   details: detailsOf({
     objective: "Customer Operations als wiederverwendbare Domäne strukturieren.",
     applicability: [
@@ -1601,7 +1601,7 @@ export const consultingKnowledgeSeed: ConsultingKnowledgeEntry[] = [
         ...useCase.roiModels,
         ...useCase.riskModels,
       ],
-      stageScopes: ["assessment", "prioritization", "solution_matching", "roadmap", "report"],
+      stageScopes: ["assessment", "prioritization", "solution_matching", "roadmap"],
       details: detailsOf({
         objective: useCase.summary,
         applicability: useCase.taxonomyCodes,

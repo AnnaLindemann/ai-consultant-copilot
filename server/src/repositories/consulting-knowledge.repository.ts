@@ -32,7 +32,7 @@ let seedPromise: Promise<void> | null = null
 // (roadmap Phase 5 "curation is a deliberate activity").
 export const ensureConsultingKnowledgeSeeded = async () => {
   if (seedPromise === null) {
-    seedPromise = seedConsultingKnowledgeIfEmpty().catch((error: unknown) => {
+    seedPromise = ensureBaselineConsultingKnowledge().catch((error: unknown) => {
       // A failed seed must not poison the process: the next caller retries
       // rather than inheriting a rejected promise forever.
       seedPromise = null
@@ -127,14 +127,50 @@ export const updateConsultingKnowledgeEntry = async (
   return { status: "updated", entry: toEntry(row) }
 }
 
-const seedConsultingKnowledgeIfEmpty = async () => {
+const ensureBaselineConsultingKnowledge = async () => {
   const count = await prisma.consultingKnowledgeEntry.count()
-  if (count > 0) return
+  if (count > 0) {
+    await reconcileSeededFollowUpTemplateStageScopes()
+    return
+  }
 
   await prisma.consultingKnowledgeEntry.createMany({
     data: consultingKnowledgeSeed.map((entry) => toRow(entry, null)),
     skipDuplicates: true,
   })
+}
+
+const reconcileSeededFollowUpTemplateStageScopes = async () => {
+  const seededTemplateCodes = new Set(
+    consultingKnowledgeSeed
+      .filter((entry) => entry.kind === "follow_up_template")
+      .map((entry) => entry.code),
+  )
+  const rows = await prisma.consultingKnowledgeEntry.findMany({
+    where: {
+      code: { in: [...seededTemplateCodes] },
+      kind: "follow_up_template",
+    },
+    select: { code: true, stageScopes: true },
+  })
+
+  for (const row of rows) {
+    const currentScopes = Array.isArray(row.stageScopes)
+      ? row.stageScopes.filter((scope): scope is string => typeof scope === "string")
+      : []
+    if (currentScopes.includes("report")) continue
+
+    await prisma.consultingKnowledgeEntry.updateMany({
+      where: {
+        code: row.code,
+        kind: "follow_up_template",
+      },
+      data: {
+        stageScopes: [...currentScopes, "report"] as Prisma.InputJsonValue,
+        revision: { increment: 1 },
+      },
+    })
+  }
 }
 
 const toRow = (

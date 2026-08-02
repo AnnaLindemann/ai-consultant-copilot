@@ -207,6 +207,29 @@ enum RoadmapVersionStatus {
   superseded
 }
 
+enum ReportReviewState {
+  draft
+  manager_review
+  approved
+}
+
+enum ReportVersionStatus {
+  active
+  superseded
+}
+
+enum DocumentPublicationStatus {
+  active
+  revoked
+  superseded
+}
+
+enum DocumentNotificationOutcome {
+  pending
+  sent
+  failed
+}
+
 // Where an engagement currently stands in the consulting methodology
 // (domain-model.md §3). Phase 1 only tracks the stage marker; later phases
 // add the content each stage produces. `discovery` is the first stage, so a
@@ -363,6 +386,10 @@ model Engagement {
   // the Opportunities are.
   recommendationVersions RecommendationVersion[]
   roadmapVersions        ImplementationRoadmapVersion[]
+  reportVersions         ConsultantReportVersion[]
+  documentPublications   DocumentPublication[]
+  reportPdfArtifacts     ReportPdfArtifact[]
+  documentNotificationAttempts DocumentNotificationAttempt[]
 
   invitations       ClientInvitation[]
   discoveryAccesses DiscoveryAccess[]
@@ -722,6 +749,7 @@ model AnalysisRun {
   opportunityVersions    OpportunityVersion[]
   recommendationVersions RecommendationVersion[]
   roadmapVersions        ImplementationRoadmapVersion[]
+  reportVersions         ConsultantReportVersion[]
 
   @@index([engagementId])
   @@index([workspaceId])
@@ -772,6 +800,167 @@ model ImplementationRoadmapVersion {
   @@index([engagementId, status])
   @@index([workspaceId])
   @@index([sourceRecommendationVersionId])
+  @@index([createdAt])
+}
+
+model ConsultantReportVersion {
+  id String @id @default(cuid())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  versionNumber Int
+  status        ReportVersionStatus @default(active)
+  reviewState   ReportReviewState   @default(draft)
+
+  content Json
+
+  sourceDiscoveryFingerprint        String
+  sourceAssessmentRevision          Int
+  sourceAssessmentFingerprint       String
+  sourceOpportunityVersionId        String
+  sourceOpportunityVersionNumber    Int
+  sourceOpportunityFingerprint      String
+  sourceRecommendationVersionId     String
+  sourceRecommendationVersionNumber Int
+  sourceRecommendationFingerprint   String
+  sourceRoadmapVersionId            String
+  sourceRoadmapVersionNumber        Int
+  sourceRoadmapFingerprint          String
+  sourceSnapshot                    Json?
+
+  analysisRunId String?
+  analysisRun   AnalysisRun? @relation(fields: [analysisRunId], references: [id], onDelete: SetNull)
+
+  createdAt       DateTime @default(now())
+  createdByUserId String?
+  createdBy       User?    @relation("ReportVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  lastModifiedAt       DateTime @default(now())
+  lastModifiedByUserId String?
+  lastModifiedBy       User?    @relation("ReportVersionLastModifiedBy", fields: [lastModifiedByUserId], references: [id], onDelete: SetNull)
+
+  revision Int @default(0)
+
+  approvedAt                DateTime?
+  approvedByUserId          String?
+  approvedBy                User?     @relation("ReportVersionApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  approvedSourceFingerprint String?
+
+  publications DocumentPublication[]
+  pdfArtifacts  ReportPdfArtifact[]
+
+  @@unique([engagementId, versionNumber])
+  @@index([engagementId, status])
+  @@index([workspaceId])
+  @@index([sourceOpportunityVersionId])
+  @@index([sourceRecommendationVersionId])
+  @@index([sourceRoadmapVersionId])
+  @@index([createdAt])
+}
+
+model DocumentPublication {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  reportVersionId String
+  reportVersion   ConsultantReportVersion @relation(fields: [reportVersionId], references: [id], onDelete: Restrict)
+
+  pdfArtifactId String?
+  pdfArtifact   ReportPdfArtifact? @relation(fields: [pdfArtifactId], references: [id], onDelete: Restrict)
+
+  status DocumentPublicationStatus @default(active)
+
+  clientUserId String?
+  clientUser   User?   @relation("DocumentPublishedForClient", fields: [clientUserId], references: [id], onDelete: SetNull)
+
+  title          String?
+  managerMessage String?
+
+  publishedAt       DateTime @default(now())
+  publishedByUserId String
+  publishedBy       User     @relation("DocumentPublishedBy", fields: [publishedByUserId], references: [id], onDelete: Restrict)
+
+  revokedAt       DateTime?
+  revokedByUserId String?
+  revokedBy       User?     @relation("DocumentRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
+
+  emailNotificationAttemptedAt DateTime?
+  emailNotificationDeliveredAt DateTime?
+  emailNotificationFailure     String?
+
+  notificationAttempts DocumentNotificationAttempt[]
+
+  @@index([workspaceId])
+  @@index([engagementId])
+  @@index([reportVersionId])
+  @@index([pdfArtifactId])
+  @@index([clientUserId])
+  @@index([status])
+  @@index([publishedAt])
+}
+
+model ReportPdfArtifact {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  reportVersionId String
+  reportVersion   ConsultantReportVersion @relation(fields: [reportVersionId], references: [id], onDelete: Restrict)
+
+  rendererVersion String
+  contentHash     String
+  pdfHash         String
+  bytes           Bytes
+
+  publications DocumentPublication[]
+
+  @@unique([reportVersionId, rendererVersion])
+  @@index([workspaceId])
+  @@index([engagementId])
+  @@index([reportVersionId])
+  @@index([pdfHash])
+  @@index([createdAt])
+}
+
+model DocumentNotificationAttempt {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  publicationId String
+  publication   DocumentPublication @relation(fields: [publicationId], references: [id], onDelete: Restrict)
+
+  requestKey        String
+  outcome           DocumentNotificationOutcome
+  errorCategory     String?
+  providerMessageId String?
+
+  @@unique([publicationId, requestKey])
+  @@index([workspaceId])
+  @@index([engagementId])
+  @@index([publicationId])
+  @@index([outcome])
   @@index([createdAt])
 }
 
@@ -933,6 +1122,10 @@ model Workspace {
   opportunityVersions    OpportunityVersion[]
   recommendationVersions RecommendationVersion[]
   roadmapVersions        ImplementationRoadmapVersion[]
+  reportVersions         ConsultantReportVersion[]
+  documentPublications   DocumentPublication[]
+  reportPdfArtifacts     ReportPdfArtifact[]
+  documentNotificationAttempts DocumentNotificationAttempt[]
   invitations            ClientInvitation[]
   discoveryAccesses      DiscoveryAccess[]
   notifications          Notification[]
@@ -976,6 +1169,12 @@ model User {
   modifiedRecommendationVersions RecommendationVersion[]    @relation("RecommendationVersionLastModifiedBy")
   createdRoadmapVersions         ImplementationRoadmapVersion[] @relation("RoadmapVersionCreatedBy")
   modifiedRoadmapVersions        ImplementationRoadmapVersion[] @relation("RoadmapVersionLastModifiedBy")
+  createdReportVersions          ConsultantReportVersion[]      @relation("ReportVersionCreatedBy")
+  modifiedReportVersions         ConsultantReportVersion[]      @relation("ReportVersionLastModifiedBy")
+  approvedReportVersions         ConsultantReportVersion[]      @relation("ReportVersionApprovedBy")
+  publishedDocuments             DocumentPublication[]          @relation("DocumentPublishedBy")
+  revokedDocumentPublications    DocumentPublication[]          @relation("DocumentRevokedBy")
+  clientDocumentPublications     DocumentPublication[]          @relation("DocumentPublishedForClient")
   notifications                  Notification[]
   auditTrails                    AuditTrail[]
   curatedKnowledgeEntries        ConsultingKnowledgeEntry[] @relation("ConsultingKnowledgeCuratedBy")

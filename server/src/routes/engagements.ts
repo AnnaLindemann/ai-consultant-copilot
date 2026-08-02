@@ -79,6 +79,13 @@ import {
   saveRoadmapSchema,
 } from "../schemas/implementation-roadmap.schema.js"
 import {
+  approveConsultantReportSchema,
+  generateConsultantReportSchema,
+  notifyReportPublicationSchema,
+  publishConsultantReportSchema,
+  saveConsultantReportSchema,
+} from "../schemas/consultant-report.schema.js"
+import {
   generateRecommendations,
   getRecommendationStageState,
   listRecommendationVersions,
@@ -96,6 +103,21 @@ import {
   type SaveRoadmapFailure,
 } from "../services/implementation-roadmap.service.js"
 import { getRoadmapVersionById } from "../repositories/implementation-roadmap-version.repository.js"
+import { getReportVersionById } from "../repositories/consultant-report-version.repository.js"
+import {
+  approveConsultantReport,
+  generateConsultantReport,
+  getReportStageState,
+  listReportVersions,
+  publishConsultantReport,
+  renderReportVersionPdf,
+  retryPublicationNotification,
+  revokeConsultantReportPublication,
+  saveConsultantReport,
+  type GenerateReportFailure,
+  type PublishReportFailure,
+  type SaveReportFailure,
+} from "../services/consultant-report.service.js"
 import { retrieveKnowledgePackage } from "../services/consulting-knowledge.service.js"
 import { failureIdentity } from "../lib/failure-identity.js"
 
@@ -201,6 +223,36 @@ const saveRoadmapFailureStatus: Record<SaveRoadmapFailure, number> = {
   stale_update: 409,
 }
 
+const reportFailureStatus: Record<GenerateReportFailure, number> = {
+  sources_not_ready: 422,
+  consultant_edits_protected: 409,
+  ai_step_failed: 502,
+  ai_output_invalid: 422,
+  ai_output_ungrounded: 422,
+  version_conflict: 409,
+  persistence_failed: 500,
+}
+
+const saveReportFailureStatus: Record<SaveReportFailure, number> = {
+  sources_not_ready: 422,
+  ai_output_ungrounded: 422,
+  version_not_found: 404,
+  historical_version_readonly: 409,
+  immutable_version_readonly: 409,
+  stale_update: 409,
+  not_in_review: 409,
+}
+
+const publishReportFailureStatus: Record<PublishReportFailure, number> = {
+  version_not_found: 404,
+  historical_version_readonly: 409,
+  not_approved: 422,
+  no_active_publication: 404,
+  no_client_recipient: 422,
+  stale_update: 409,
+  pdf_artifact_missing: 422,
+}
+
 const saveRecommendationsFailureStatus: Record<
   SaveRecommendationsFailure,
   number
@@ -293,6 +345,10 @@ router.get("/:id", async (req, res) => {
       authorized.resource,
       authorized.scope,
     )
+    const report = await getReportStageState(
+      authorized.resource,
+      authorized.scope,
+    )
 
     return res.json({
       status: true,
@@ -302,6 +358,7 @@ router.get("/:id", async (req, res) => {
         opportunities,
         recommendations,
         roadmap,
+        report,
         knowledgePackage,
       },
     })
@@ -1308,6 +1365,420 @@ router.get("/:id/roadmap/versions/:versionId", async (req, res) => {
   }
 })
 
+router.post("/:id/report", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "report.generate",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  const parseResult = generateConsultantReportSchema.safeParse(req.body ?? {})
+  if (!parseResult.success) {
+    return res.status(400).json({
+      status: false,
+      message: "report.error.invalid_input",
+      errors: parseResult.error.flatten(),
+    })
+  }
+
+  try {
+    const result = await generateConsultantReport(
+      authorized.resource,
+      authorized.scope,
+      {
+        replaceConsultantEdits:
+          parseResult.data.replaceConsultantEdits ?? false,
+      },
+    )
+
+    if (!result.success) {
+      return res.status(reportFailureStatus[result.failure]).json({
+        status: false,
+        message: result.messageId,
+        data: {
+          failure: result.failure,
+          evaluation: result.evaluation,
+          unknownTemplateCodes: result.unknownTemplateCodes,
+          nonTemplateCodes: result.nonTemplateCodes,
+          ungroundedQuestions: result.ungroundedQuestions,
+          invalidSourceReferences: result.invalidSourceReferences,
+        },
+      })
+    }
+
+    return res.status(201).json({
+      status: true,
+      message: "report.message.generated",
+      data: { version: result.version, evaluation: result.evaluation },
+    })
+  } catch (error) {
+    console.error("GENERATE_REPORT_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "report.error.internal",
+    })
+  }
+})
+
+router.patch("/:id/report", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "report.update",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  const parseResult = saveConsultantReportSchema.safeParse(req.body)
+  if (!parseResult.success) {
+    return res.status(400).json({
+      status: false,
+      message: "report.error.invalid_input",
+      errors: parseResult.error.flatten(),
+    })
+  }
+
+  try {
+    const reviewState = parseResult.data.reviewState ?? "draft"
+    const result = await saveConsultantReport(
+      authorized.resource,
+      authorized.scope,
+      {
+        versionId: parseResult.data.versionId,
+        expectedRevision: parseResult.data.expectedRevision,
+        report: parseResult.data.report,
+        reviewState,
+      },
+    )
+
+    if (!result.success) {
+      return res.status(saveReportFailureStatus[result.failure]).json({
+        status: false,
+        message: result.messageId,
+        data: {
+          failure: result.failure,
+          currentRevision: result.currentRevision,
+          unknownTemplateCodes: result.unknownTemplateCodes,
+          nonTemplateCodes: result.nonTemplateCodes,
+          ungroundedQuestions: result.ungroundedQuestions,
+          invalidSourceReferences: result.invalidSourceReferences,
+        },
+      })
+    }
+
+    return res.json({
+      status: true,
+      message:
+        result.withdrewFromReview
+          ? "report.message.withdrawn_from_review"
+          : result.version.reviewState === "manager_review"
+          ? "report.message.submitted_for_review"
+          : "report.message.saved",
+      data: { version: result.version },
+    })
+  } catch (error) {
+    console.error("SAVE_REPORT_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "report.error.internal",
+    })
+  }
+})
+
+router.post("/:id/report/versions/:versionId/approve", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "report.approve",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  const parseResult = approveConsultantReportSchema.safeParse(req.body ?? {})
+  if (!parseResult.success) return invalidReportInput(res, parseResult.error)
+
+  try {
+    const result = await approveConsultantReport(
+      authorized.resource,
+      authorized.scope,
+      {
+        versionId: req.params.versionId,
+        expectedRevision: parseResult.data.expectedRevision,
+      },
+    )
+
+    if (!result.success) {
+      return res.status(saveReportFailureStatus[result.failure]).json({
+        status: false,
+        message: result.messageId,
+        data: {
+          failure: result.failure,
+          currentRevision: result.currentRevision,
+        },
+      })
+    }
+
+    return res.json({
+      status: true,
+      message: "report.message.approved",
+      data: { version: result.version },
+    })
+  } catch (error) {
+    console.error("APPROVE_REPORT_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "report.error.internal",
+    })
+  }
+})
+
+router.get("/:id/report/versions", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "report.read",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  try {
+    const versions = await listReportVersions(req.params.id, authorized.scope)
+
+    return res.json({
+      status: true,
+      message: "report.message.versions_loaded",
+      data: { versions },
+    })
+  } catch (error) {
+    console.error("LOAD_REPORT_VERSIONS_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "report.error.internal",
+    })
+  }
+})
+
+router.get("/:id/report/versions/:versionId", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "report.read",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  try {
+    const version = await getReportVersionById(
+      req.params.versionId,
+      req.params.id,
+      authorized.scope,
+    )
+
+    if (!version) {
+      return res.status(404).json({
+        status: false,
+        message: "report.error.version_not_found",
+      })
+    }
+
+    return res.json({
+      status: true,
+      message: "report.message.version_loaded",
+      data: { version },
+    })
+  } catch (error) {
+    console.error("LOAD_REPORT_VERSION_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "report.error.internal",
+    })
+  }
+})
+
+router.get("/:id/report/versions/:versionId/pdf", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "report.export_pdf",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  try {
+    const pdf = await renderReportVersionPdf(
+      req.params.versionId,
+      req.params.id,
+      authorized.scope,
+    )
+
+    if (!pdf) {
+      return res.status(404).json({
+        status: false,
+        message: "report.error.version_not_found",
+      })
+    }
+
+    res.setHeader("content-type", "application/pdf")
+    res.setHeader("content-disposition", `inline; filename="report-${req.params.versionId}.pdf"`)
+    return res.send(pdf)
+  } catch (error) {
+    console.error("REPORT_PDF_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "report.error.internal",
+    })
+  }
+})
+
+router.post("/:id/report/versions/:versionId/publish", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "report.publish",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  try {
+    const parseResult = publishConsultantReportSchema.safeParse(req.body ?? {})
+    if (!parseResult.success) return invalidReportInput(res, parseResult.error)
+
+    const result = await publishConsultantReport(
+      authorized.resource,
+      authorized.scope,
+      req.params.versionId,
+      parseResult.data,
+    )
+
+    if (!result.success) {
+      return res.status(publishReportFailureStatus[result.failure]).json({
+        status: false,
+        message: result.messageId,
+        data: { failure: result.failure },
+      })
+    }
+
+    return res.status(201).json({
+      status: true,
+      message: "report.message.published",
+      data: { publication: result.publication },
+    })
+  } catch (error) {
+    console.error("PUBLISH_REPORT_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "report.error.internal",
+    })
+  }
+})
+
+router.post("/:id/report/publication/revoke", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "report.revoke_publication",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  try {
+    const result = await revokeConsultantReportPublication(
+      authorized.resource,
+      authorized.scope,
+    )
+
+    if (!result.success) {
+      return res.status(publishReportFailureStatus[result.failure]).json({
+        status: false,
+        message: result.messageId,
+        data: { failure: result.failure },
+      })
+    }
+
+    return res.json({
+      status: true,
+      message: "report.message.publication_revoked",
+      data: { publication: result.publication },
+    })
+  } catch (error) {
+    console.error("REVOKE_REPORT_PUBLICATION_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "report.error.internal",
+    })
+  }
+})
+
+router.post("/:id/report/publication/notify", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "report.publish",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  try {
+    const parseResult = notifyReportPublicationSchema.safeParse(req.body ?? {})
+    if (!parseResult.success) return invalidReportInput(res, parseResult.error)
+
+    const result = await retryPublicationNotification(
+      authorized.resource,
+      authorized.scope,
+      parseResult.data.requestKey,
+    )
+
+    if (!result.success) {
+      return res.status(publishReportFailureStatus[result.failure]).json({
+        status: false,
+        message: result.messageId,
+        data: { failure: result.failure },
+      })
+    }
+
+    return res.json({
+      status: true,
+      message: "report.message.notification_retried",
+      data: { publication: result.publication },
+    })
+  } catch (error) {
+    console.error("RETRY_REPORT_NOTIFICATION_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "report.error.internal",
+    })
+  }
+})
+
 router.get("/:id/analysis-runs", async (req, res) => {
   const actingUser = await requireActingUser(req, res)
   if (!actingUser) return
@@ -1394,6 +1865,13 @@ const invalidTransitionInput = (res: Response, error: ZodError) =>
   res.status(400).json({
     status: false,
     message: "discovery.error.invalid_transition_input",
+    errors: error.flatten(),
+  })
+
+const invalidReportInput = (res: Response, error: ZodError) =>
+  res.status(400).json({
+    status: false,
+    message: "report.error.invalid_input",
     errors: error.flatten(),
   })
 

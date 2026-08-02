@@ -101,6 +101,8 @@ const NOT_DISPLAYED = new Map<string, string>([
   ["use server", "a React directive"],
   ["Content-Type", "an HTTP header name"],
   ["Enter", "a KeyboardEvent.key value"],
+  ["Escape", "a KeyboardEvent.key value"],
+  ["Tab", "a KeyboardEvent.key value"],
   // Data, not a label: the server refuses a save that still carries this exact
   // string, so both sides must agree on it. See the comment at its declaration
   // in `OpportunityPanel.tsx`; making it language-neutral is a contract change.

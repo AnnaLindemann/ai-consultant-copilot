@@ -171,6 +171,36 @@ export const authorizePortalDiscoveryAction = async (
   return { permitted: true, resource: engagement, scope }
 }
 
+export const authorizePortalDocumentAction = async (
+  actingUser: ActingUser | null,
+  action: AccessAction,
+  engagementId: string,
+): Promise<AuthorizationOutcome<null>> => {
+  if (!actingUser) {
+    return deny(
+      null,
+      action,
+      decideAccess(null, action, { kind: "workspace" }) as AccessDenial,
+      {},
+    )
+  }
+
+  const scope = engagementScopeOf(actingUser)
+  const decision = decideAccess(actingUser, action, {
+    kind: "portal_document",
+    engagementId,
+    workspaceId: actingUser.workspaceId,
+  })
+
+  if (!decision.permitted) {
+    return deny(actingUser, action, decision, {
+      requestedEngagementId: engagementId,
+    })
+  }
+
+  return { permitted: true, resource: null, scope }
+}
+
 // Report a refusal. Unauthenticated and forbidden stay distinct outcomes, and
 // every refusal about a named resource is reported as `not_found` with one
 // fixed body, so responses cannot be used to discover whether an engagement

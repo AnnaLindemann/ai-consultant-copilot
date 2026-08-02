@@ -345,6 +345,7 @@ export const getActiveDiscoveryAccessByEngagement = async (
     select: {
       id: true,
       userId: true,
+      user: { select: { email: true } },
       engagementId: true,
       grantedByUserId: true,
     },

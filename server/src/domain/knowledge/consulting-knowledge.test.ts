@@ -184,6 +184,29 @@ test("only the kinds a stage requires are retrieved", () => {
   )
 })
 
+test("seeded follow-up templates are curated for report retrieval", () => {
+  const followUpTemplates = consultingKnowledgeSeed.filter(
+    (candidate) => candidate.kind === "follow_up_template",
+  )
+
+  assert.ok(followUpTemplates.length > 0)
+  assert.deepEqual(
+    followUpTemplates.map((template) => template.stageScopes),
+    followUpTemplates.map(() => ["report"]),
+  )
+
+  const packaged = buildKnowledgePackage(
+    consultingKnowledgeSeed,
+    "report",
+    contextOf("Support Posteingang mit fehlender Baseline"),
+  )
+
+  assert.ok(
+    packaged.entries.some((entry) => entry.kind === "follow_up_template"),
+    "report retrieval did not expose seeded follow-up templates",
+  )
+})
+
 test("an entry the curator did not scope to the stage is not retrieved", () => {
   const laterStageOnly = entry({
     code: "roadmap-only-question",

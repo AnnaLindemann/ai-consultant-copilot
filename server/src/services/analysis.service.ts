@@ -1,9 +1,9 @@
 import { evaluateAnalysisOutput } from "../evaluation/evaluate-analysis-output.js"
 import { callLlm } from "../lib/llm-client.js"
-import { parseConsultantReport } from "../lib/parse-consultant-report.js"
+import { parseAnalysisReport } from "../lib/parse-analysis-report.js"
 import { buildAnalysisPrompt } from "../prompts/build-analysis-prompt.js"
 
-import type { ConsultantReport } from "../../../shared/consultant-report.schema.js"
+import type { AnalysisReport } from "../../../shared/analysis-report.schema.js"
 import type { EvaluationResult } from "../evaluation/evaluation.types.js"
 import { calculateLlmCost } from "../evaluation/calculate-llm-cost.js"
 import { createAnalysisRun } from "../repositories/analysis-run.repository.js"
@@ -18,7 +18,7 @@ import { failureIdentity } from "../lib/failure-identity.js"
 export type AnalyzeEngagementResult =
   | {
       success: true
-      report: ConsultantReport
+      report: AnalysisReport
       evaluation: EvaluationResult
     }
   | {
@@ -45,7 +45,7 @@ export const analyzeEngagement = async (
 
   const llmResponse = await callLlm(prompt)
 
-  const parsedResult = parseConsultantReport(llmResponse.content)
+  const parsedResult = parseAnalysisReport(llmResponse.content)
 
   const costEstimateUsd = calculateLlmCost({
     promptTokens: llmResponse.promptTokens,

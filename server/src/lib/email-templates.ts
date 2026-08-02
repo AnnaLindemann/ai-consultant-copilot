@@ -15,6 +15,7 @@ export type EmailTemplateId =
   | "password_reset"
   | "discovery_access_granted"
   | "discovery_returned"
+  | "document_published"
 
 type TemplateParams = {
   staff_invitation: { recipientName: string; acceptUrl: string; expiresOn: string }
@@ -22,6 +23,7 @@ type TemplateParams = {
   password_reset: { resetUrl: string }
   discovery_access_granted: { portalUrl: string }
   discovery_returned: { portalUrl: string }
+  document_published: { portalUrl: string }
 }
 
 const de: {
@@ -73,6 +75,15 @@ const de: {
     paragraphs: [
       "Der Consultant hat Ihre Discovery geprüft und mit Anmerkungen zurückgegeben. Ihre Eingaben sind unverändert erhalten:",
       portalUrl,
+    ],
+  }),
+
+  document_published: ({ portalUrl }) => ({
+    subject: "Ein neuer Bericht steht im Client Portal bereit",
+    paragraphs: [
+      "Ein neuer, freigegebener Bericht wurde fuer Sie im Client Portal veroeffentlicht:",
+      portalUrl,
+      "Sie koennen den Bericht dort ansehen und als PDF herunterladen.",
     ],
   }),
 }

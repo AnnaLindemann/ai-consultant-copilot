@@ -1,4 +1,6 @@
 import type { DiscoveryMessageId } from "../../shared/discovery-messages"
+import type { ConsultantReportMessageId } from "../../shared/consultant-report-messages"
+import type { RoadmapMessageId } from "../../shared/implementation-roadmap-messages"
 import type { OpportunityMessageId } from "../../shared/opportunity-messages"
 import type { RecommendationMessageId } from "../../shared/recommendation-messages"
 import type { WorkbenchMessageId } from "../../shared/workbench-messages"
@@ -112,6 +114,94 @@ const recommendationServerMessages: Record<RecommendationMessageId, string> = {
     "Unerwarteter Serverfehler. Die Empfehlungen wurden nicht verändert. Bitte erneut versuchen.",
 }
 
+const roadmapServerMessages: Record<RoadmapMessageId, string> = {
+  "roadmap.message.loaded": "Roadmap geladen",
+  "roadmap.message.generated":
+    "Entwurf der Implementierungs-Roadmap erstellt. Bitte prüfen, anpassen und speichern.",
+  "roadmap.message.saved": "Roadmap gespeichert",
+  "roadmap.message.accepted": "Roadmap angenommen",
+  "roadmap.message.versions_loaded": "Roadmap-Fassungen geladen",
+  "roadmap.error.invalid_input":
+    "Die Roadmap ist unvollständig oder ungültig. Jede Phase braucht Ziel, Umfang, Ergebnis, mindestens eine angenommene Empfehlung und gültige Abhängigkeiten.",
+  "roadmap.error.recommendations_not_ready":
+    "Es gibt noch keine angenommene aktive Empfehlungsfassung. Nehmen Sie zuerst Empfehlungen an, bevor Sie die Roadmap erstellen.",
+  "roadmap.error.knowledge_unavailable":
+    "Für dieses Engagement liefert die Consulting Knowledge Base derzeit kein Implementation Pattern. Ohne kuratierten Beleg wird kein Entwurf erstellt.",
+  "roadmap.error.consultant_edits_protected":
+    "Diese Roadmap enthält Ihre eigenen Änderungen. Ein erneuter Lauf würde sie ersetzen und braucht deshalb Ihre ausdrückliche Bestätigung.",
+  "roadmap.error.ai_step_failed":
+    "Der KI-Anbieter war nicht erreichbar. Es wurde nichts verändert – bitte erneut versuchen.",
+  "roadmap.error.ai_output_invalid":
+    "Die KI-Antwort war unbrauchbar. Es wurde kein Entwurf erstellt und nichts verändert.",
+  "roadmap.error.ai_output_ungrounded":
+    "Die Roadmap beruft sich auf Empfehlungen, Implementation Patterns oder Abhängigkeiten, die nicht zulässig sind. Der Entwurf wurde verworfen und nichts verändert.",
+  "roadmap.error.version_conflict":
+    "Ein anderer Lauf wurde gerade gespeichert. Laden Sie die aktuelle Roadmap neu und versuchen Sie es erneut.",
+  "roadmap.error.persistence_failed":
+    "Die Roadmap-Fassung konnte nicht gespeichert werden. Bitte erneut versuchen.",
+  "roadmap.error.version_not_found":
+    "Diese Roadmap-Fassung wurde nicht gefunden.",
+  "roadmap.error.historical_version_readonly":
+    "Diese frühere Roadmap-Fassung ist nur lesbar. Öffnen Sie die aktive Fassung, um weiterzubearbeiten.",
+  "roadmap.error.stale_update":
+    "Diese Roadmap-Fassung ist veraltet. Laden Sie die aktuelle Version erneut, bevor Sie weiter speichern.",
+  "roadmap.error.internal":
+    "Unerwarteter Serverfehler. Die Roadmap wurde nicht verändert. Bitte erneut versuchen.",
+}
+
+const consultantReportServerMessages: Record<ConsultantReportMessageId, string> = {
+  "report.message.loaded": "Report geladen",
+  "report.message.generated":
+    "Report-Entwurf erstellt. Bitte prüfen, anpassen und zur Freigabe geben.",
+  "report.message.saved": "Report gespeichert",
+  "report.message.withdrawn_from_review":
+    "Report gespeichert und aus der Prüfung zurückgezogen",
+  "report.message.submitted_for_review": "Report zur Prüfung markiert",
+  "report.message.approved": "Report freigegeben",
+  "report.message.versions_loaded": "Report-Fassungen geladen",
+  "report.message.version_loaded": "Report-Fassung geladen",
+  "report.message.published": "Report im Client Portal veröffentlicht",
+  "report.message.publication_revoked":
+    "Veröffentlichung im Client Portal zurückgezogen",
+  "report.message.notification_retried":
+    "E-Mail-Benachrichtigung erneut ausgelöst",
+  "report.error.invalid_input":
+    "Der Report ist unvollständig oder ungültig. Prüfen Sie Inhalt, Rückfragen und Freigabestatus.",
+  "report.error.sources_not_ready":
+    "Der Report kann erst erstellt werden, wenn Discovery, Assessment, Opportunities, Empfehlungen und Roadmap angenommen sind.",
+  "report.error.consultant_edits_protected":
+    "Dieser Report enthält Ihre Änderungen. Ein erneuter Lauf würde eine neue Fassung erstellen und braucht deshalb Ihre ausdrückliche Bestätigung.",
+  "report.error.ai_step_failed":
+    "Der KI-Anbieter war nicht erreichbar. Es wurde nichts verändert – bitte erneut versuchen.",
+  "report.error.ai_output_invalid":
+    "Die KI-Antwort war unbrauchbar. Es wurde kein Report-Entwurf erstellt.",
+  "report.error.ai_output_ungrounded":
+    "Der Report enthält Rückfragen, die nicht auf gespeicherten Lücken oder gültigen Vorlagen beruhen. Der Entwurf wurde verworfen.",
+  "report.error.version_conflict":
+    "Ein anderer Report-Lauf wurde gerade gespeichert. Laden Sie die aktuelle Fassung neu und versuchen Sie es erneut.",
+  "report.error.persistence_failed":
+    "Die Report-Fassung konnte nicht gespeichert werden. Bitte erneut versuchen.",
+  "report.error.version_not_found": "Diese Report-Fassung wurde nicht gefunden.",
+  "report.error.historical_version_readonly":
+    "Diese frühere Report-Fassung ist nur lesbar.",
+  "report.error.immutable_version_readonly":
+    "Freigegebene Report-Fassungen sind unveränderlich.",
+  "report.error.stale_update":
+    "Diese Fassung wurde auf älteren Quellen erstellt. Laden Sie neu oder erstellen Sie eine neue Fassung.",
+  "report.error.not_in_review":
+    "Nur Report-Fassungen in Prüfung können freigegeben werden.",
+  "report.error.not_approved":
+    "Nur freigegebene Report-Fassungen können veröffentlicht werden.",
+  "report.error.pdf_artifact_missing":
+    "Die PDF-Fassung konnte nicht erzeugt werden. Prüfen Sie die Vorschau und versuchen Sie die Veröffentlichung erneut.",
+  "report.error.no_active_publication":
+    "Für dieses Engagement gibt es keine aktive Veröffentlichung.",
+  "report.error.no_client_recipient":
+    "Für dieses Engagement ist kein aktiver Client-Empfänger verknüpft.",
+  "report.error.internal":
+    "Unerwarteter Serverfehler. Der Report wurde nicht verändert. Bitte erneut versuchen.",
+}
+
 // The outcomes the Organization, Engagement, Assessment and Analysis endpoints
 // report. These endpoints predate the localization seam and answered in English
 // prose, which the workbench then displayed verbatim; the wording lives here
@@ -169,6 +259,7 @@ const uiMessages = {
   "common.field.yes": "Ja",
   "common.field.no": "Nein",
   "common.action.remove": "Entfernen",
+  "common.action.open": "Öffnen",
   "common.error.label": "Fehler",
   "common.field.none": "Keine.",
   "common.field.pipe_hint": "Einträge mit senkrechtem Strich (|) trennen.",
@@ -1451,6 +1542,111 @@ const uiMessages = {
   "report.badge.method": "Methode: {method}",
   "report.badge.priority": "Priorität: {priority}",
   "report.badge.effort": "Aufwand: {effort}",
+  "report.lifecycle.eyebrow": "Consultant Report",
+  "report.lifecycle.title": "Report & Rückfragen",
+  "report.lifecycle.intro":
+    "Die finale Kundenfassung entsteht aus den angenommenen Quellen und wird erst nach Freigabe ausdrücklich veröffentlicht.",
+  "report.empty.title": "Noch kein Report",
+  "report.empty.description":
+    "Sobald alle Quellen angenommen sind, kann eine erste Report-Fassung erstellt werden.",
+  "report.sources.missing": "Noch nicht bereit: {sources}",
+  "report.sources.discovery": "Discovery",
+  "report.sources.assessment": "Assessment",
+  "report.sources.opportunities": "Opportunities",
+  "report.sources.recommendations": "Empfehlungen",
+  "report.sources.roadmap": "Roadmap",
+  "report.warning.stale":
+    "Die angenommenen Quellen haben sich seit dieser Report-Fassung geändert.",
+  "report.state.current": "aktuell",
+  "report.state.stale": "veraltet",
+  "report.state.published": "veröffentlicht",
+  "report.review_state.draft": "Entwurf",
+  "report.review_state.manager_review": "In Prüfung",
+  "report.review_state.approved": "Freigegeben",
+  "report.version_status.active": "aktiv",
+  "report.version_status.superseded": "historisch",
+  "report.question_status.draft": "Entwurf",
+  "report.question_status.approved": "Freigegeben",
+  "report.question_status.removed": "Entfernt",
+  "report.action.generate": "Report erstellen",
+  "report.action.regenerate": "Neue Fassung erstellen",
+  "report.action.generating": "Wird erstellt …",
+  "report.action.replace_edits": "Eigene Änderungen ersetzen",
+  "report.action.save_draft": "Entwurf speichern",
+  "report.action.submit": "Zur Prüfung",
+  "report.action.approve": "Freigeben",
+  "report.action.preview_pdf": "PDF-Vorschau",
+  "report.action.publish": "Veröffentlichen",
+  "report.action.revoke": "Zurückziehen",
+  "report.action.retry_notification": "E-Mail erneut senden",
+  "report.versions.show": "Fassungen anzeigen",
+  "report.versions.empty": "Es gibt noch keine gespeicherten Report-Fassungen.",
+  "report.version.label": "Fassung {version}: {status}, {review}, {date}",
+  "report.field.title": "Titel",
+  "report.field.executive_summary": "Management Summary",
+  "report.field.engagement_context": "Engagement-Kontext",
+  "report.field.assessment_summary": "Assessment-Zusammenfassung",
+  "report.field.prioritized_problems": "Priorisierte Probleme",
+  "report.field.recommendations": "Empfehlungen",
+  "report.field.roadmap_summary": "Roadmap-Zusammenfassung",
+  "report.field.risks": "Risiken",
+  "report.field.assumptions": "Annahmen",
+  "report.field.line_hint": "Ein Eintrag pro Zeile.",
+  "report.questions.title": "Follow-up-Fragen",
+  "report.questions.add": "Frage hinzufügen",
+  "report.questions.empty": "Keine offenen Follow-up-Fragen.",
+  "report.questions.question": "Frage",
+  "report.questions.status": "Status",
+  "report.questions.template": "Vorlage",
+  "report.questions.source": "Quelle",
+  "report.questions.rationale": "Begründung",
+  "report.publication.title": "Client Portal",
+  "report.publication.none": "Noch nicht veröffentlicht.",
+  "report.publication.active":
+    "Fassung {version} veröffentlicht am {date}.",
+  "report.publication.email_sent": "E-Mail versendet",
+  "report.publication.email_pending": "E-Mail-Versand vorgemerkt",
+  "report.publication.email_failed": "E-Mail-Versand fehlgeschlagen",
+  "report.publication.email_not_sent": "E-Mail nicht versendet",
+  "report.publish.dialog_title": "Bericht veröffentlichen",
+  "report.publish.dialog_description":
+    "Diese freigegebene Report-Fassung wird als PDF im Client Portal bereitgestellt.",
+  "report.publish.version_label": "Freigegebene Fassung",
+  "report.publish.title_label": "Client-sichtbarer Titel",
+  "report.publish.title_help": "Dieser Titel erscheint im Client Portal.",
+  "report.publish.title_required": "Die Veröffentlichung braucht einen Titel.",
+  "report.publish.message_label": "Nachricht an den Client",
+  "report.publish.client_label": "Empfänger",
+  "report.publish.client_missing": "Kein aktiver Client-Empfänger verfügbar.",
+  "report.publish.read_only_pdf":
+    "Der Client erhält ausschließlich lesenden Zugriff auf genau diese PDF-Fassung.",
+  "report.publish.immutable_version":
+    "Die veröffentlichte Report-Fassung bleibt unveränderlich.",
+  "report.publish.email_separate":
+    "E-Mail-Benachrichtigung ist ein eigener Schritt und ändert die Veröffentlichung nicht.",
+  "report.publish.primary": "Bericht veröffentlichen",
+  "report.publish.publishing": "Bericht wird veröffentlicht",
+  "report.publish.error.not_approved":
+    "Nur eine aktive freigegebene Fassung kann veröffentlicht werden.",
+  "report.publish.error.stale":
+    "Eine veraltete Report-Fassung kann nicht veröffentlicht werden.",
+  "report.publish.error.no_client":
+    "Für die Veröffentlichung fehlt ein aktiver Client-Empfänger.",
+  "report.revoke.dialog_title": "Veröffentlichung widerrufen",
+  "report.revoke.dialog_description":
+    "Der Zugriff im Client Portal wird beendet, die interne Historie bleibt erhalten.",
+  "report.revoke.version_label": "Fassung {version}",
+  "report.revoke.client_label": "Client: {client}",
+  "report.revoke.access_ends": "Der Client-Zugriff endet sofort.",
+  "report.revoke.history_kept":
+    "Report-Fassung, PDF, Veröffentlichungs- und Benachrichtigungshistorie bleiben intern erhalten.",
+  "report.revoke.primary": "Veröffentlichung widerrufen",
+  "report.revoke.revoking": "Veröffentlichung wird widerrufen",
+  "portal.documents.title": "Dokumente",
+  "portal.documents.empty": "Derzeit ist kein Dokument veröffentlicht.",
+  "portal.documents.report": "Consultant Report, Fassung {version}",
+  "portal.documents.published": "Veröffentlicht am {date}",
+  "portal.documents.open": "PDF öffnen",
 
   // --- Business & AI Readiness Assessment (Phase 3) -----------------------
   "assessment.eyebrow": "Geschäfts- & KI-Reife",
@@ -1702,12 +1898,103 @@ const uiMessages = {
   "opportunity.hint.pipe": "Einträge mit senkrechtem Strich (|) trennen.",
   "opportunity.hint.requirements":
     "Jede Opportunity braucht ein Problem, einen Verbesserungsansatz, mindestens ein zitiertes Assessment-Ergebnis, mindestens ein Erfolgskriterium und eine Begründung ihres Rangs. Eine Einstufung unterhalb von „KI-bereit“ muss mindestens eine Voraussetzung nennen, und bei geringer Zuversicht ist mindestens eine Annahme zu nennen.",
+
+  // --- Implementation Roadmap (Phase 7) ----------------------------------
+  "roadmap.title": "Implementierungs-Roadmap",
+  "roadmap.intro":
+    "Ordnet angenommene Empfehlungen in eine umsetzbare Reihenfolge mit Abhängigkeiten, Risiken und erwarteten Ergebnissen.",
+  "roadmap.empty.title": "Noch keine Roadmap",
+  "roadmap.empty.description":
+    "Sobald eine angenommene Empfehlungsfassung vorliegt, kann daraus eine Roadmap erstellt werden.",
+  "roadmap.no_recommendations.title": "Keine angenommenen Empfehlungen",
+  "roadmap.no_recommendations.description":
+    "Die Roadmap wird nur aus aktiven angenommenen Empfehlungen erstellt.",
+  "roadmap.stale":
+    "Die angenommenen Empfehlungen haben sich seit dieser Roadmap geändert. Erstellen Sie die Roadmap bewusst neu, wenn die neue Grundlage gelten soll.",
+  "roadmap.generate": "Roadmap erstellen",
+  "roadmap.regenerate": "Roadmap neu erstellen",
+  "roadmap.confirm_replace": "Eigene Änderungen ersetzen",
+  "roadmap.save": "Speichern",
+  "roadmap.accept": "Annehmen",
+  "roadmap.versions.show": "Fassungen anzeigen",
+  "roadmap.versions.empty": "Es gibt noch keine gespeicherten Roadmap-Fassungen.",
+  "roadmap.version.label": "Fassung {version}: {status}, {date}",
+  "roadmap.version_status.active": "aktiv",
+  "roadmap.version_status.superseded": "historisch",
+  "roadmap.add_phase": "Phase hinzufügen",
+  "roadmap.remove_phase": "Phase entfernen",
+  "roadmap.move_up": "Nach oben",
+  "roadmap.move_down": "Nach unten",
+  "roadmap.field.summary": "Zusammenfassung",
+  "roadmap.field.title": "Titel",
+  "roadmap.field.objective": "Ziel",
+  "roadmap.field.scope": "Umfang",
+  "roadmap.field.expected_outcome": "Erwartetes Ergebnis",
+  "roadmap.field.dependencies": "Abhängigkeiten",
+  "roadmap.field.prerequisites": "Voraussetzungen",
+  "roadmap.field.readiness": "Readiness",
+  "roadmap.field.risks": "Risiken",
+  "roadmap.field.assumptions": "Annahmen",
+  "roadmap.field.sequencing": "Reihenfolge-Begründung",
+  "roadmap.field.recommendations": "Empfehlungen",
+  "roadmap.field.recommendation_dispositions":
+    "Empfehlungs-Entscheidungen",
+  "roadmap.field.deferred_rationale": "Begründung für Zurückstellung",
+  "roadmap.field.patterns": "Implementation Patterns",
+  "roadmap.field.pattern_rationale": "Begründung für {pattern}",
+  "roadmap.field.gaps": "Offene Punkte",
+  "roadmap.disposition.included": "Enthalten",
+  "roadmap.disposition.deferred": "Zurückgestellt",
+  "roadmap.patterns.none": "Keine Implementation Patterns verfügbar.",
+  "roadmap.review_state.ai_draft": "KI-Entwurf – noch nicht geprüft",
+  "roadmap.review_state.consultant_edited": "Von Ihnen bearbeitet",
+  "roadmap.review_state.accepted": "Von Ihnen angenommen",
+  "roadmap.validation": "Bitte vervollständigen Sie alle Roadmap-Phasen.",
+  "roadmap.validation.disposition.missing":
+    "Eine angenommene Empfehlung hat keine Entscheidung.",
+  "roadmap.validation.disposition.unknown":
+    "Die Roadmap verweist auf eine unbekannte oder nicht zulässige Empfehlung.",
+  "roadmap.validation.disposition.duplicate":
+    "Eine Empfehlung hat mehr als eine Entscheidung.",
+  "roadmap.validation.disposition.included_not_linked":
+    "Eine enthaltene Empfehlung ist mit keiner Roadmap-Phase verknüpft.",
+  "roadmap.validation.disposition.deferred_linked":
+    "Eine zurückgestellte Empfehlung ist trotzdem mit einer Roadmap-Phase verknüpft.",
+  "roadmap.validation.disposition.deferred_missing_rationale":
+    "Eine zurückgestellte Empfehlung hat keine Begründung.",
+  "roadmap.validation.disposition.linked_without_disposition":
+    "Eine verknüpfte Empfehlung hat keine Entscheidung.",
+  "roadmap.validation.disposition.generic":
+    "Eine Empfehlungs-Entscheidung ist ungültig.",
+  "roadmap.validation.grounding.unknown_pattern":
+    "Die Roadmap verweist auf ein unbekanntes Implementation Pattern.",
+  "roadmap.validation.grounding.wrong_pattern_kind":
+    "Die Roadmap verweist auf einen Knowledge-Base-Eintrag, der kein Implementation Pattern ist.",
+  "roadmap.validation.dependency.duplicate_phase":
+    "Eine Roadmap-Phase hat keine eindeutige Identität.",
+  "roadmap.validation.dependency.duplicate_sequence":
+    "Mehrere Roadmap-Phasen verwenden dieselbe Reihenfolge.",
+  "roadmap.validation.dependency.duplicate":
+    "Eine Phase enthält dieselbe Abhängigkeit mehrfach.",
+  "roadmap.validation.dependency.unknown":
+    "Eine Phase verweist auf eine unbekannte Abhängigkeit.",
+  "roadmap.validation.dependency.self":
+    "Eine Phase darf nicht von sich selbst abhängen.",
+  "roadmap.validation.dependency.not_earlier":
+    "Eine Phase darf nur von früheren Phasen abhängen.",
+  "roadmap.validation.dependency.cycle":
+    "Die Roadmap enthält einen Abhängigkeits-Zyklus.",
+  "roadmap.validation.dependency.generic":
+    "Eine Roadmap-Abhängigkeit ist ungültig.",
+  "roadmap.readonly": "Frühere Roadmap-Fassungen sind nur lesbar.",
 } as const
 
 export const de = {
   ...serverMessages,
   ...opportunityServerMessages,
   ...recommendationServerMessages,
+  ...roadmapServerMessages,
+  ...consultantReportServerMessages,
   ...workbenchServerMessages,
   ...uiMessages,
 }

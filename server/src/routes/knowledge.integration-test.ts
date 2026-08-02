@@ -494,6 +494,58 @@ if (!environment) {
     assert.equal(await prisma.consultingKnowledgeEntry.count(), countBefore)
   })
 
+  test("restart reconciles legacy follow-up template report scope once and preserves later curator edits", async () => {
+    const code = "follow-up-missing-volume"
+    await prisma.consultingKnowledgeEntry.update({
+      where: { code },
+      data: { stageScopes: ["discovery"], revision: 0 },
+    })
+
+    const firstRestartSpecifier: string =
+      "../repositories/consulting-knowledge.repository.js?restart=follow-up-1"
+    const firstRestart = (await import(firstRestartSpecifier)) as {
+      ensureConsultingKnowledgeSeeded: () => Promise<void>
+    }
+    await firstRestart.ensureConsultingKnowledgeSeeded()
+
+    const corrected = await prisma.consultingKnowledgeEntry.findUniqueOrThrow({
+      where: { code },
+    })
+    assert.deepEqual(corrected.stageScopes, ["discovery", "report"])
+    assert.equal(corrected.revision, 1)
+
+    const secondRestartSpecifier: string =
+      "../repositories/consulting-knowledge.repository.js?restart=follow-up-2"
+    const secondRestart = (await import(secondRestartSpecifier)) as {
+      ensureConsultingKnowledgeSeeded: () => Promise<void>
+    }
+    await secondRestart.ensureConsultingKnowledgeSeeded()
+
+    const unchanged = await prisma.consultingKnowledgeEntry.findUniqueOrThrow({
+      where: { code },
+    })
+    assert.deepEqual(unchanged.stageScopes, ["discovery", "report"])
+    assert.equal(unchanged.revision, 1)
+
+    await prisma.consultingKnowledgeEntry.update({
+      where: { code },
+      data: { stageScopes: ["report", "assessment"], revision: 2 },
+    })
+
+    const thirdRestartSpecifier: string =
+      "../repositories/consulting-knowledge.repository.js?restart=follow-up-3"
+    const thirdRestart = (await import(thirdRestartSpecifier)) as {
+      ensureConsultingKnowledgeSeeded: () => Promise<void>
+    }
+    await thirdRestart.ensureConsultingKnowledgeSeeded()
+
+    const curated = await prisma.consultingKnowledgeEntry.findUniqueOrThrow({
+      where: { code },
+    })
+    assert.deepEqual(curated.stageScopes, ["report", "assessment"])
+    assert.equal(curated.revision, 2)
+  })
+
   test("the knowledge base carries no workspace column to leak across", async () => {
     // Both knowledge bases are product-level, shared assets outside the Phase 3A
     // isolation boundary (architecture.md §9). Its absence is the guarantee.

@@ -1,11 +1,11 @@
-import type { GeneratedConsultantReportDraft } from "../../../shared/consultant-report.schema.js"
+import type { AnalysisReport } from "../../../shared/analysis-report.schema.js"
+import { analysisReportSchema } from "../../../shared/analysis-report.schema.js"
 import { parseLlmJson } from "./parse-llm-json.js"
-import { validateConsultantReport } from "./validate-consultant-report.js"
 
-type ParseConsultantReportResult =
+type ParseAnalysisReportResult =
   | {
       success: true
-      report: GeneratedConsultantReportDraft
+      report: AnalysisReport
       jsonParseSuccess: true
       schemaValid: true
       error?: never
@@ -18,7 +18,7 @@ type ParseConsultantReportResult =
       error: string
     }
 
-export function parseConsultantReport(raw: string): ParseConsultantReportResult {
+export function parseAnalysisReport(raw: string): ParseAnalysisReportResult {
   let parsed: unknown
 
   try {
@@ -32,24 +32,20 @@ export function parseConsultantReport(raw: string): ParseConsultantReportResult 
     }
   }
 
-  try {
-    const report = validateConsultantReport(parsed)
-
-    return {
-      success: true,
-      report,
-      jsonParseSuccess: true,
-      schemaValid: true,
-    }
-  } catch (error) {
+  const result = analysisReportSchema.safeParse(parsed)
+  if (!result.success) {
     return {
       success: false,
       jsonParseSuccess: true,
       schemaValid: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "LLM JSON failed ConsultantReport validation",
+      error: result.error.message,
     }
+  }
+
+  return {
+    success: true,
+    report: result.data,
+    jsonParseSuccess: true,
+    schemaValid: true,
   }
 }

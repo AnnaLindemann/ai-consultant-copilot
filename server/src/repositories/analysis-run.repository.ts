@@ -12,6 +12,7 @@ export type AnalysisRunStage =
   | "prioritization"
   | "solution_matching"
   | "roadmap"
+  | "report"
 
 export type CreateAnalysisRunInput = {
   workspaceId: string

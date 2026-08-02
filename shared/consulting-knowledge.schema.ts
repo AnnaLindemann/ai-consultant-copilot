@@ -47,13 +47,15 @@ export const consultingKnowledgeStageSchema = z.enum([
 ])
 
 // The stages that retrieve today: discovery questions shape Discovery,
-// frameworks and AI-readiness criteria shape Assessment (roadmap Phase 5), and
-// AI Use Cases and Solution Patterns ground Recommendations (roadmap Phase 6).
-// Prioritization, roadmap, and report retrieve from a later phase, not these.
+// frameworks and AI-readiness criteria shape Assessment, AI Use Cases and
+// Solution Patterns ground Recommendations, Implementation Patterns inform the
+// Implementation Roadmap, and Follow-up Templates shape Report questions.
 export const knowledgeRetrievalStageSchema = z.enum([
   "discovery",
   "assessment",
   "solution_matching",
+  "roadmap",
+  "report",
 ])
 
 export const consultingKnowledgeDetailsSchema = z.object({
@@ -160,6 +162,8 @@ export const knowledgeSelectionSchema = z.object({
   kind: consultingKnowledgeKindSchema,
   title: nonEmptyText,
   summary: nonEmptyText,
+  revision: z.number().int().nonnegative(),
+  fingerprint: nonEmptyText,
   details: consultingKnowledgeDetailsSchema,
   // Why this entry was selected, expressed as the relationships that matched.
   // It is what makes a package explainable rather than merely ranked.
