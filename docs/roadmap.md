@@ -567,3 +567,61 @@ The phases beyond the MVP are deliberately separated from that core:
 - **Phase 11 (Production Readiness)** prepares the product for real-world **deployment and operation** — deployment, monitoring, operational security, backup, recovery, and performance — rather than extending the methodology. Note that authentication and authorization are *not* deferred to this phase; they are delivered in Phase 3A, and Phase 11 operates and hardens them.
 
 Drawing the MVP boundary here allows the consulting methodology to be **validated with real engagements before investing in advanced retrieval and production infrastructure**. If the methodology proves its value, RAG and production hardening are the natural next investments; if it needs adjustment, that is learned before those investments are made.
+
+## Reference Solutions
+
+The Workbench is intentionally designed as a **domain-independent consulting platform**. The consulting methodology, engagement lifecycle, knowledge architecture, AI governance, and collaboration model are reusable across industries.
+
+After the MVP and Production Readiness phases, the platform is extended through **Reference Solutions** — curated domain packages that specialize the generic consulting workflow for specific industries without changing the core architecture.
+
+Each Reference Solution may contribute:
+
+- domain-specific Discovery templates;
+- Assessment frameworks;
+- Business Process taxonomy;
+- AI Readiness criteria;
+- Opportunity catalogues;
+- AI Use Cases;
+- Solution Patterns;
+- Technology recommendations;
+- ROI models;
+- Risk models;
+- Follow-up Question templates;
+- Report templates;
+- KPI libraries.
+
+Reference Solutions remain reusable knowledge packages built on top of the common Consulting Knowledge Base and Technology Knowledge Base.
+
+### Reference Solution 1 — Contact Center AI
+
+The first official Reference Solution focuses on **AI-powered Contact Centers**, reflecting the primary consulting domain of the product.
+
+It extends the platform with consulting assets specifically for Contact Center transformation, including:
+
+- Contact Center Discovery templates.
+- Call flow assessment.
+- Customer service process analysis.
+- Voicebot and Chatbot opportunity identification.
+- Agent-assist opportunities.
+- Quality assurance automation.
+- AI call summarization.
+- Knowledge Assistant use cases.
+- Contact Center KPI library (AHT, FCR, CSAT, NPS, Containment Rate, Transfer Rate, Service Level, Occupancy, etc.).
+- Contact Center implementation patterns.
+- Voice AI implementation roadmaps.
+- Contact Center report templates.
+
+### Dialfire Integration
+
+Dialfire is treated as a **reference implementation**, not as a platform dependency.
+
+The Contact Center Reference Solution may integrate with Dialfire to support:
+
+- importing call flows;
+- importing queue and campaign configuration;
+- importing operational metrics;
+- analysing existing call-center configuration;
+- generating AI transformation recommendations;
+- producing migration and implementation roadmaps for AI-enabled contact centers.
+
+The platform architecture remains vendor-neutral, allowing equivalent integrations with other contact-center platforms in the future.
