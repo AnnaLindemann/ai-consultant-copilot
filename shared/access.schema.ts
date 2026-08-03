@@ -46,6 +46,10 @@ export const notificationKindSchema = z.enum([
   "discovery_reopened",
   "document_published",
   "document_publication_revoked",
+  // Phase 9 notifies the owning Manager that a Client left feedback. The
+  // Manager's own review steps are recorded in the Audit Trail, not announced
+  // back to themselves, so they add audit event types and no notification kind.
+  "client_feedback_submitted",
   "ownership_transferred",
   "role_changed",
   "sign_in",
@@ -69,6 +73,11 @@ export const auditEventTypeSchema = z.enum([
   "document_downloaded",
   "document_notification_sent",
   "document_notification_failed",
+  "client_feedback_submitted",
+  "client_feedback_classified",
+  "client_feedback_closed_no_action",
+  "feedback_reentry_opened",
+  "feedback_reentry_completed",
   "report_version_created",
   "report_submitted_for_review",
   "report_approved",

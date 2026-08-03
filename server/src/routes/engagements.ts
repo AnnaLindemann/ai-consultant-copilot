@@ -80,8 +80,12 @@ import {
 } from "../schemas/implementation-roadmap.schema.js"
 import {
   approveConsultantReportSchema,
+  closeFeedbackSchema,
   generateConsultantReportSchema,
   notifyReportPublicationSchema,
+  classifyFeedbackSchema,
+  completeFeedbackReentrySchema,
+  openFeedbackReentrySchema,
   publishConsultantReportSchema,
   saveConsultantReportSchema,
 } from "../schemas/consultant-report.schema.js"
@@ -118,6 +122,14 @@ import {
   type PublishReportFailure,
   type SaveReportFailure,
 } from "../services/consultant-report.service.js"
+import {
+  beginFeedbackReentry,
+  closeFeedbackWithoutAction,
+  finishFeedbackReentry,
+  getFeedbackStageState,
+  reviewFeedback,
+  type FeedbackFailure,
+} from "../services/feedback.service.js"
 import { retrieveKnowledgePackage } from "../services/consulting-knowledge.service.js"
 import { failureIdentity } from "../lib/failure-identity.js"
 
@@ -253,6 +265,22 @@ const publishReportFailureStatus: Record<PublishReportFailure, number> = {
   pdf_artifact_missing: 422,
 }
 
+const feedbackFailureStatus: Record<FeedbackFailure, number> = {
+  publication_not_found: 404,
+  invalid_idempotent_submission: 409,
+  feedback_not_found: 404,
+  feedback_not_classified: 409,
+  invalid_feedback_transition: 409,
+  reentry_not_found: 404,
+  reentry_already_open: 409,
+  reentry_sources_unavailable: 422,
+  no_impacted_stages: 422,
+  missing_rationale: 422,
+  incomplete_reentry_outcome: 422,
+  invalid_result_artifact: 422,
+  stale_update: 409,
+}
+
 const saveRecommendationsFailureStatus: Record<
   SaveRecommendationsFailure,
   number
@@ -349,6 +377,14 @@ router.get("/:id", async (req, res) => {
       authorized.resource,
       authorized.scope,
     )
+    // Phase 9 reads the four stage states already computed above rather than
+    // re-deriving them, so a Feedback card and its stage panel answer from one
+    // set of facts (coding-standards.md §2).
+    const feedback = await getFeedbackStageState(
+      authorized.resource,
+      authorized.scope,
+      { opportunities, recommendations, roadmap, report },
+    )
 
     return res.json({
       status: true,
@@ -359,6 +395,7 @@ router.get("/:id", async (req, res) => {
         recommendations,
         roadmap,
         report,
+        feedback,
         knowledgePackage,
       },
     })
@@ -1543,6 +1580,229 @@ router.post("/:id/report/versions/:versionId/approve", async (req, res) => {
   }
 })
 
+router.get("/:id/feedback", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "feedback.read",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  try {
+    const feedback = await getFeedbackStageState(
+      authorized.resource,
+      authorized.scope,
+    )
+
+    return res.json({
+      status: true,
+      message: "feedback.message.loaded",
+      data: feedback,
+    })
+  } catch (error) {
+    console.error("LOAD_FEEDBACK_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "feedback.error.internal",
+    })
+  }
+})
+
+router.patch("/:id/feedback/:feedbackId/classification", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "feedback.classify",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  const parseResult = classifyFeedbackSchema.safeParse(req.body)
+  if (!parseResult.success) return invalidFeedbackInput(res, parseResult.error)
+
+  try {
+    const result = await reviewFeedback(
+      authorized.resource,
+      authorized.scope,
+      req.params.feedbackId,
+      parseResult.data,
+    )
+
+    if (!result.success) {
+      return res.status(feedbackFailureStatus[result.failure]).json({
+        status: false,
+        message: result.messageId,
+        data: {
+          failure: result.failure,
+          currentRevision: result.currentRevision,
+        },
+      })
+    }
+
+    return res.json({
+      status: true,
+      message: "feedback.message.classified",
+      data: { feedback: result.feedback },
+    })
+  } catch (error) {
+    console.error("CLASSIFY_FEEDBACK_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "feedback.error.internal",
+    })
+  }
+})
+
+router.patch("/:id/feedback/:feedbackId/close-no-action", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "feedback.classify",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  const parseResult = closeFeedbackSchema.safeParse(req.body)
+  if (!parseResult.success) return invalidFeedbackInput(res, parseResult.error)
+
+  try {
+    const result = await closeFeedbackWithoutAction(
+      authorized.resource,
+      authorized.scope,
+      req.params.feedbackId,
+      parseResult.data,
+    )
+
+    if (!result.success) {
+      return res.status(feedbackFailureStatus[result.failure]).json({
+        status: false,
+        message: result.messageId,
+        data: {
+          failure: result.failure,
+          currentRevision: result.currentRevision,
+        },
+      })
+    }
+
+    return res.json({
+      status: true,
+      message: "feedback.message.closed_no_action",
+      data: { feedback: result.feedback },
+    })
+  } catch (error) {
+    console.error("CLOSE_FEEDBACK_NO_ACTION_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "feedback.error.internal",
+    })
+  }
+})
+
+router.post("/:id/feedback/reentries", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "feedback.reentry",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  const parseResult = openFeedbackReentrySchema.safeParse(req.body)
+  if (!parseResult.success) return invalidFeedbackInput(res, parseResult.error)
+
+  try {
+    const result = await beginFeedbackReentry(
+      authorized.resource,
+      authorized.scope,
+      parseResult.data,
+    )
+
+    if (!result.success) {
+      return res.status(feedbackFailureStatus[result.failure]).json({
+        status: false,
+        message: result.messageId,
+        data: {
+          failure: result.failure,
+          currentRevision: result.currentRevision,
+        },
+      })
+    }
+
+    return res.status(201).json({
+      status: true,
+      message: "feedback.message.reentry_opened",
+      data: { feedback: result.feedback, reentry: result.reentry },
+    })
+  } catch (error) {
+    console.error("OPEN_FEEDBACK_REENTRY_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "feedback.error.internal",
+    })
+  }
+})
+
+router.post("/:id/feedback/reentries/:reentryId/complete", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "feedback.reentry",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  const parseResult = completeFeedbackReentrySchema.safeParse(req.body)
+  if (!parseResult.success) return invalidFeedbackInput(res, parseResult.error)
+
+  try {
+    const result = await finishFeedbackReentry(
+      authorized.resource,
+      authorized.scope,
+      req.params.reentryId,
+      parseResult.data,
+    )
+
+    if (!result.success) {
+      return res.status(feedbackFailureStatus[result.failure]).json({
+        status: false,
+        message: result.messageId,
+        data: {
+          failure: result.failure,
+          currentRevision: result.currentRevision,
+        },
+      })
+    }
+
+    return res.json({
+      status: true,
+      message: "feedback.message.reentry_completed",
+      data: { reentry: result.reentry },
+    })
+  } catch (error) {
+    console.error("COMPLETE_FEEDBACK_REENTRY_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "feedback.error.internal",
+    })
+  }
+})
+
 router.get("/:id/report/versions", async (req, res) => {
   const actingUser = await requireActingUser(req, res)
   if (!actingUser) return
@@ -1872,6 +2132,13 @@ const invalidReportInput = (res: Response, error: ZodError) =>
   res.status(400).json({
     status: false,
     message: "report.error.invalid_input",
+    errors: error.flatten(),
+  })
+
+const invalidFeedbackInput = (res: Response, error: ZodError) =>
+  res.status(400).json({
+    status: false,
+    message: "feedback.error.invalid_input",
     errors: error.flatten(),
   })
 

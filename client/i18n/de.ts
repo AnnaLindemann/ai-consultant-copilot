@@ -1,5 +1,6 @@
 import type { DiscoveryMessageId } from "../../shared/discovery-messages"
 import type { ConsultantReportMessageId } from "../../shared/consultant-report-messages"
+import type { FeedbackMessageId } from "../../shared/feedback-messages"
 import type { RoadmapMessageId } from "../../shared/implementation-roadmap-messages"
 import type { OpportunityMessageId } from "../../shared/opportunity-messages"
 import type { RecommendationMessageId } from "../../shared/recommendation-messages"
@@ -200,6 +201,43 @@ const consultantReportServerMessages: Record<ConsultantReportMessageId, string> 
     "Für dieses Engagement ist kein aktiver Client-Empfänger verknüpft.",
   "report.error.internal":
     "Unerwarteter Serverfehler. Der Report wurde nicht verändert. Bitte erneut versuchen.",
+}
+
+const feedbackServerMessages: Record<FeedbackMessageId, string> = {
+  "feedback.message.submitted": "Feedback eingereicht",
+  "feedback.message.loaded": "Feedback geladen",
+  "feedback.message.classified": "Feedback klassifiziert",
+  "feedback.message.closed_no_action": "Feedback ohne Re-Entry geschlossen",
+  "feedback.message.reentry_opened": "Re-Entry geöffnet",
+  "feedback.message.reentry_completed": "Re-Entry abgeschlossen",
+  "feedback.error.invalid_input":
+    "Das Feedback ist unvollständig oder ungültig.",
+  "feedback.error.invalid_idempotent_submission":
+    "Dieser Sendeversuch passt nicht zur ursprünglichen Feedback-Übermittlung.",
+  "feedback.error.publication_not_found":
+    "Die veröffentlichte Report-Fassung wurde nicht gefunden.",
+  "feedback.error.feedback_not_found": "Dieses Feedback wurde nicht gefunden.",
+  "feedback.error.feedback_not_classified":
+    "Das Feedback muss zuerst klassifiziert werden.",
+  "feedback.error.invalid_feedback_transition":
+    "Dieser Feedback-Schritt ist in diesem Status nicht erlaubt.",
+  "feedback.error.reentry_not_found": "Dieser Re-Entry wurde nicht gefunden.",
+  "feedback.error.reentry_already_open":
+    "Für dieses Feedback ist bereits ein Re-Entry offen.",
+  "feedback.error.reentry_sources_unavailable":
+    "Für dieses Engagement gibt es noch keine Report-Fassung, auf die sich ein Re-Entry beziehen könnte.",
+  "feedback.error.no_impacted_stages":
+    "Wählen Sie mindestens eine betroffene Stufe aus.",
+  "feedback.error.incomplete_reentry_outcome":
+    "Für jede betroffene Stufe muss ein Ergebnis dokumentiert werden.",
+  "feedback.error.invalid_result_artifact":
+    "Das Ergebnis verweist nicht auf eine gültige neue Fassung dieser Stufe.",
+  "feedback.error.missing_rationale":
+    "Erfassen Sie eine Begründung für diese Entscheidung.",
+  "feedback.error.stale_update":
+    "Dieses Feedback wurde inzwischen geändert. Laden Sie neu und versuchen Sie es erneut.",
+  "feedback.error.internal":
+    "Unerwarteter Serverfehler. Das Feedback wurde nicht verändert. Bitte erneut versuchen.",
 }
 
 // The outcomes the Organization, Engagement, Assessment and Analysis endpoints
@@ -1647,6 +1685,99 @@ const uiMessages = {
   "portal.documents.report": "Consultant Report, Fassung {version}",
   "portal.documents.published": "Veröffentlicht am {date}",
   "portal.documents.open": "PDF öffnen",
+  "portal.feedback.title": "Feedback zum Report",
+  "portal.feedback.hint":
+    "Ihr Feedback wird an die exakt veröffentlichte Fassung gebunden, die Sie hier sehen.",
+  "portal.feedback.label": "Feedback",
+  "portal.feedback.submit": "Feedback senden",
+  "portal.feedback.sending": "Wird gesendet …",
+  "portal.feedback.sent": "Feedback wurde eingereicht.",
+  "portal.feedback.error":
+    "Feedback konnte nicht gesendet werden. Bitte erneut versuchen.",
+  "portal.feedback.submitted_row":
+    "Eingereicht am {date} zu Fassung {version}. Status: {status}",
+
+  // --- Client Feedback & Engagement Evolution (Phase 9) -------------------
+  "feedback.eyebrow": "Rückmeldung & Weiterentwicklung",
+  "feedback.title": "Client Feedback",
+  "feedback.intro":
+    "Rückmeldungen zu veröffentlichten Report-Fassungen einordnen und einen kontrollierten Re-Entry in frühere Stufen planen. Es wird nichts automatisch geändert, angenommen oder veröffentlicht.",
+  "feedback.empty":
+    "Zu dieser veröffentlichten Report-Fassung liegt noch kein Feedback vor.",
+  "feedback.action.refresh": "Feedback aktualisieren",
+  "feedback.action.classify": "Klassifizieren",
+  "feedback.action.close_no_action": "Ohne Re-Entry schließen",
+  "feedback.action.open_reentry": "Re-Entry öffnen",
+  "feedback.action.complete_reentry": "Re-Entry abschließen",
+  "feedback.source.version":
+    "Feedback zu Report-Fassung {version}, veröffentlicht am {date}",
+  "feedback.submitted_by": "Eingereicht von {author} am {date}",
+  "feedback.field.classification": "Einordnung",
+  "feedback.field.impacted_stages": "Betroffene Stufen",
+  "feedback.field.summary": "Manager-Zusammenfassung",
+  "feedback.field.decision": "Manager-Entscheidung",
+  "feedback.field.reentry_plan": "Re-Entry-Plan",
+  "feedback.field.close_reason": "Begründung für den Abschluss ohne Re-Entry",
+  "feedback.field.completion_note": "Abschlussnotiz",
+  "feedback.field.outcome_reason": "Begründung",
+  "feedback.status.submitted": "Eingereicht",
+  "feedback.status.classified": "Klassifiziert",
+  "feedback.status.reentry_open": "Re-Entry offen",
+  "feedback.status.resolved": "Abgeschlossen",
+  "feedback.status.closed_no_action": "Ohne Änderung geschlossen",
+  "feedback.classification.unselected": "Bitte auswählen",
+  "feedback.classification.new_fact": "Neue Tatsache",
+  "feedback.classification.fact_correction": "Faktenkorrektur",
+  "feedback.classification.changed_condition": "Geänderte Bedingung",
+  "feedback.classification.disagreement": "Widerspruch",
+  "feedback.classification.clarification": "Klarstellung",
+  "feedback.classification.request": "Anfrage",
+  "feedback.classification.duplicate": "Duplikat",
+  "feedback.classification.no_engagement_change_required":
+    "Keine Engagement-Änderung nötig",
+  "feedback.stage.discovery": "Discovery",
+  "feedback.stage.assessment": "Assessment",
+  "feedback.stage.opportunities": "Opportunities",
+  "feedback.stage.recommendations": "Empfehlungen",
+  "feedback.stage.roadmap": "Roadmap",
+  "feedback.stage.report": "Report",
+  // The three separate answers: what the Manager declared, what is actually
+  // stale, and how the commented-on report stands today.
+  "feedback.impact.declared": "Vom Manager als betroffen erklärt",
+  "feedback.impact.declared_none": "Noch keine Stufe erklärt",
+  "feedback.impact.technical": "Technisch veraltet",
+  "feedback.impact.technical_none": "Keine Stufe technisch veraltet",
+  "feedback.impact.source_report": "Kommentierte Report-Fassung",
+  "feedback.impact.source_report_current": "Weiterhin die aktuelle Fassung",
+  "feedback.reentry.open_title": "Offene Re-Entries",
+  "feedback.reentry.row": "Betroffene Stufen: {stages}",
+  "feedback.reentry.plan_hint":
+    "Der Plan beschreibt, was überprüft wird. Die Überarbeitung selbst erfolgt weiterhin über die bestehenden Stufen-Workflows.",
+  "feedback.reentry.outcome.completed": "Mit neuer Fassung abgeschlossen",
+  "feedback.reentry.outcome.waived": "Erlassen",
+  "feedback.reentry.outcome.no_change_confirmed": "Keine Änderung bestätigt",
+  "feedback.result.version": "Angenommene Fassung {version}",
+  "feedback.result.revision": "Angenommene Revision {revision}",
+  "feedback.result.accepted_state": "Angenommener Stand",
+  "feedback.result.none": "Kein Ergebnis verfügbar",
+  "feedback.result.unavailable.artifact_missing":
+    "Für diese Stufe existiert noch keine Fassung.",
+  "feedback.result.unavailable.not_accepted":
+    "Die aktuelle Fassung dieser Stufe ist noch nicht angenommen.",
+  "feedback.result.unavailable.unchanged_since_source":
+    "Diese Stufe hat sich seit dem Öffnen des Re-Entry nicht geändert.",
+  // Each reason names the artifact that actually changed beneath the stage.
+  "feedback.staleness.discovery_changed": "Discovery geändert",
+  "feedback.staleness.assessment_changed": "Assessment geändert",
+  "feedback.staleness.opportunity_version_changed":
+    "Opportunity-Fassung geändert",
+  "feedback.staleness.recommendation_version_changed":
+    "Empfehlungsfassung geändert",
+  "feedback.staleness.roadmap_version_changed": "Roadmap-Fassung geändert",
+  "feedback.source_report.source_report_superseded":
+    "Es gibt inzwischen eine neuere Report-Fassung",
+  "feedback.source_report.source_report_sources_changed":
+    "Die Quellen dieser Report-Fassung haben sich geändert",
 
   // --- Business & AI Readiness Assessment (Phase 3) -----------------------
   "assessment.eyebrow": "Geschäfts- & KI-Reife",
@@ -1995,6 +2126,7 @@ export const de = {
   ...recommendationServerMessages,
   ...roadmapServerMessages,
   ...consultantReportServerMessages,
+  ...feedbackServerMessages,
   ...workbenchServerMessages,
   ...uiMessages,
 }

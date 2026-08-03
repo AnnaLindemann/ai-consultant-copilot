@@ -401,6 +401,18 @@ mock.module("../services/consultant-report.service.js", {
   },
 })
 
+mock.module("../services/feedback.service.js", {
+  namedExports: {
+    beginFeedbackReentry: async () => ({ success: false, failure: "feedback_not_found" }),
+    closeFeedbackWithoutAction: async () => ({ success: false, failure: "feedback_not_found" }),
+    finishFeedbackReentry: async () => ({ success: false, failure: "reentry_not_found" }),
+    getClientPortalFeedback: async () => [],
+    getFeedbackStageState: async () => ({ feedback: [], openReentries: [] }),
+    reviewFeedback: async () => ({ success: false, failure: "feedback_not_found" }),
+    submitFeedback: async () => ({ success: false, failure: "publication_not_found" }),
+  },
+})
+
 mock.module("../services/access.service.js", {
   namedExports: {
     listWorkspaceUsers: async () => [],

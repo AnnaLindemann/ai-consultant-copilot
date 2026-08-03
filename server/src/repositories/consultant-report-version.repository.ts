@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma.js"
 import { engagementScopeWhere } from "./engagement.repository.js"
 
+import type { DatabaseClient } from "../lib/prisma.js"
 import type { EngagementScope } from "../domain/access/access.js"
 import type { AuditEventType } from "../../../shared/access.schema.js"
 import type {
@@ -429,8 +430,9 @@ export const getReportVersionById = async (
   versionId: string,
   engagementId: string,
   scope: EngagementScope,
+  client: DatabaseClient = prisma,
 ): Promise<ReportVersionDetail | null> => {
-  const version = await prisma.consultantReportVersion.findFirst({
+  const version = await client.consultantReportVersion.findFirst({
     where: { id: versionId, engagementId, engagement: engagementScopeWhere(scope) },
     include: withRelations,
   })
@@ -826,7 +828,7 @@ const toVersionSummary = (version: ReportVersionRow): ReportVersionSummary => ({
   lastModifiedAt: version.lastModifiedAt.toISOString(),
   lastModifiedByUserId: version.lastModifiedByUserId,
   lastModifiedByName: actorName(version.lastModifiedBy),
-  sourceSnapshot: sourceSnapshotOf(version),
+  sourceSnapshot: reportVersionSourceSnapshot(version),
   analysisRunId: version.analysisRunId,
   followUpQuestionCount: reportOf(version).followUpQuestions.length,
   publication:
@@ -843,7 +845,13 @@ const toVersionDetail = (version: ReportVersionRow): ReportVersionDetail => ({
 const reportOf = (version: ReportVersionRow): ConsultantReportContent =>
   version.content as unknown as ConsultantReportContent
 
-const sourceSnapshotOf = (version: {
+// How a stored ReportVersion's source snapshot is read back: the persisted JSON
+// where it exists, over a fallback rebuilt from the snapshot columns for
+// versions written before the JSON column did. It is exported because it is the
+// *only* correct way to answer "what was this version built from" — a second
+// copy would drift, and the two answers would disagree about whether anything
+// had changed (coding-standards.md §4 "one home per concept").
+export const reportVersionSourceSnapshot = (version: {
   sourceDiscoveryFingerprint: string
   sourceAssessmentRevision: number
   sourceAssessmentFingerprint: string

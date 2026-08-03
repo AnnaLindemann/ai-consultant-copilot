@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client"
 
 import { prisma } from "../lib/prisma.js"
 
+import type { DatabaseClient } from "../lib/prisma.js"
 import type {
   CreateEngagementInput,
   UpdateEngagementInput,
@@ -152,8 +153,9 @@ export const getEngagementsByOrganizationId = async (
 export const getEngagementById = async (
   id: string,
   scope: EngagementScope,
+  client: DatabaseClient = prisma,
 ): Promise<EngagementWithOrganization | null> => {
-  return prisma.engagement.findFirst({
+  return client.engagement.findFirst({
     where: { id, ...engagementScopeWhere(scope) },
     include: { organization: true },
   })

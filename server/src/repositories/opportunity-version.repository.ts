@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma.js"
 import { engagementScopeWhere } from "./engagement.repository.js"
 
+import type { DatabaseClient } from "../lib/prisma.js"
 import type { EngagementScope } from "../domain/access/access.js"
 import type {
   OpportunityPrioritization,
@@ -248,8 +249,9 @@ export const getOpportunityVersionById = async (
   versionId: string,
   engagementId: string,
   scope: EngagementScope,
+  client: DatabaseClient = prisma,
 ): Promise<OpportunityVersionDetail | null> => {
-  const version = await prisma.opportunityVersion.findFirst({
+  const version = await client.opportunityVersion.findFirst({
     where: {
       id: versionId,
       engagementId,

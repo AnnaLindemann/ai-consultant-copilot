@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma.js"
 import { engagementScopeWhere } from "./engagement.repository.js"
 
+import type { DatabaseClient } from "../lib/prisma.js"
 import type { EngagementScope } from "../domain/access/access.js"
 import type {
   RecommendationReviewState,
@@ -254,8 +255,9 @@ export const getRecommendationVersionById = async (
   versionId: string,
   engagementId: string,
   scope: EngagementScope,
+  client: DatabaseClient = prisma,
 ): Promise<RecommendationVersionDetail | null> => {
-  const version = await prisma.recommendationVersion.findFirst({
+  const version = await client.recommendationVersion.findFirst({
     where: {
       id: versionId,
       engagementId,

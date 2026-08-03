@@ -6,6 +6,7 @@ import {
   saveDiscoveryProfileSchema,
   submitDiscoverySchema,
 } from "../schemas/discovery.schema.js"
+import { submitClientFeedbackSchema } from "../schemas/consultant-report.schema.js"
 import { requireActingUser } from "../lib/auth-context.js"
 import { failureIdentity } from "../lib/failure-identity.js"
 import { appendAuditTrail } from "../repositories/access.repository.js"
@@ -27,6 +28,10 @@ import {
   getPublishedPortalDocument,
   renderPublishedReportPdf,
 } from "../services/consultant-report.service.js"
+import {
+  getClientPortalFeedback,
+  submitFeedback,
+} from "../services/feedback.service.js"
 
 const router = Router()
 
@@ -285,6 +290,115 @@ router.get("/engagements/:id/documents/:versionId/pdf", async (req, res) => {
     return res.status(500).json({
       status: false,
       message: "portal.error.internal",
+    })
+  }
+})
+
+router.post("/engagements/:id/feedback", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizePortalDocumentAction(
+    actingUser,
+    "portal.feedback.submit",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  const parseResult = submitClientFeedbackSchema.safeParse(req.body)
+  if (!parseResult.success) return invalidPortalInput(res, parseResult.error)
+
+  try {
+    const discoveryAuthorized = await authorizePortalDiscoveryAction(
+      actingUser,
+      "portal.discovery.read",
+      req.params.id,
+    )
+    if (!discoveryAuthorized.permitted) return denyRequest(res, discoveryAuthorized)
+
+    const result = await submitFeedback(
+      discoveryAuthorized.resource,
+      discoveryAuthorized.scope,
+      parseResult.data,
+    )
+
+    if (!result.success) {
+      return res.status(result.failure === "publication_not_found" ? 404 : 409).json({
+        status: false,
+        message: result.messageId,
+        data: { failure: result.failure },
+      })
+    }
+
+    // Only a newly created Feedback notifies. An idempotent replay is the same
+    // Feedback arriving twice, and the Manager is not told twice. Raising it is
+    // best-effort by construction, so a failed notification never undoes the
+    // Feedback that is already persisted (architecture.md §7A.7).
+    if (result.created) {
+      await raiseNotification({
+        workspaceId: discoveryAuthorized.resource.workspaceId,
+        userId: discoveryAuthorized.resource.owningManagerId,
+        engagementId: discoveryAuthorized.resource.id,
+        kind: "client_feedback_submitted",
+        payload: {
+          feedbackId: result.feedback.id,
+          publicationId: result.feedback.sourcePublicationId,
+        },
+      })
+    }
+
+    // `result.feedback` is a `ClientPortalFeedbackSummary` all the way from the
+    // repository's narrow `select`, so no internal field exists to leak here —
+    // on creation or on replay of an already-classified Feedback.
+    return res.status(result.created ? 201 : 200).json({
+      status: true,
+      message: "feedback.message.submitted",
+      data: { feedback: result.feedback },
+    })
+  } catch (error) {
+    console.error("PORTAL_SUBMIT_FEEDBACK_FAILED", {
+      engagementId: req.params.id,
+      ...failureIdentity(error),
+    })
+
+    return res.status(500).json({
+      status: false,
+      message: "feedback.error.internal",
+    })
+  }
+})
+
+router.get("/engagements/:id/feedback", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizePortalDiscoveryAction(
+    actingUser,
+    "portal.discovery.read",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  try {
+    const feedback = await getClientPortalFeedback(
+      authorized.resource,
+      authorized.scope,
+    )
+
+    return res.json({
+      status: true,
+      message: "feedback.message.loaded",
+      data: { feedback },
+    })
+  } catch (error) {
+    console.error("PORTAL_LOAD_FEEDBACK_FAILED", {
+      engagementId: req.params.id,
+      ...failureIdentity(error),
+    })
+
+    return res.status(500).json({
+      status: false,
+      message: "feedback.error.internal",
     })
   }
 })

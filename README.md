@@ -462,6 +462,8 @@ account-lifecycle endpoints requires an authenticated session cookie.
 | GET    | `/portal/engagements/:id/discovery` | Client Discovery Portal: read your own Discovery. |
 | PATCH  | `/portal/engagements/:id/discovery` | Client Discovery Portal: save your own Discovery. |
 | POST   | `/portal/engagements/:id/discovery/submit` | Client Discovery Portal: submit for review. |
+| POST   | `/portal/engagements/:id/feedback` | Client Portal: submit feedback on a published report version. |
+| GET    | `/portal/engagements/:id/feedback` | Client Portal: your own submitted feedback, client-safe fields only. |
 | GET    | `/organizations`                  | List organizations.                            |
 | POST   | `/organizations`                  | Create an organization.                        |
 | GET    | `/organizations/:id`              | Get one organization.                          |
@@ -485,6 +487,11 @@ account-lifecycle endpoints requires an authenticated session cookie.
 | PATCH  | `/engagements/:id/recommendations`| Save the consultant's reviewed, re-grounded Recommendations. |
 | GET    | `/engagements/:id/recommendations/versions` | The engagement's Recommendation version history. |
 | GET    | `/engagements/:id/recommendations/versions/:versionId` | One preserved Recommendation version. |
+| GET    | `/engagements/:id/feedback`       | Client Feedback and open re-entries for this engagement (`ADMIN`, `MANAGER`). |
+| PATCH  | `/engagements/:id/feedback/:feedbackId/classification` | Classify feedback and declare the impacted stages (revision-checked). |
+| PATCH  | `/engagements/:id/feedback/:feedbackId/close-no-action` | Close feedback without re-entry, with a required reason. |
+| POST   | `/engagements/:id/feedback/reentries` | Open a re-entry for classified feedback, recording the source versions. |
+| POST   | `/engagements/:id/feedback/reentries/:reentryId/complete` | Record an outcome per impacted stage and complete the re-entry. |
 | POST   | `/engagements/:id/analyze`        | Run the AI analysis for an engagement.         |
 | GET    | `/engagements/:id/analysis-runs`  | List the engagement's Analysis Runs.           |
 | GET    | `/knowledge`                      | Browse the curated Consulting Knowledge Base (`ADMIN`, `MANAGER`). |
@@ -493,6 +500,88 @@ account-lifecycle endpoints requires an authenticated session cookie.
 | PATCH  | `/knowledge/entries/:code`        | Edit or deactivate a curated entry (`ADMIN`, revision-checked). |
 | GET    | `/knowledge/engagements/:id/discovery-package` | The knowledge package retrieved for this engagement's Discovery. |
 | GET    | `/knowledge/engagements/:id/assessment-package` | The knowledge package retrieved for this engagement's Assessment. |
+
+## Client Feedback & Engagement Evolution (Phase 9)
+
+An engagement does not end with the first delivered report. A Client can leave
+feedback on a report version they actually received, and the owning Manager
+turns that into a controlled re-entry into earlier stages.
+
+**Nothing in Phase 9 changes an accepted artifact.** Submitting, classifying,
+declaring impacted stages, opening a re-entry and recording outcomes all write
+only feedback and re-entry records. Revising Discovery, the Assessment, the
+Opportunities, the Recommendations, the Roadmap or the Report still happens
+through those stages' own workflows, produces new versions, and requires the
+same explicit approval and publication as before. No Phase 9 action generates,
+accepts, approves or publishes anything, and none of them records an Analysis
+Run — they are deterministic, not AI-assisted.
+
+### Lifecycle
+
+```text
+submitted → classified → reentry_open → resolved
+submitted | classified → closed_no_action
+```
+
+`resolved` and `closed_no_action` are terminal; reopening is not a supported
+operation and is refused. Every transition is revision-checked, so two Managers
+acting at once cannot produce conflicting state, and each one appends its audit
+event in the same transaction as the state change.
+
+### What binds a Feedback
+
+A submission is accepted only when the server can prove the whole chain: an
+authenticated Client, an active Discovery Access, the same workspace and
+engagement, an **active** (non-revoked) `DocumentPublication` published to
+**that exact Client**, referencing an **approved** `ConsultantReportVersion`.
+The report version, its number and the publication timestamp are read from the
+publication — a Client supplies only the publication id, a retry key and the
+text.
+
+Retries are idempotent per `(publication, submitter, retry key)`, so a resent
+request returns the same Feedback instead of creating a second one. Reusing a
+key with different text is refused rather than silently answered with the
+earlier record. Two deliberate submissions with the same text under different
+keys are two separate, immutable records; a correction is a new Feedback, never
+an edit of the original.
+
+### What the Client Portal returns
+
+The portal answers with a narrow client-safe payload — id, lifecycle status,
+the submitted text, the submission date, the publication id and the report
+version number. Classification, declared impacted stages, Manager summary and
+decision, close-no-action reason, reviewer identity, artifact identifiers,
+source fingerprints, revision counters, technical staleness and re-entry
+records are never included, on first submission or on an idempotent replay of
+an already-classified Feedback.
+
+### Declared impact, technical staleness and the source report
+
+The Manager view separates three answers that are easy to confuse:
+
+- **Declared impacted stages** — what the Manager decided must be reviewed.
+- **Technical staleness** — whether a stage's recorded source has actually
+  moved on, taken from the same per-stage predicates the Opportunity,
+  Recommendation, Roadmap and Report panels already use. Each reason names the
+  artifact that changed, not the stage that went stale.
+- **Source report state** — whether the published version the Client commented
+  on has been superseded, or its sources have since changed.
+
+Declaring a stage impacted never makes anything technically stale.
+
+### Completing a re-entry
+
+Every declared stage needs an explicit outcome: `completed`, `waived` or
+`no_change_confirmed`, the last two with a Manager-authored reason. A completed
+stage references the version the engagement actually holds — the active,
+accepted (approved, for a report) version, selected from options the server
+supplies. Discovery and the Assessment carry no separate version record, so
+their result identity (content fingerprint, and the Assessment revision) is
+derived server-side from accepted engagement state; no identifier is typed by
+hand. Completion is refused when a stage has no outcome, when the result is not
+accepted, when it is the same version the re-entry started from, when it belongs
+to another engagement or workspace, or when it does not exist.
+
 
 ## Scripts
 

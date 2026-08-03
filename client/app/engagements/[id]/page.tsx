@@ -7,6 +7,7 @@ import OpportunityPanel from "../../../components/OpportunityPanel"
 import RecommendationPanel from "../../../components/RecommendationPanel"
 import RoadmapPanel from "../../../components/RoadmapPanel"
 import ConsultantReportPanel from "../../../components/ConsultantReportPanel"
+import FeedbackPanel from "../../../components/FeedbackPanel"
 import ManagerShell from "../../../components/ManagerShell"
 import {
   stageEyebrowStyle,
@@ -36,6 +37,7 @@ import type { OpportunityVersionState } from "../../../../shared/opportunity.sch
 import type { RecommendationStageState } from "../../../../shared/recommendation.schema"
 import type { RoadmapStageState } from "../../../../shared/implementation-roadmap.schema"
 import type { ReportStageState } from "../../../../shared/consultant-report.schema"
+import type { FeedbackStageState } from "../../../../shared/feedback.schema"
 
 type EngagementDetails = {
   id: string
@@ -56,6 +58,7 @@ type EngagementDetails = {
   recommendations: RecommendationStageState
   roadmap: RoadmapStageState
   report: ReportStageState
+  feedback: FeedbackStageState
   createdAt: string
   updatedAt: string
   organization: {
@@ -264,6 +267,11 @@ export default async function EngagementDetailsPage({
           key={`${engagement.report.activeVersion?.id ?? "none"}:${engagement.report.activeVersion?.revision ?? "0"}:${engagement.report.stale ? "1" : "0"}:${engagement.report.activePublication?.id ?? "none"}`}
           engagementId={engagement.id}
           initialStageState={engagement.report}
+        />
+        <FeedbackPanel
+          key={`feedback:${engagement.feedback.feedback.length}:${engagement.feedback.openReentries.length}:${engagement.report.activeVersion?.id ?? "none"}`}
+          engagementId={engagement.id}
+          initialStageState={engagement.feedback}
         />
         <EngagementAnalysisPanel
           engagementId={engagement.id}

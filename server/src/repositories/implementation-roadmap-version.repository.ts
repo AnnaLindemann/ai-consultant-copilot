@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma.js"
 import { engagementScopeWhere } from "./engagement.repository.js"
 
+import type { DatabaseClient } from "../lib/prisma.js"
 import type { EngagementScope } from "../domain/access/access.js"
 import type {
   Roadmap,
@@ -257,8 +258,9 @@ export const getRoadmapVersionById = async (
   versionId: string,
   engagementId: string,
   scope: EngagementScope,
+  client: DatabaseClient = prisma,
 ): Promise<RoadmapVersionDetail | null> => {
-  const version = await prisma.implementationRoadmapVersion.findFirst({
+  const version = await client.implementationRoadmapVersion.findFirst({
     where: {
       id: versionId,
       engagementId,

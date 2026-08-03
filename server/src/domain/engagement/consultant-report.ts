@@ -383,10 +383,15 @@ const resolveFollowUpQuestions = (
 export const sourceGaps = (sources: ReportSourceBundle) =>
   sourceGapRecords(sources).map((gap) => gap.description)
 
-const discoveryFingerprint = (discovery: DiscoveryProfile): string =>
+// Exported because the report source snapshot is the reference definition of
+// what Discovery and the Assessment currently fingerprint to. Anything that
+// compares against a report snapshot — including a Feedback re-entry deciding
+// whether Discovery has actually moved — must use the same formula, or the two
+// answers disagree about whether anything changed (coding-standards.md §4).
+export const discoveryFingerprint = (discovery: DiscoveryProfile): string =>
   createSha256Hash(canonicalStageContent(discovery))
 
-const assessmentFingerprint = (assessment: Assessment): string =>
+export const assessmentFingerprint = (assessment: Assessment): string =>
   createSha256Hash(canonicalAssessmentContent(assessment))
 
 const opportunityFingerprint = (version: OpportunityVersionDetail): string =>

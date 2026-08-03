@@ -230,6 +230,30 @@ enum DocumentNotificationOutcome {
   failed
 }
 
+enum ClientFeedbackStatus {
+  submitted
+  classified
+  reentry_open
+  resolved
+  closed_no_action
+}
+
+enum ClientFeedbackClassification {
+  new_fact
+  fact_correction
+  changed_condition
+  disagreement
+  clarification
+  request
+  duplicate
+  no_engagement_change_required
+}
+
+enum FeedbackReentryStatus {
+  open
+  completed
+}
+
 // Where an engagement currently stands in the consulting methodology
 // (domain-model.md §3). Phase 1 only tracks the stage marker; later phases
 // add the content each stage produces. `discovery` is the first stage, so a
@@ -390,6 +414,8 @@ model Engagement {
   documentPublications   DocumentPublication[]
   reportPdfArtifacts     ReportPdfArtifact[]
   documentNotificationAttempts DocumentNotificationAttempt[]
+  clientFeedback         ClientFeedback[]
+  feedbackReentries      FeedbackReentry[]
 
   invitations       ClientInvitation[]
   discoveryAccesses DiscoveryAccess[]
@@ -404,6 +430,112 @@ model Engagement {
   @@index([createdAt])
   @@index([sensitiveData])
   @@index([gdprConcerns])
+}
+
+model ClientFeedback {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  sourcePublicationId String
+  sourcePublication   DocumentPublication @relation(fields: [sourcePublicationId], references: [id], onDelete: Restrict)
+
+  sourceReportVersionId String
+  sourceReportVersion   ConsultantReportVersion @relation(fields: [sourceReportVersionId], references: [id], onDelete: Restrict)
+  sourceReportVersionNumber Int
+  sourceReportVersionPublishedAt DateTime
+
+  submittedByUserId String
+  submittedBy       User   @relation("ClientFeedbackSubmittedBy", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  submittedAt       DateTime @default(now())
+  submissionKey     String
+  submissionContentHash String
+  originalContent   String
+
+  status ClientFeedbackStatus @default(submitted)
+  classification ClientFeedbackClassification?
+  impactedStages Json @default("[]")
+  managerSummary String?
+  managerDecision String?
+  closedNoActionReason String?
+  reviewedAt DateTime?
+  reviewedByUserId String?
+  reviewedBy User? @relation("ClientFeedbackReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  revision Int @default(0)
+
+  reentries FeedbackReentry[]
+
+  @@index([workspaceId])
+  @@index([engagementId])
+  @@index([sourcePublicationId])
+  @@index([sourceReportVersionId])
+  @@index([submittedByUserId])
+  @@index([status])
+  @@index([submittedAt])
+  // Idempotency is scoped to one publication and one submitter, so a retry key
+  // cannot collide across clients, engagements or workspaces: the publication
+  // fixes all three. Named explicitly because Prisma's derived name would
+  // exceed PostgreSQL's identifier limit and be truncated.
+  @@unique([sourcePublicationId, submittedByUserId, submissionKey], map: "ClientFeedback_publication_submitter_key_unique")
+}
+
+model FeedbackReentry {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  feedbackId String
+  feedback   ClientFeedback @relation(fields: [feedbackId], references: [id], onDelete: Restrict)
+
+  status FeedbackReentryStatus @default(open)
+  impactedStages Json
+  plan String
+  outcomes Json @default("[]")
+
+  sourceDiscoveryFingerprint String
+  sourceAssessmentRevision Int
+  sourceAssessmentFingerprint String
+  sourceOpportunityVersionId String?
+  sourceRecommendationVersionId String?
+  sourceRoadmapVersionId String?
+
+  // The published ReportVersion the re-entry started from. A real relation, so
+  // the lineage `Feedback → source version → result version` cannot be left
+  // pointing at nothing. `Restrict` matches the historical-version model: a
+  // version that a re-entry records is preserved, never cascade-deleted.
+  sourceReportVersionId String
+  sourceReportVersion   ConsultantReportVersion @relation("FeedbackReentrySourceReportVersion", fields: [sourceReportVersionId], references: [id], onDelete: Restrict)
+
+  openedAt DateTime @default(now())
+  openedByUserId String
+  openedBy User @relation("FeedbackReentryOpenedBy", fields: [openedByUserId], references: [id], onDelete: Restrict)
+
+  completedAt DateTime?
+  completedByUserId String?
+  completedBy User? @relation("FeedbackReentryCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
+  completionNote String?
+
+  revision Int @default(0)
+
+  @@index([workspaceId])
+  @@index([engagementId])
+  @@index([feedbackId])
+  @@index([status])
+  @@index([openedAt])
+  @@index([sourceReportVersionId])
 }
 
 // The curated Consulting Knowledge Base (roadmap Phase 5). It is its own table
@@ -852,6 +984,8 @@ model ConsultantReportVersion {
 
   publications DocumentPublication[]
   pdfArtifacts  ReportPdfArtifact[]
+  clientFeedback ClientFeedback[]
+  feedbackReentries FeedbackReentry[] @relation("FeedbackReentrySourceReportVersion")
 
   @@unique([engagementId, versionNumber])
   @@index([engagementId, status])
@@ -900,6 +1034,7 @@ model DocumentPublication {
   emailNotificationFailure     String?
 
   notificationAttempts DocumentNotificationAttempt[]
+  clientFeedback ClientFeedback[]
 
   @@index([workspaceId])
   @@index([engagementId])
@@ -1126,6 +1261,8 @@ model Workspace {
   documentPublications   DocumentPublication[]
   reportPdfArtifacts     ReportPdfArtifact[]
   documentNotificationAttempts DocumentNotificationAttempt[]
+  clientFeedback         ClientFeedback[]
+  feedbackReentries      FeedbackReentry[]
   invitations            ClientInvitation[]
   discoveryAccesses      DiscoveryAccess[]
   notifications          Notification[]
@@ -1175,6 +1312,10 @@ model User {
   publishedDocuments             DocumentPublication[]          @relation("DocumentPublishedBy")
   revokedDocumentPublications    DocumentPublication[]          @relation("DocumentRevokedBy")
   clientDocumentPublications     DocumentPublication[]          @relation("DocumentPublishedForClient")
+  submittedClientFeedback        ClientFeedback[]               @relation("ClientFeedbackSubmittedBy")
+  reviewedClientFeedback         ClientFeedback[]               @relation("ClientFeedbackReviewedBy")
+  openedFeedbackReentries        FeedbackReentry[]              @relation("FeedbackReentryOpenedBy")
+  completedFeedbackReentries     FeedbackReentry[]              @relation("FeedbackReentryCompletedBy")
   notifications                  Notification[]
   auditTrails                    AuditTrail[]
   curatedKnowledgeEntries        ConsultingKnowledgeEntry[] @relation("ConsultingKnowledgeCuratedBy")

@@ -3,6 +3,7 @@ import Link from "next/link"
 import type { CSSProperties } from "react"
 
 import ClientDiscoveryWorkspace from "../../../../components/ClientDiscoveryWorkspace"
+import ClientFeedbackForm from "../../../../components/ClientFeedbackForm"
 import ClientPortalShell from "../../../../components/ClientPortalShell"
 import {
   EmptyState,
@@ -14,6 +15,7 @@ import { uiColors, uiRadius, uiSpace } from "../../../../lib/design-tokens"
 import { portalDocumentView } from "../../../../lib/portal-documents"
 import type { DiscoveryProfile } from "../../../../../shared/discovery-profile.schema"
 import type { DiscoveryWorkflowState } from "../../../../../shared/discovery-workflow.schema"
+import type { ClientPortalFeedbackSummary } from "../../../../../shared/feedback.schema"
 
 type PortalDiscoveryResponse = {
   status: boolean
@@ -41,6 +43,14 @@ type PortalDocumentsResponse = {
   message?: string
 }
 
+type PortalFeedbackResponse = {
+  status: boolean
+  data?: {
+    feedback: ClientPortalFeedbackSummary[]
+  }
+  message?: string
+}
+
 type PortalPageProps = {
   params: Promise<{
     id: string
@@ -55,9 +65,10 @@ export default async function PortalEngagementDiscoveryPage({
 }: PortalPageProps) {
   const { id } = await params
   const cookieHeader = await serializeCookies()
-  const [discovery, documents] = await Promise.all([
+  const [discovery, documents, feedback] = await Promise.all([
     loadPortalDiscovery(id, cookieHeader),
     loadPortalDocuments(id, cookieHeader),
+    loadPortalFeedback(id, cookieHeader),
   ])
 
   // Whether the access was revoked, expired, never granted, or the caller is
@@ -85,7 +96,7 @@ export default async function PortalEngagementDiscoveryPage({
       title={t("portal.title")}
       description={t("portal.subtitle")}
     >
-      <DocumentsSection engagementId={id} documents={documents} />
+      <DocumentsSection engagementId={id} documents={documents} feedback={feedback} />
       {discovery && (
         <ClientDiscoveryWorkspace
           engagementId={id}
@@ -131,12 +142,31 @@ async function loadPortalDocuments(
   return result.data?.documents ?? []
 }
 
+async function loadPortalFeedback(
+  engagementId: string,
+  cookieHeader: string,
+): Promise<ClientPortalFeedbackSummary[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/portal/engagements/${engagementId}/feedback`,
+    {
+      cache: "no-store",
+      headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+    },
+  )
+  if (!response.ok) return []
+
+  const result = (await response.json()) as PortalFeedbackResponse
+  return result.data?.feedback ?? []
+}
+
 function DocumentsSection({
   engagementId,
   documents,
+  feedback,
 }: {
   engagementId: string
   documents: PortalDocument[]
+  feedback: ClientPortalFeedbackSummary[]
 }) {
   return (
     <section style={documentsStyle}>
@@ -174,6 +204,28 @@ function DocumentsSection({
               >
                 {view.openLabel}
               </a>
+              <div style={feedbackWrapperStyle}>
+                <h3 style={feedbackTitleStyle}>{t("portal.feedback.title")}</h3>
+                {feedback
+                  .filter((item) => item.sourcePublicationId === document.id)
+                  .map((item) => (
+                    <div key={item.id} style={submittedFeedbackStyle}>
+                      <p style={mutedTextStyle}>
+                        {t("portal.feedback.submitted_row", {
+                          date: formatDateTime(item.submittedAt),
+                          version: item.sourceReportVersionNumber,
+                          status: t(`feedback.status.${item.status}`),
+                        })}
+                      </p>
+                      <p style={submittedFeedbackTextStyle}>{item.content}</p>
+                    </div>
+                  ))}
+                <ClientFeedbackForm
+                  engagementId={engagementId}
+                  publicationId={document.id}
+                  apiBaseUrl={API_BASE_URL}
+                />
+              </div>
             </div>
           )
         })
@@ -223,4 +275,31 @@ const documentTitleStyle: CSSProperties = {
   color: uiColors.textPrimary,
   fontSize: 14,
   fontWeight: 650,
+}
+
+const feedbackWrapperStyle: CSSProperties = {
+  flexBasis: "100%",
+}
+
+const feedbackTitleStyle: CSSProperties = {
+  margin: `${uiSpace.sm} 0 0`,
+  color: uiColors.textPrimary,
+  fontSize: 14,
+  fontWeight: 650,
+}
+
+const submittedFeedbackStyle: CSSProperties = {
+  display: "grid",
+  gap: uiSpace.xs,
+  marginTop: uiSpace.sm,
+  padding: uiSpace.sm,
+  borderRadius: uiRadius.control,
+  border: `1px solid ${uiColors.border}`,
+  background: uiColors.surface,
+}
+
+const submittedFeedbackTextStyle: CSSProperties = {
+  margin: 0,
+  color: uiColors.textPrimary,
+  whiteSpace: "pre-wrap",
 }

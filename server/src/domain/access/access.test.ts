@@ -249,6 +249,9 @@ test("a Client reaches nothing in the consultant workbench", () => {
     "discovery.submit",
     "discovery.review",
     "analysis_run.read",
+    "feedback.read",
+    "feedback.classify",
+    "feedback.reentry",
     "organization.read",
     "organization.create",
   ]
@@ -262,6 +265,34 @@ test("a Client reaches nothing in the consultant workbench", () => {
       "role_not_permitted",
     )
   }
+})
+
+test("Client Feedback is submitted by Clients and controlled by the Manager", () => {
+  assert.equal(
+    decideAccess(client, "portal.feedback.submit", discoveryTarget(activeAccess))
+      .permitted,
+    true,
+  )
+
+  for (const action of ["feedback.read", "feedback.classify", "feedback.reentry"] as const) {
+    assert.equal(
+      decideAccess(owningManager, action, ownedEngagement).permitted,
+      true,
+      `${action} was not available to the owning Manager`,
+    )
+  }
+
+  assert.equal(
+    decideAccess(client, "feedback.classify", ownedEngagement).permitted,
+    false,
+    "a Client classified feedback in the consultant workbench",
+  )
+  assert.equal(
+    decideAccess(owningManager, "portal.feedback.submit", discoveryTarget(activeAccess))
+      .permitted,
+    false,
+    "a Manager submitted feedback through the client portal",
+  )
 })
 
 test("a Client cannot reach the discovery of an engagement they are not associated with", () => {

@@ -101,6 +101,9 @@ export type AccessAction =
   | "report.publish"
   | "report.revoke_publication"
   | "report.export_pdf"
+  | "feedback.read"
+  | "feedback.classify"
+  | "feedback.reentry"
   | "organization.read"
   | "organization.create"
   | "knowledge.read"
@@ -127,6 +130,7 @@ export type AccessAction =
   | "portal.discovery.submit"
   | "portal.documents.read"
   | "portal.documents.download"
+  | "portal.feedback.submit"
 
 // What the action is aimed at. The kind decides how a refusal is disclosed: a
 // refusal about a named resource must be indistinguishable from that resource
@@ -208,6 +212,9 @@ const ROLES_PERMITTED: Record<AccessAction, readonly UserRole[]> = {
   "report.publish": ["ADMIN", "MANAGER"],
   "report.revoke_publication": ["ADMIN", "MANAGER"],
   "report.export_pdf": ["ADMIN", "MANAGER"],
+  "feedback.read": ["ADMIN", "MANAGER"],
+  "feedback.classify": ["ADMIN", "MANAGER"],
+  "feedback.reentry": ["ADMIN", "MANAGER"],
   "organization.read": ["ADMIN", "MANAGER"],
   "organization.create": ["ADMIN", "MANAGER"],
   "knowledge.read": ["ADMIN", "MANAGER"],
@@ -240,6 +247,7 @@ const ROLES_PERMITTED: Record<AccessAction, readonly UserRole[]> = {
   "portal.discovery.submit": ["CLIENT"],
   "portal.documents.read": ["CLIENT"],
   "portal.documents.download": ["CLIENT"],
+  "portal.feedback.submit": ["CLIENT"],
 }
 
 // The one decision point, in the fixed documented order:
