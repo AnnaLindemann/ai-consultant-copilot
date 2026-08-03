@@ -97,6 +97,59 @@ those rows, running
 `npx prisma migrate resolve --rolled-back 20260730140000_phase3a_multi_user_collaboration`,
 and deploying again.
 
+#### The shadow database (migration development only)
+
+Prisma's migration *development* tooling needs a second, throwaway database — the
+**shadow database**. It replays `prisma/migrations` into an empty database from
+scratch, so the result of the migration history can be compared with
+`prisma/schema.prisma`. That comparison is the only thing that proves the two
+have not drifted apart: a schema edit that never reached a migration file, or a
+migration that changed something the schema does not describe.
+
+> **Never point `SHADOW_DATABASE_URL` at the application database.** Prisma drops
+> and rebuilds the shadow database's contents on every run. Aimed at
+> `ai_consultant_db` it would destroy real engagement content. It must be a
+> separate, empty, disposable database. `prisma migrate deploy` — the command a
+> real environment runs — never touches it.
+
+Create it once, alongside the application database:
+
+```bash
+docker compose exec postgres \
+  psql -U ai_user -d postgres -c 'CREATE DATABASE "ai_consultant_shadow";'
+```
+
+Against a PostgreSQL you did not start with docker compose, use `psql` directly:
+
+```bash
+psql "postgresql://USER:PASSWORD@localhost:5432/postgres" \
+  -c 'CREATE DATABASE "ai_consultant_shadow";'
+```
+
+Then point `server/.env` at it — same credentials and port as `DATABASE_URL`,
+different database name:
+
+```env
+SHADOW_DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/ai_consultant_shadow"
+```
+
+`server/prisma.config.ts` passes it to Prisma as the datasource's
+`shadowDatabaseUrl`, so no command needs the flag spelled out.
+
+**Verify migrations and schema agree:**
+
+```bash
+npm run prisma:drift-check --prefix server
+```
+
+It exits `0` and prints nothing when the migration history replays to exactly
+the schema. It exits `2` and prints the difference when they disagree. The check
+only ever reads `prisma/schema.prisma` and writes to the shadow database; it
+never creates, drops, resets, or migrates the application database. Run it after
+changing `schema.prisma` or adding a migration, and treat a non-zero exit as a
+finding to resolve deliberately — never by editing a migration that has already
+been applied somewhere.
+
 ### 5. Run the apps
 
 In two terminals:
@@ -595,6 +648,7 @@ npm run test:integration          # PostgreSQL-backed integration tests (REQUIRE
 npm run test:integration:optional # the same suite, skipped when no database is reachable
 npm run test:all                  # unit + integration — the acceptance command
 npm run typecheck                 # tsc --noEmit
+npm run prisma:drift-check        # replay prisma/migrations into the shadow DB and diff against schema.prisma
 npm run llm:test                  # smoke-test the configured LLM provider connection
 npm run mail:dev                  # read the local development mailbox
 ```

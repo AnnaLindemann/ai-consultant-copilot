@@ -705,8 +705,10 @@ model TechnologyProfile {
   // The official origins the product attributes its **seeded** content to.
   // Populated only while `origin` is `product_seed`; the curator's apply path
   // clears it and hands the question to the Technology Update History, so the
-  // declaration and the audit record can never disagree.
-  originSourceCodes Json
+  // declaration and the audit record can never disagree. Empty is the honest
+  // default — "no official source declared" — so the curator's clearing write
+  // and a row that arrives without one read identically.
+  originSourceCodes Json @default("[]")
 
   // Bumped by each applied change, so a reader can tell how often a profile
   // has moved. It is written only by the curator's apply path.
@@ -962,7 +964,7 @@ model ConsultantReportVersion {
   sourceRoadmapVersionId            String
   sourceRoadmapVersionNumber        Int
   sourceRoadmapFingerprint          String
-  sourceSnapshot                    Json?
+  sourceSnapshot                    Json
 
   analysisRunId String?
   analysisRun   AnalysisRun? @relation(fields: [analysisRunId], references: [id], onDelete: SetNull)
@@ -994,6 +996,8 @@ model ConsultantReportVersion {
   @@index([sourceRecommendationVersionId])
   @@index([sourceRoadmapVersionId])
   @@index([createdAt])
+  @@index([approvedByUserId])
+  @@index([approvedAt])
 }
 
 model DocumentPublication {
