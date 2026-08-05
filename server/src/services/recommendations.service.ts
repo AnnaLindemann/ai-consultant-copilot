@@ -350,7 +350,12 @@ export const generateRecommendations = async (
     : null
   const grounded = resolution?.resolved === true
 
+  // Priced against the model that actually answered, not the one configured.
+  // An unpriced pair yields `undefined` and the run records no cost rather than
+  // a wrong one (`evaluation/llm-rates.ts`).
   const costEstimateUsd = calculateLlmCost({
+    provider: llmResponse.provider,
+    model: llmResponse.model,
     promptTokens: llmResponse.promptTokens,
     completionTokens: llmResponse.completionTokens,
   })

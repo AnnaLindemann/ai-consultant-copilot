@@ -272,6 +272,100 @@ export const technologySourceSeed: TechnologySource[] = [
 // The initial product catalogue: well-established technologies the product is
 // expected to be able to recommend, described in durable terms.
 export const technologyProfileSeed: TechnologyProfile[] = [
+  // --- The provider and model this deployment itself runs on ----------------
+  //
+  // These two exist so the Workspace's AI model approval can name a curated
+  // Technology Profile instead of being an ungrounded string pair. Without
+  // them, approving `groq` / `openai/gpt-oss-120b` was possible but carried no
+  // provenance and no link to the re-review mechanism: an approved Technology
+  // Update that changed a compliance-relevant fact had no profile to change it
+  // on, so no approval could be sent back for review (audit finding P7).
+  //
+  // **What is deliberately absent, and why.**
+  //
+  // Every compliance-relevant fact an Administrator needs before approving a
+  // provider — processing region, retention, whether inputs are used for
+  // training, subprocessors, DPA status, international transfers — is stated
+  // below as *not yet verified*, because nobody has read it off the provider's
+  // own documentation and written it down. A seeded profile that asserted "EU
+  // processing" or "inputs not retained" would be exactly the fabricated
+  // specific this catalogue forbids (agent-rules.md §12), and it would be
+  // fabricated in the one place where a reader is entitled to rely on it: the
+  // basis for a lawful-processing decision.
+  //
+  // So they say what is true — that the fact must be established from the
+  // official source before approval — and the Administrator establishes it.
+  // The Technology Curator's propose → approve → history flow is how a verified
+  // fact replaces a placeholder; the seed never asserts one.
+  {
+    code: "groq-inference-platform",
+    categoryCode: "ai-providers",
+    title: "Groq",
+    summary:
+      "Anbieterplattform für schnelle Inferenz offener Sprachmodelle über eine OpenAI-kompatible Schnittstelle.",
+    details: {
+      role: "Betreibt offene Sprachmodelle als gehosteten Dienst und stellt sie über eine OpenAI-kompatible Schnittstelle bereit.",
+      strengths: [
+        "Sehr kurze Antwortzeiten, was mehrstufige Analyseschritte praktikabel macht",
+        "OpenAI-kompatible Schnittstelle, wodurch ein Modellwechsel keine Anwendungsänderung erfordert",
+        "Betreibt offene Modelle, deren Gewichte und Modellkarten öffentlich einsehbar sind",
+      ],
+      limitations: [
+        "Datenschutzrelevante Angaben sind NICHT VERIFIZIERT: Verarbeitungsregion, Aufbewahrung von Eingaben, Nutzung von Eingaben für Training, Unterauftragnehmer, Datenschutzvereinbarung (DPA) und Drittlandtransfer müssen vor einer Freigabe aus der offiziellen Dokumentation des Anbieters bestätigt werden",
+        "Preise und Ratenbegrenzungen ändern sich und sind vor kommerzieller Nutzung zu prüfen",
+        "Das Modellangebot ist an den Lebenszyklus der jeweiligen Modellanbieter gebunden",
+      ],
+      suitability: [
+        "Betrieb von Analyse- und Entwurfsschritten, bei denen Antwortzeit spürbar ist",
+        "Einsatzszenarien, in denen ein Modellwechsel ohne Anwendungsänderung möglich bleiben soll",
+      ],
+    },
+    matchTerms: ["groq", "inferenz", "anbieter", "hosting", "llm-provider"],
+    tags: ["provider", "inference", "hosting"],
+    status: "active",
+    sortOrder: 6,
+    origin: "product_seed",
+    originSourceCodes: ["groq"],
+    revision: 0,
+  },
+  {
+    code: "openai-gpt-oss",
+    categoryCode: "ai-models",
+    title: "OpenAI GPT-OSS",
+    summary:
+      "Offene Sprachmodellfamilie von OpenAI mit veröffentlichten Gewichten, betreibbar bei verschiedenen Anbietern.",
+    details: {
+      role: "Sprachmodell für Verstehen, Strukturieren und Erzeugen von Text, mit offen veröffentlichten Gewichten.",
+      strengths: [
+        "Offene Gewichte und öffentliche Modellkarte, wodurch Herkunft und Grenzen nachvollziehbar dokumentiert sind",
+        "Bei mehreren Anbietern betreibbar, was Anbieterabhängigkeit verringert",
+        "Folgt strukturierten Ausgabeformaten, was die maschinelle Weiterverarbeitung erleichtert",
+      ],
+      limitations: [
+        "Ausgaben sind nicht deterministisch und bleiben ein zu prüfender Entwurf",
+        "Das Modell erzeugt interne Zwischenüberlegungen; wie diese in der Antwort erscheinen, hängt vom Anbieter ab und ist vor produktivem Einsatz zu prüfen",
+        "Datenschutzrelevante Angaben hängen vom betreibenden Anbieter ab, nicht vom Modell, und sind dort zu klären",
+        "Preisangaben sind NICHT VERIFIZIERT und beim jeweiligen Anbieter zu bestätigen",
+      ],
+      suitability: [
+        "Strukturierte Analyse- und Bewertungsschritte mit maschinell weiterverarbeiteter Ausgabe",
+        "Einsatz mit menschlicher Prüfung vor Übernahme in Kundenergebnisse",
+      ],
+    },
+    matchTerms: [
+      "gpt-oss",
+      "gpt oss",
+      "offenes modell",
+      "open weights",
+      "sprachmodell",
+    ],
+    tags: ["llm", "open-weights", "text"],
+    status: "active",
+    sortOrder: 4,
+    origin: "product_seed",
+    originSourceCodes: ["openai", "groq"],
+    revision: 0,
+  },
   {
     code: "openai-gpt-5",
     categoryCode: "ai-models",

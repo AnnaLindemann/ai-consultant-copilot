@@ -469,9 +469,23 @@ const withCurrentRequestId = (
   return { ...payload, requestId }
 }
 
+// The workspace's append-only Audit Trail, newest first.
+//
+// Ordered by `id` as well as `createdAt`, and the tie-breaker is not cosmetic.
+// `AuditTrail.createdAt` is `TIMESTAMP(3)` defaulted to `CURRENT_TIMESTAMP`,
+// which in PostgreSQL is the *transaction start* time — identical for every row
+// written inside one transaction, and readily identical across two fast
+// consecutive ones. On `createdAt` alone the order of those rows is whatever
+// the query planner returns, so an investigator could see a lifecycle's events
+// out of sequence, and the same read could return them differently twice
+// (audit finding 2.1).
+//
+// `id` is a cuid: monotonic within a process, so it orders same-timestamp rows
+// by the order they were actually written. Both keys descend together, so the
+// newest entry is first on both.
 export const listAuditTrailByWorkspace = async (scope: WorkspaceScope) =>
   prisma.auditTrail.findMany({
     where: { workspaceId: scope.workspaceId },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: 200,
   })

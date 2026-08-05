@@ -74,6 +74,44 @@ export const requestLifecycleLogger: RequestHandler = (req, res, next) => {
   next()
 }
 
+// A request body that exceeded the configured limit.
+//
+// `express.json()` rejects it with an error carrying `type: "entity.too.large"`
+// and status 413. Left to the global handler below it became
+// `server.error.internal`, which is wrong twice over: it tells the consultant
+// their save failed for an unknown reason when the actual reason is actionable,
+// and it puts an operator on the trail of a server fault that does not exist.
+//
+// Reported as its own stable identifier, with no size in the response. The
+// limit is a deployment decision documented in `app.ts`, not a hint to tune a
+// payload against.
+export const payloadTooLargeHandler: ErrorRequestHandler = (
+  error,
+  req,
+  res,
+  next,
+) => {
+  if (!isPayloadTooLarge(error)) return next(error)
+
+  logger.warn("http.payload_too_large", {
+    ...safeRequestMetadata(req),
+    httpStatus: 413,
+  })
+
+  if (res.headersSent) return destroyResponse(res)
+
+  res.status(413).json({
+    status: false,
+    message: "server.error.payload_too_large",
+  })
+}
+
+const isPayloadTooLarge = (error: unknown): boolean =>
+  error !== null &&
+  typeof error === "object" &&
+  ((error as { type?: unknown }).type === "entity.too.large" ||
+    (error as { status?: unknown }).status === 413)
+
 export const globalErrorHandler: ErrorRequestHandler = (
   error,
   req,
@@ -173,9 +211,16 @@ const safeEngagementIdFromParams = (req: Request): string | undefined => {
   }
 }
 
+// Health and readiness probes are not logged. A platform polls them every few
+// seconds forever; logging them would bury every line that matters under
+// traffic that carries no information. A probe that *fails* is still logged,
+// through `shouldLogCompletedRequest` below.
+const isProbePath = (path: string) =>
+  path === "/health" || path.startsWith("/health/")
+
 const shouldLogRequest = (req: Request): boolean => {
   const path = safePath(req) ?? "/"
-  return path !== "/health" && !STATIC_ASSET_PATTERN.test(path)
+  return !isProbePath(path) && !STATIC_ASSET_PATTERN.test(path)
 }
 
 const shouldLogCompletedRequest = (req: Request, status: number): boolean =>

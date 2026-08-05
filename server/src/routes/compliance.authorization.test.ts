@@ -4,6 +4,14 @@ import { after, beforeEach, mock, test } from "node:test"
 import express from "express"
 
 import { compliancePolicyRepositoryMock } from "../domain/compliance/compliance-policy.fixture.js"
+import { getDefaultLlmConfig } from "../lib/llm-config.js"
+
+// The provider/model this deployment is configured to call. Named through the
+// configuration rather than as a literal, so these authorization cases keep
+// testing *who may approve a model* rather than which model happens to be the
+// current default (audit §12).
+const configuredLlm = getDefaultLlmConfig()
+
 
 // The access-control gate over the Security, Privacy & AI Compliance surface
 // (implementation-workflow §13.6a): the phase adds reachable data, so its
@@ -206,8 +214,8 @@ after(() => server.close())
 beforeEach(() => {
   signedInAs = users.administrator
   auditEntries = []
-  process.env.LLM_PROVIDER = "groq"
-  process.env.LLM_MODEL = "llama-3.3-70b-versatile"
+  process.env.LLM_PROVIDER = configuredLlm.provider
+  process.env.LLM_MODEL = configuredLlm.model
   process.env.DOCUMENT_ACCESS_SECRET = "test-document-access-secret"
 })
 
@@ -297,8 +305,8 @@ test("new workspace compliance controls are Administrator-only", async () => {
       path: "/compliance/ai-model-approvals",
       method: "POST",
       body: {
-        provider: "groq",
-        model: "llama-3.3-70b-versatile",
+        provider: configuredLlm.provider,
+        model: configuredLlm.model,
         status: "approved",
         dpaStatus: "in_place",
         promptRetention: "not_retained",
@@ -347,8 +355,8 @@ test("an Administrator can reach the new workspace compliance controls", async (
       await request("/compliance/ai-model-approvals", {
         method: "POST",
         body: {
-          provider: "groq",
-          model: "llama-3.3-70b-versatile",
+          provider: configuredLlm.provider,
+          model: configuredLlm.model,
           status: "approved",
           dpaStatus: "in_place",
           promptRetention: "not_retained",

@@ -22,7 +22,8 @@ backups/
 *.sql.gz
 
 # Scratch space. Holds the local development mailbox (server/tmp/dev-mailbox),
-# which stores verification, reset, and invitation links as files.
+# which stores verification, reset, and invitation links as files, and the LLM
+# benchmark's results (server/tmp/benchmark).
 tmp/
 
 # OS

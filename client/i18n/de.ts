@@ -248,6 +248,8 @@ const feedbackServerMessages: Record<FeedbackMessageId, string> = {
 const workbenchServerMessages: Record<WorkbenchMessageId, string> = {
   "server.error.internal":
     "Unerwarteter Serverfehler. Bitte erneut versuchen und bei Rückfragen die Anfrage-ID angeben.",
+  "server.error.payload_too_large":
+    "Die Daten sind zu umfangreich zum Speichern. Bitte kürzen Sie längere Freitexte und speichern Sie erneut.",
 
   "organization.message.list_loaded": "Organisationen geladen",
   "organization.message.loaded": "Organisation geladen",

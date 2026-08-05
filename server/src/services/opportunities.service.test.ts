@@ -12,12 +12,24 @@ import type {
   OpportunityVersionDetail,
 } from "../../../shared/opportunity.schema.js"
 import type { LlmResponse } from "../lib/llm-client.js"
+import { getDefaultLlmConfig } from "../lib/llm-config.js"
+import { calculateLlmCost } from "../evaluation/calculate-llm-cost.js"
 import type { CreateAnalysisRunInput } from "../repositories/analysis-run.repository.js"
 import type { EngagementWithOrganization } from "../repositories/engagement.repository.js"
 import type {
   CreateOpportunityVersionInput,
   SaveOpportunityVersionInput,
 } from "../repositories/opportunity-version.repository.js"
+
+// The provider/model this deployment is configured to call, captured once,
+// before any case mutates the environment.
+//
+// Nothing below names a model literally. A suite that hard-coded one asserted
+// the default's *current value* rather than the stage's behaviour, so changing
+// the default broke tests that have nothing to do with model selection (audit
+// §12). The fixture workspace approves this same pair, which is what lets the
+// "unapproved model" case below change `LLM_MODEL` and still be refused.
+const configuredLlm = getDefaultLlmConfig()
 
 // The stage's infrastructure is replaced at its module seams so the
 // orchestration can be exercised without a database, a provider, or a live
@@ -64,7 +76,14 @@ let compliancePolicyRow = compliancePolicyRowFixture()
 const complianceAuditEntries: { eventType: string }[] = []
 
 mock.module("../repositories/compliance.repository.js", {
-  namedExports: compliancePolicyRepositoryMock(() => compliancePolicyRow),
+  // The approved pair is pinned to the configuration captured above, not
+  // re-read per call. That is what keeps the "an unapproved model is refused"
+  // case honest: it changes `LLM_MODEL` inside the case, the workspace's
+  // approval stays what it was, and the gate refuses the mismatch.
+  namedExports: compliancePolicyRepositoryMock(
+    () => compliancePolicyRow,
+    () => configuredLlm,
+  ),
 })
 
 mock.module("../repositories/access.repository.js", {
@@ -281,7 +300,7 @@ const validOutput = (opportunities = [opportunity()]) =>
 const llmResponse = (content: string): LlmResponse => ({
   content,
   provider: "groq",
-  model: "llama-3.3-70b-versatile",
+  model: configuredLlm.model,
   latencyMs: 1400,
   promptTokens: 1100,
   completionTokens: 700,
@@ -325,8 +344,8 @@ const submission = (
 beforeEach(() => {
   // The stage runs against configured LLM settings; the provider itself is
   // replaced above, so nothing is called.
-  process.env.LLM_PROVIDER = "groq"
-  process.env.LLM_MODEL = "llama-3.3-70b-versatile"
+  process.env.LLM_PROVIDER = configuredLlm.provider
+  process.env.LLM_MODEL = configuredLlm.model
   recordedRuns.length = 0
   linkedRuns.length = 0
   saveCalls.length = 0
@@ -455,13 +474,25 @@ test("a prioritization records its Analysis Run with the stage's trust signals",
   assert.equal(run.workspaceId, "ws_1")
   assert.equal(run.stage, "prioritization")
   assert.equal(run.provider, "groq")
-  assert.equal(run.model, "llama-3.3-70b-versatile")
+  assert.equal(run.model, configuredLlm.model)
   assert.equal(run.promptVersion, "opportunities-v2")
   assert.equal(typeof run.promptFingerprint, "string")
   assert.equal(run.promptFingerprint!.length > 0, true)
   assert.equal(run.latencyMs, 1400)
   assert.equal(run.totalTokens, 1800)
-  assert.equal(typeof run.costEstimateUsd, "number")
+  // The cost the rate table yields for the model that actually answered —
+  // which is `undefined` for a model whose rate has not been confirmed. The run
+  // records what the table says rather than a fallback figure
+  // (`evaluation/llm-rates.ts`).
+  assert.equal(
+    run.costEstimateUsd,
+    calculateLlmCost({
+      provider: configuredLlm.provider,
+      model: configuredLlm.model,
+      promptTokens: run.promptTokens,
+      completionTokens: run.completionTokens,
+    }),
+  )
   assert.equal(run.jsonParseSuccess, true)
   assert.equal(run.schemaValid, true)
   assert.equal(run.errorMessage, undefined)

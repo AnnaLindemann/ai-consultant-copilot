@@ -174,7 +174,15 @@ if (!environment) {
   > => {
     const rows = await prisma.auditTrail.findMany({
       where: { engagementId },
-      orderBy: { createdAt: "asc" },
+      // `createdAt` alone is not an ordering. It is `TIMESTAMP(3)` defaulted to
+      // `CURRENT_TIMESTAMP`, which PostgreSQL evaluates once per *transaction*,
+      // so two events written in one transaction — or in two fast consecutive
+      // ones — carry the same value and the planner returns them in whatever
+      // order it likes. The lifecycle assertions below compare an exact
+      // sequence, so on a fast machine they failed intermittently while nothing
+      // was wrong with the product (audit §16). `id` is a cuid and monotonic
+      // within a process, so it breaks the tie by actual write order.
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: {
         engagementId: true,
         userId: true,

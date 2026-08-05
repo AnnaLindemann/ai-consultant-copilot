@@ -4,6 +4,10 @@ import { prismaAdapter } from "better-auth/adapters/prisma"
 import { prisma } from "../prisma.js"
 import { emailDelivery } from "../email-delivery.js"
 import { renderEmail } from "../email-templates.js"
+import {
+  betterAuthAdvancedOptions,
+  resolveSessionCookieConfig,
+} from "./cookie-config.js"
 
 // Better Auth — the runtime authentication provider behind
 // `AuthenticationProvider` (architecture.md §7A.1). It owns password hashing
@@ -16,8 +20,19 @@ import { renderEmail } from "../email-templates.js"
 // `AuthAccount`, `AuthVerification`), mapped by `modelName` below so they read
 // as this repository's models while staying the provider's own storage.
 
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN ?? "http://localhost:3000"
 const SERVER_BASE_URL = process.env.SERVER_BASE_URL ?? "http://localhost:8787"
+
+// How the session cookie is scoped, and which origins may open one.
+//
+// Both come from `cookie-config.ts` rather than being read here, so that CORS
+// (`app.ts`), the CSRF origin check below, and the cookie's `Domain` attribute
+// are three consequences of one parsed configuration instead of three
+// independent readings of the same variables that can drift apart.
+//
+// `AUTH_COOKIE_DOMAIN` is what makes a split `app.<parent>` / `api.<parent>`
+// deployment work at all; unset — as it is in local development — nothing below
+// changes and the cookie stays host-only.
+const cookieConfig = resolveSessionCookieConfig()
 
 // A development secret keeps `npm run dev` working from a bare checkout; a
 // production process without a real secret is a misconfiguration, not a default
@@ -39,7 +54,19 @@ export const auth = betterAuth({
   secret: readAuthSecret(),
   baseURL: SERVER_BASE_URL,
   basePath: "/api/auth",
-  trustedOrigins: [CLIENT_ORIGIN],
+
+  // The exact origins the deployment named, and no pattern. A Vercel preview
+  // deployment is trusted only by being listed on purpose.
+  trustedOrigins: [...cookieConfig.trustedOrigins],
+
+  // Empty unless a parent domain is configured, so a development checkout keeps
+  // today's host-only cookie. With one, the session cookie carries
+  // `Domain=.<parent>` and is therefore visible to the frontend's browser
+  // requests, to its server components, and to its proxy — the three readers
+  // that a host-only cookie leaves with an empty jar. `SameSite` stays `lax`:
+  // under a shared parent the two halves are same-site, so `lax` is both
+  // correct and stronger than the `none` a split-domain deployment would need.
+  advanced: betterAuthAdvancedOptions(cookieConfig),
 
   database: prismaAdapter(prisma, { provider: "postgresql" }),
 

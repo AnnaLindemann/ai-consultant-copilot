@@ -1,0 +1,29 @@
+// The production build.
+//
+// It differs from `tsconfig.json` in exactly one way: tests, fixtures and the
+// benchmark are excluded from the emitted output. `npm run typecheck` still
+// uses the base configuration and still checks all of them — a test that stops
+// compiling is a defect, and hiding it from the type checker to keep a build
+// small would be the wrong trade.
+//
+// Excluding by pattern works because no production module imports a test, a
+// fixture, or the benchmark. TypeScript follows imports regardless of
+// `exclude`, so if that ever stopped being true the excluded file would be
+// pulled back into the output and the layering violation would be visible in
+// `dist` rather than hidden.
+{
+  "extends": "./tsconfig.json",
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tmp",
+    "**/*.test.ts",
+    "**/*.integration-test.ts",
+    "**/*.fixture.ts",
+    // The benchmark is a development tool that calls a paid provider. It has no
+    // business in a deployed artifact, and excluding it also means the deployed
+    // process cannot import a module whose whole purpose is to spend money.
+    "src/benchmark/**",
+    "scripts/**"
+  ]
+}

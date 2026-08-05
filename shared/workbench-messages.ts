@@ -12,6 +12,11 @@
 export const workbenchMessageIds = [
   // Global server boundary.
   "server.error.internal",
+  // A request body that exceeded the configured limit. Its own identifier
+  // rather than the internal one above: the cause is actionable by the person
+  // who hit it, and reporting it as an internal failure sent operators looking
+  // for a server fault that does not exist.
+  "server.error.payload_too_large",
 
   // Organizations.
   "organization.message.list_loaded",

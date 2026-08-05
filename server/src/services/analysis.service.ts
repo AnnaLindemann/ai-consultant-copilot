@@ -103,7 +103,12 @@ export const analyzeEngagement = async (
     responseText: llmResponse.content,
   })
 
+  // Priced against the model that actually answered, not the one configured.
+  // An unpriced pair yields `undefined` and the run records no cost rather than
+  // a wrong one (`evaluation/llm-rates.ts`).
   const costEstimateUsd = calculateLlmCost({
+    provider: llmResponse.provider,
+    model: llmResponse.model,
     promptTokens: llmResponse.promptTokens,
     completionTokens: llmResponse.completionTokens,
   })

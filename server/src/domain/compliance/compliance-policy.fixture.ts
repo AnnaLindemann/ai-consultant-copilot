@@ -1,4 +1,5 @@
 import { defaultCompliancePolicy } from "./compliance.js"
+import { getDefaultLlmConfig } from "../../lib/llm-config.js"
 
 import type {
   RecordEngagementConsent,
@@ -38,6 +39,23 @@ export const compliancePolicyRowFixture = (
   }
 }
 
+// The provider/model pair a fixture workspace has approved.
+//
+// It is resolved from the deployment's configured default rather than named as
+// a literal. A fixture that hard-coded one model id meant every AI-stage suite
+// silently depended on that model still being the default, so changing
+// `LLM_MODEL`'s default broke four suites for a reason that had nothing to do
+// with what they test (audit §12).
+//
+// Read through a function, and captured by each suite *before* a case mutates
+// the environment. That is what keeps the "an unapproved model is refused" case
+// meaningful: it changes `LLM_MODEL` inside the case, the approved pair stays
+// what it was, and the gate correctly refuses the mismatch.
+export const approvedLlmPairFixture = (): { provider: string; model: string } => {
+  const config = getDefaultLlmConfig()
+  return { provider: config.provider, model: config.model }
+}
+
 // The compliance repository, replaced wholesale, for a test whose subject is
 // something else — an AI stage, or workspace bootstrap — that now reads the
 // policy on its way through.
@@ -46,11 +64,14 @@ export const compliancePolicyRowFixture = (
 // repository operation does not silently leave several suites unable to load
 // the module they mock.
 //
-// The stored policy is read through a function so a test can change it between
-// cases: binding the value once would freeze whatever the first case set.
+// The stored policy and the approved pair are both read through functions so a
+// test can change them between cases: binding either value once would freeze
+// whatever the first case set.
 export const compliancePolicyRepositoryMock = (
   readRow: () => ReturnType<typeof compliancePolicyRowFixture> =
     compliancePolicyRowFixture,
+  readApprovedPair: () => { provider: string; model: string } =
+    approvedLlmPairFixture,
 ) => ({
   ensureCompliancePolicyRow: async () => readRow(),
   getCompliancePolicyRow: async () => readRow(),
@@ -105,12 +126,12 @@ export const compliancePolicyRepositoryMock = (
     provider: string,
     model: string,
   ) =>
-    provider === "groq" && model === "llama-3.3-70b-versatile"
+    provider === readApprovedPair().provider && model === readApprovedPair().model
       ? {
           id: "approval_1",
           provider,
           model,
-          technologyProfileCode: "groq_llama",
+          technologyProfileCode: "openai-gpt-oss",
           reviewedProfileRevision: 1,
           status: "approved" as const,
           statusReason: null,
@@ -128,9 +149,9 @@ export const compliancePolicyRepositoryMock = (
   listAiModelApprovals: async () => [],
   getAiModelApprovalById: async () => ({
     id: "approval_1",
-    provider: "groq",
-    model: "llama-3.3-70b-versatile",
-    technologyProfileCode: "groq_llama",
+    provider: readApprovedPair().provider,
+    model: readApprovedPair().model,
+    technologyProfileCode: "openai-gpt-oss",
     reviewedProfileRevision: 1,
     status: "approved" as const,
     statusReason: null,

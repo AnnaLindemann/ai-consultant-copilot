@@ -817,6 +817,22 @@ governance assessment of EU AI Act readiness, see
 [docs/ai-act-readiness.md](./docs/ai-act-readiness.md); it is not legal advice.
 
 
+## Deployment
+
+Running the workbench outside a developer's machine is documented separately:
+
+| Document | Covers |
+|---|---|
+| [`docs/deployment.md`](docs/deployment.md) | Render and Vercel settings, DNS, first run |
+| [`docs/environment.md`](docs/environment.md) | Every environment variable, and where it belongs |
+| [`docs/operations.md`](docs/operations.md) | Backup, restore, rollback, model changes, secret rotation |
+| [`docs/smoke-tests.md`](docs/smoke-tests.md) | Checks that a deployment works, and the end-to-end checklist |
+
+Two things are worth knowing before starting: the deployment **requires a parent
+domain you own** (the frontend and API must share one, or nobody can stay signed
+in), and free-tier infrastructure is suitable for technical testing but not for
+client work.
+
 ## Scripts
 
 Run from the `server/` directory:
@@ -828,13 +844,23 @@ npm run test:unit                 # unit tests only
 npm run test:integration          # PostgreSQL-backed integration tests (REQUIRES a database)
 npm run test:integration:optional # the same suite, skipped when no database is reachable
 npm run test:all                  # unit + integration — the acceptance command
-npm run typecheck                 # tsc --noEmit
+npm run typecheck                 # tsc --noEmit (checks tests too)
+npm run build                     # compile to dist/ — production output, tests excluded
+npm start                         # run the compiled server (dist/server/src/server.js)
+npm run smoke:production          # start the built artifact, check the probes, stop it cleanly
 npm run prisma:drift-check        # replay prisma/migrations into the shadow DB and diff against schema.prisma
 npm run llm:test                  # smoke-test the configured LLM provider connection
+npm run benchmark:llm             # run the six stages against the configured model (LIVE PROVIDER, costs money)
 npm run mail:dev                  # read the local development mailbox
 ```
 
-From `client/`: `npm run dev`, `npm run build`, `npm run lint`.
+From `client/`: `npm run dev`, `npm run build`, `npm run lint`, `npm test`.
+
+> A **production** client build requires `NEXT_PUBLIC_API_BASE_URL` and refuses
+> to complete without a valid `https://` value — the variable is inlined into
+> the bundle, so a build without it ships a frontend that calls localhost from
+> the visitor's browser. To build locally:
+> `NEXT_PUBLIC_API_BASE_URL=https://api.example.test npm run build --prefix client`.
 
 ## Testing
 
