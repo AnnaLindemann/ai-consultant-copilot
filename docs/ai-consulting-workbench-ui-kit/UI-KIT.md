@@ -839,6 +839,10 @@ Content:
 - open questions;
 - latest activity;
 - contextual right rail with next action and risks.
+- engagement compliance panel, including the pending AI-output review state and
+  the explicit `KI-Ergebnis geprüft` action for authorized Manager/Admin users.
+  The action is hidden from Clients and disabled when no pending AI output
+  exists; ordinary save controls remain separate.
 
 ## M04 — Discovery review
 
@@ -1256,6 +1260,9 @@ High-level rules:
 | Edit published report | No | No | No |
 | Manage users/roles/ownership | No | No | Yes |
 | View audit trail | No | Own relevant history view only | Workspace audit |
+| View `/compliance` | No | Read policy/dashboard | Yes |
+| Manage compliance actions | No | No | Yes |
+| Mark AI output reviewed | No | Own Engagements | All workspace Engagements |
 
 Every permission is enforced server-side. UI visibility mirrors permission; it does not create permission.
 

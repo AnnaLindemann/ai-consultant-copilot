@@ -60,6 +60,7 @@ const routePath = (file: string) => {
 // recorded here *and* renders the shell its experience calls for.
 const ROUTE_SHELLS: Record<string, "ManagerShell" | "ClientPortalShell" | "PublicShell"> = {
   "/": "ManagerShell",
+  "/compliance": "ManagerShell",
   "/engagements": "ManagerShell",
   "/engagements/[id]": "ManagerShell",
   "/engagements/[id]/discovery": "ManagerShell",
@@ -165,7 +166,14 @@ test("no internal page is a dead end", () => {
   // that the sidebar itself marks as current.
   // `/technology` is a sidebar entry of its own; the curator's two surfaces
   // under it carry breadcrumbs back to it rather than standing alone.
-  const topLevel = ["/", "/engagements", "/knowledge", "/technology"]
+  // `/compliance` is likewise a sidebar entry of its own.
+  const topLevel = [
+    "/",
+    "/engagements",
+    "/knowledge",
+    "/technology",
+    "/compliance",
+  ]
 
   for (const file of routeFiles()) {
     const route = routePath(file)

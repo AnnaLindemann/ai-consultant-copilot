@@ -325,7 +325,7 @@ cases, risk models, best practices), and **Solution Matching** (AI Use Cases and
 Solution Patterns — exactly what Phase 6 grounds a recommendation in). **Tags are a weak
 additional signal and can never select an entry on their own**; stable codes,
 the taxonomy, and explicit relationships are what retrieval runs on. Embeddings,
-vector search, and RAG remain out of scope until Phase 10.
+vector search, and RAG remain out of scope until Phase 11.
 
 **Curation is a deliberate, separate activity.** An Administrator creates,
 edits, and deactivates entries; a Manager reads; a Client reaches nothing.
@@ -540,6 +540,15 @@ account-lifecycle endpoints requires an authenticated session cookie.
 | PATCH  | `/engagements/:id/recommendations`| Save the consultant's reviewed, re-grounded Recommendations. |
 | GET    | `/engagements/:id/recommendations/versions` | The engagement's Recommendation version history. |
 | GET    | `/engagements/:id/recommendations/versions/:versionId` | One preserved Recommendation version. |
+| POST   | `/engagements/:id/roadmap`       | Generate the AI Implementation Roadmap from accepted Recommendations. |
+| PATCH  | `/engagements/:id/roadmap`      | Save the consultant's reviewed Roadmap.        |
+| GET    | `/engagements/:id/roadmap/versions` | The engagement's Roadmap version history.   |
+| GET    | `/engagements/:id/roadmap/versions/:versionId` | One preserved Roadmap version.          |
+| POST   | `/engagements/:id/report`        | Generate the AI Consultant Report draft.       |
+| PATCH  | `/engagements/:id/report`       | Save the Consultant Report draft or manager-review state. |
+| POST   | `/engagements/:id/report/approve` | Approve a reviewed report version.           |
+| POST   | `/engagements/:id/report/publish` | Publish an approved report version to the Client Portal. |
+| POST   | `/engagements/:id/ai-output-review` | Explicitly mark one AI-assisted stage output as human-reviewed (`ADMIN`, `MANAGER`). |
 | GET    | `/engagements/:id/feedback`       | Client Feedback and open re-entries for this engagement (`ADMIN`, `MANAGER`). |
 | PATCH  | `/engagements/:id/feedback/:feedbackId/classification` | Classify feedback and declare the impacted stages (revision-checked). |
 | PATCH  | `/engagements/:id/feedback/:feedbackId/close-no-action` | Close feedback without re-entry, with a required reason. |
@@ -553,6 +562,28 @@ account-lifecycle endpoints requires an authenticated session cookie.
 | PATCH  | `/knowledge/entries/:code`        | Edit or deactivate a curated entry (`ADMIN`, revision-checked). |
 | GET    | `/knowledge/engagements/:id/discovery-package` | The knowledge package retrieved for this engagement's Discovery. |
 | GET    | `/knowledge/engagements/:id/assessment-package` | The knowledge package retrieved for this engagement's Assessment. |
+| GET    | `/compliance/policy`              | The Workspace Compliance Policy (`ADMIN`, `MANAGER` read-only). |
+| PATCH  | `/compliance/policy`              | Configure data handling, AI policy and retention (`ADMIN`). |
+| POST   | `/compliance/identifier-rules/preview` | Try a personal-identifier rule against sample text before saving it (`ADMIN`). |
+| GET    | `/compliance/dashboard`           | The Compliance Dashboard (`ADMIN`).            |
+| GET    | `/compliance/dpia`                | The workspace's standard DPIA assessment (`ADMIN`). |
+| PATCH  | `/compliance/dpia`                | Record the workspace DPIA status, scope, rationale and review date (`ADMIN`). |
+| GET    | `/compliance/engagements/:id`     | This engagement's classification, AI processing permission, privacy basis, consent records, DPIA screening, and legal hold. |
+| PATCH  | `/compliance/engagements/:id`     | Classify the engagement, set its AI processing permission, record DPIA screening, set or lift a legal hold. |
+| PATCH  | `/compliance/engagements/:id/privacy-processing` | Record purpose and legal basis for engagement personal-data processing. |
+| PATCH  | `/compliance/engagements/:id/dpia-screening` | Record engagement DPIA screening.      |
+| POST   | `/compliance/engagements/:id/consents` | Record a real consent record where consent is the legal basis. |
+| POST   | `/compliance/engagements/:id/consents/:consentId/withdraw` | Withdraw a consent record. |
+| POST   | `/compliance/engagements/:id/export` | Complete client-data export for one engagement (`ADMIN`). |
+| POST   | `/compliance/engagements/:id/erasure` | Permanent deletion of one engagement's client data (`ADMIN`). |
+| GET    | `/compliance/retention/preview`   | Preview records past configured retention (`ADMIN`). |
+| POST   | `/compliance/retention/execute`   | Execute retention for selected executable categories (`ADMIN`). |
+| GET    | `/compliance/ai-model-approvals`  | List governed provider/model approvals.        |
+| POST   | `/compliance/ai-model-approvals`  | Approve a provider/model combination (`ADMIN`).|
+| POST   | `/compliance/ai-model-approvals/:approvalId/revoke` | Revoke a governed provider/model approval, which stops AI processing under it (`ADMIN`). |
+| DELETE | `/compliance/ai-model-approvals/:approvalId` | Remove a governed provider/model approval entirely (`ADMIN`). |
+| POST   | `/compliance/engagements/:id/documents/:versionId/download-link` | Issue an expiring, signed link to a rendered report PDF. |
+| GET    | `/compliance/documents/download`  | Consume a signed link (still authenticated and authorized). |
 
 ## Client Feedback & Engagement Evolution (Phase 9)
 
@@ -636,6 +667,156 @@ accepted, when it is the same version the re-entry started from, when it belongs
 to another engagement or workspace, or when it does not exist.
 
 
+## Security, Privacy & AI Compliance (Phase 10)
+
+Every workspace operates under one explicit **Compliance Policy**, and no AI
+request reaches a provider without being checked against it.
+
+### The Compliance Policy
+
+One record per workspace, created with the workspace, holding three named parts:
+
+- **Data handling** — the classification new engagements start under, whether
+  client data may be exported, how long a signed document link lives, whether
+  documents are encrypted at rest, and whether encrypted transport is required.
+- **AI policy** — whether AI processing is permitted at all, whether governed
+  provider/model combinations require approval, whether confidential information
+  may be processed, whether personal data is redacted/pseudonymized first, and
+  whether a human must approve AI output before it becomes accepted engagement
+  content.
+- **Data retention** — how long engagements, documents, audit records, and
+  AI artifacts are kept. Empty means "kept until explicitly erased".
+
+Every change appends a `compliance_policy_updated` entry to the append-only
+Audit Trail. An Administrator configures the policy; a Manager may read it,
+because a consultant who cannot see the rules cannot act on a refusal.
+
+### Data classification, AI permission, and privacy basis
+
+Engagement content, documents, and generated outputs carry a **Data
+Classification**: `public`, `internal`, `confidential`, `personal_data`
+(GDPR), `strictly_confidential`, or `ai_restricted`. A report version is created
+carrying at least its engagement's classification — a document assembled from
+confidential material is never less protected than the material.
+
+Each engagement additionally carries its own **AI processing permission**:
+`allowed` (the workspace policy decides), `restricted` (AI may assist, but only
+on non-confidential content and only after PII redaction), or `prohibited` (no
+AI processing, whatever the policy permits). This is an internal permission, not
+GDPR consent.
+
+Where engagement content contains personal data, the engagement also records the
+processing purpose and Article 6 legal basis: `contract`,
+`legitimate_interest`, `legal_obligation`, `consent`, or `not_assessed`.
+`not_assessed` is the honest default and blocks AI processing of personal data.
+Real consent records are stored only when the basis is `consent`; withdrawal
+blocks future AI processing that depends on that consent.
+
+### The AI compliance gate
+
+Every AI-assisted stage passes through one gate before a prompt is built into a
+request. It asks, in a fixed order: engagement AI processing permission →
+content classification → workspace AI policy → personal-data purpose and legal
+basis → consent record when consent is the basis → DPIA/DSFA screening and
+workspace DPIA status → governed provider/model approval. Two outcomes are
+refusals, and they are recorded differently on purpose:
+
+- **A policy refusal** happens before the pipeline runs. Nothing ran, so no
+  Analysis Run is written; the refusal is an `ai_request_denied` entry in the
+  Audit Trail, and the consultant is told *which rule* refused it.
+- **A PII redaction failure** happens inside the pipeline, after the prompt was
+  built. That is a failed AI-assisted step, so it is recorded as an Analysis Run
+  with its error — with no tokens and no cost — and audited as well.
+
+In both cases engagement state is untouched, and the original text is never sent
+as a fallback.
+
+### PII redaction and output scan
+
+Where the policy requires it, personal data is redacted before the prompt is
+sent: email addresses, telephone numbers, IBANs, street addresses, and labelled
+contract or customer references are matched by shape, and the workspace's own
+configured identifiers (a contact's name, a client's customer-number scheme) are
+matched from the policy. Each value is replaced by a stable placeholder
+(`[EMAIL_1]`), so the model can still reason about "the same customer" without
+being told who they are. This is pseudonymization at best, not irreversible
+anonymization, and it is not a substitute for a lawful basis.
+
+The redacted prompt is then **re-scanned**. If anything a rule recognizes
+survived, the request is refused rather than sent. The model response is scanned
+too before it is classified or accepted as engagement content. Only counts and
+kinds are recorded — never the values, because a log of what was removed or
+detected would defeat the safeguard.
+
+### Compliance metadata on every Analysis Run
+
+Alongside provider, model, prompt version and fingerprint, each run records its
+**purpose**, **input classification**, **output classification**, **PII
+redaction status**, **AI output scan outcome**, governed **provider/model
+approval**, and **human review status**. Saving an AI draft is not human
+approval. When policy requires review, an authorized Manager or Administrator
+uses the explicit stage-scoped review action, which moves the runs behind that
+stage from `pending` to `reviewed`.
+
+### Documents
+
+Rendered report PDFs are stored as AES-256-GCM ciphertext when
+`DOCUMENT_ENCRYPTION_KEY` is configured and the policy asks for encryption at
+rest; artifacts written before the key existed stay readable as they are, and a
+tampered artifact fails to open rather than being served. A short-lived,
+**signed download link** can be issued for one artifact, for one user, until one
+moment — it narrows what an already-authorized caller may fetch and never widens
+anyone's reach.
+
+### GDPR export and erasure
+
+An Administrator can export everything the workspace holds about one engagement,
+and can permanently delete it. Deletion cascades to everything the engagement
+owns; the **Audit Trail survives**, with the erasure recorded in it naming what
+was erased. A **legal hold** on an engagement is the one thing that blocks
+erasure — a retention period says how long data is kept by default, not how long
+it must be kept.
+
+### The Compliance Dashboard
+
+An Administrator sees, workspace-scoped: engagements by classification,
+confidential and AI-restricted engagements, engagements under legal hold, denied
+AI requests, PII redaction failures, AI outputs with personal data, engagements
+without legal basis, engagements with withdrawn consent, DPIA screening, governed
+provider/model approvals needing review, denied access attempts, AI output still
+awaiting human review, and what has passed its configured retention period.
+
+### What the Audit Trail gained
+
+`compliance_policy_updated`, `engagement_classification_changed`,
+`engagement_ai_processing_permission_changed`,
+`engagement_privacy_processing_updated`, `engagement_consent_recorded`,
+`engagement_consent_withdrawn`, `engagement_dpia_screening_changed`,
+`engagement_legal_hold_changed`, `workspace_dpia_updated`,
+`ai_model_approval_updated`, `ai_model_approval_removed`,
+`ai_model_approval_needs_review`, `confidential_content_accessed`,
+`document_download_link_issued`, `ai_request_denied`,
+`ai_pii_redaction_applied`, `ai_pii_redaction_failed`,
+`ai_output_personal_data_detected`, `retention_preview_generated`,
+`retention_action_executed`, `audit_entries_minimized`,
+`client_data_exported`, and `client_data_erased` — the same append-only log,
+never a fourth one, and still distinct from Analysis Runs and the Technology
+Update History.
+
+Two of those are the log's only governed exceptions to append-only, and both are
+Administrator-only and audited by the entry that names them:
+`audit_entries_minimized` records that a GDPR erasure reduced earlier entries for
+that engagement to their event and time, and `retention_action_executed` records
+that an explicitly executed retention action deleted entries past the configured
+cutoff — never entries whose engagement is under legal hold. No ordinary business
+workflow rewrites or removes an entry.
+
+For operational logging rules, see
+[docs/application-logging.md](./docs/application-logging.md). For the product
+governance assessment of EU AI Act readiness, see
+[docs/ai-act-readiness.md](./docs/ai-act-readiness.md); it is not legal advice.
+
+
 ## Scripts
 
 Run from the `server/` directory:
@@ -689,6 +870,23 @@ non-revealing. `src/domain/access/access.test.ts` tests the AccessPolicy as pure
 domain logic; `src/routes/authorization.test.ts` drives the real routes and the
 real policy through the HTTP boundary and asserts each denial is recorded as a
 `denied_permission` audit entry.
+
+From Phase 10 they also cover the **compliance rules and the AI gate**:
+`src/domain/compliance/compliance.test.ts` proves each refusal — a prohibited
+engagement, AI-restricted content, a workspace with AI switched off, restricted
+permission meeting confidential material, missing personal-data purpose/legal
+basis, withdrawn consent, incomplete DPIA screening, an unapproved
+provider/model combination, and that a missing approval approves nothing;
+`src/domain/compliance/pii.test.ts` proves that personal data is redacted
+deterministically, that ordinary engagement content survives, that a leftover
+is *reported* rather than passed on, and that the record of a redaction never
+contains what was removed;
+`src/lib/document-protection.test.ts` covers encryption at rest and the expiring
+signed link, including a tampered artifact and a forged token; the AI stage
+tests prove no provider call is made when the policy refuses, and that the
+prompt actually sent is the redacted one the gate returned; and
+`src/routes/compliance.authorization.test.ts` drives the compliance routes
+through the HTTP boundary and asserts the denials.
 
 The unit suites are deterministic and need no database or live model (the
 Assessment orchestration and authorization tests replace the provider, the

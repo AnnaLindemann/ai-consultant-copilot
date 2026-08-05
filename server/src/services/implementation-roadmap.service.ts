@@ -16,9 +16,9 @@ import {
 } from "../domain/engagement/implementation-roadmap.js"
 import { canonicalRecommendationContent } from "../domain/engagement/recommendations.js"
 import { createSha256Hash } from "../lib/create-sha256-hash.js"
+import { getCurrentRequestId, logger } from "../lib/application-logger.js"
 import { failureIdentity } from "../lib/failure-identity.js"
 import { callLlm } from "../lib/llm-client.js"
-import { getDefaultLlmConfig } from "../lib/llm-config.js"
 import { parseImplementationRoadmap } from "../lib/parse-implementation-roadmap.js"
 import { langfuse } from "../observability/langfuse.js"
 import { buildImplementationRoadmapPrompt } from "../prompts/build-implementation-roadmap-prompt.js"
@@ -47,7 +47,13 @@ import {
 } from "./consulting-knowledge.service.js"
 
 import type { EvaluationResult } from "../evaluation/evaluation.types.js"
+import {
+  authorizeAiProcessing,
+  reviewAiOutput,
+} from "./ai-compliance.service.js"
+
 import type { RoadmapMessageId } from "../../../shared/implementation-roadmap-messages.js"
+import type { ComplianceMessageId } from "../../../shared/compliance-messages.js"
 import type {
   Roadmap,
   RoadmapReviewState,
@@ -70,6 +76,10 @@ export type GenerateRoadmapFailure =
   | "ai_output_ungrounded"
   | "version_conflict"
   | "persistence_failed"
+  // The Workspace Compliance Policy, the engagement's AI consent, or its data
+  // classification refused the request before it reached the provider (roadmap
+  // Phase 10).
+  | "ai_not_permitted"
 
 export type SaveRoadmapFailure =
   | "recommendations_not_ready"
@@ -78,8 +88,11 @@ export type SaveRoadmapFailure =
   | "historical_version_readonly"
   | "stale_update"
 
+// `ai_not_permitted` is deliberately absent: a compliance refusal is reported
+// with the identifier the gate named — which rule refused it — rather than with
+// one fixed message for every rule.
 const FAILURE_MESSAGE: Record<
-  GenerateRoadmapFailure | SaveRoadmapFailure,
+  Exclude<GenerateRoadmapFailure, "ai_not_permitted"> | SaveRoadmapFailure,
   RoadmapMessageId
 > = {
   recommendations_not_ready: "roadmap.error.recommendations_not_ready",
@@ -113,7 +126,9 @@ export type GenerateRoadmapResult =
   | ({
       success: false
       failure: GenerateRoadmapFailure
-      messageId: RoadmapMessageId
+      // A compliance refusal names the rule that stopped it, so the
+      // identifier may come from either contract.
+      messageId: RoadmapMessageId | ComplianceMessageId
       evaluation?: EvaluationResult
     } & UngroundedRoadmapDetail)
 
@@ -166,6 +181,7 @@ export const generateImplementationRoadmap = async (
     metadata: {
       engagementId: engagement.id,
       workspaceId: scope.workspaceId,
+      requestId: getCurrentRequestId(),
       stage: STAGE,
       promptVersion: IMPLEMENTATION_ROADMAP_PROMPT.version,
       promptFingerprint: IMPLEMENTATION_ROADMAP_PROMPT.fingerprint,
@@ -192,12 +208,43 @@ export const generateImplementationRoadmap = async (
     implementationPatterns: knowledgePackage,
   })
 
-  const llmConfig = getDefaultLlmConfig()
+  // The compliance gate: the Workspace Compliance Policy, the engagement's AI
+  // consent and its data classification are asked *before* anything leaves for
+  // the provider, and personal data is removed where the policy requires it
+  // (roadmap Phase 10). The prompt the gate hands back is the only one that may
+  // be sent, and a refusal leaves the version the consultant was working on
+  // exactly as they left it.
+  const gate = await authorizeAiProcessing({
+    engagement,
+    scope,
+    stage: STAGE,
+    purpose: "roadmap_assembly",
+    prompt,
+    promptVersion: IMPLEMENTATION_ROADMAP_PROMPT.version,
+    promptFingerprint: IMPLEMENTATION_ROADMAP_PROMPT.fingerprint,
+  })
+
+  if (!gate.permitted) {
+    trace?.update({
+      metadata: {
+        engagementId: engagement.id,
+        workspaceId: scope.workspaceId,
+        stage: STAGE,
+        success: false,
+        complianceDenial: gate.reason,
+      },
+    })
+    await langfuse?.flushAsync()
+
+    return refusedByCompliance(gate.messageId)
+  }
+
+  const llmConfig = { provider: gate.provider, model: gate.model }
   const groundingCodes = { knowledgeEntryCodes: knowledgePackage.codes }
 
   let llmResponse
   try {
-    llmResponse = await callLlm(prompt)
+    llmResponse = await callLlm(gate.prompt)
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "The AI provider call failed"
@@ -224,12 +271,20 @@ export const generateImplementationRoadmap = async (
       schemaValid: false,
       errorMessage,
       ...groundingCodes,
+      compliance: gate.compliance,
     })
 
     return refused("ai_step_failed")
   }
 
   const parsedResult = parseImplementationRoadmap(llmResponse.content)
+  const outputReview = await reviewAiOutput({
+    engagement,
+    scope,
+    stage: STAGE,
+    decision: gate,
+    responseText: llmResponse.content,
+  })
   const resolution = parsedResult.success
     ? resolveGeneratedRoadmap(
         parsedResult.roadmap,
@@ -280,7 +335,7 @@ export const generateImplementationRoadmap = async (
   })
 
   const persisted =
-    resolution?.resolved === true
+    outputReview.accepted && resolution?.resolved === true
       ? await persistVersion(
           engagement,
           scope,
@@ -304,8 +359,14 @@ export const generateImplementationRoadmap = async (
     costEstimateUsd,
     jsonParseSuccess: parsedResult.jsonParseSuccess,
     schemaValid: parsedResult.schemaValid && grounded,
-    errorMessage: generationError(parsedResult, resolution, persisted),
+    errorMessage: generationError(
+      parsedResult,
+      outputReview,
+      resolution,
+      persisted,
+    ),
     ...groundingCodes,
+    compliance: outputReview.compliance,
   })
 
   trace?.update({
@@ -326,6 +387,15 @@ export const generateImplementationRoadmap = async (
   if (!parsedResult.success) return { ...refused("ai_output_invalid"), evaluation }
   if (resolution === null) {
     return { ...refused("ai_output_invalid"), evaluation }
+  }
+
+  if (!outputReview.accepted) {
+    return {
+      success: false,
+      failure: "ai_output_invalid",
+      messageId: outputReview.messageId,
+      evaluation,
+    }
   }
 
   if (resolution.resolved !== true) {
@@ -545,7 +615,7 @@ const persistVersion = async (
       ? { stored: true, version: created.version }
       : { stored: false, reason: created.reason }
   } catch (error) {
-    console.error("PERSIST_ROADMAP_VERSION_FAILED", failureIdentity(error))
+    logger.error("PERSIST_ROADMAP_VERSION_FAILED", failureIdentity(error))
     return { stored: false, reason: "persistence_failed" }
   }
 }
@@ -557,16 +627,21 @@ const recordRoadmapRun = async (
     const run = await createAnalysisRun(input)
     return run.id
   } catch (error) {
-    console.error("RECORD_ROADMAP_RUN_FAILED", failureIdentity(error))
+    logger.error("RECORD_ROADMAP_RUN_FAILED", failureIdentity(error))
     return null
   }
 }
 
 const generationError = (
   parsedResult: ReturnType<typeof parseImplementationRoadmap>,
+  outputReview: { accepted: boolean },
   resolution: RoadmapResolution | null,
   persisted: PersistOutcome | null,
 ): string | undefined => {
+  if (!outputReview.accepted) {
+    return "AI output contained personal data and was refused."
+  }
+
   if (!parsedResult.success) return parsedResult.error
   if (resolution?.resolved === false) {
     return JSON.stringify(ungroundedDetail(resolution))
@@ -587,8 +662,17 @@ const ungroundedDetail = (
   dispositionErrors: resolution.dispositionErrors,
 })
 
+// A compliance refusal carries the identifier the gate named rather than this
+// stage's own, so the consultant is told which rule stopped the request.
+const refusedByCompliance = (messageId: ComplianceMessageId) =>
+  ({
+    success: false,
+    failure: "ai_not_permitted",
+    messageId,
+  }) as const
+
 const refused = (
-  failure: GenerateRoadmapFailure,
+  failure: Exclude<GenerateRoadmapFailure, "ai_not_permitted">,
 ): Extract<GenerateRoadmapResult, { success: false }> => ({
   success: false,
   failure,

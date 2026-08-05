@@ -5,6 +5,7 @@ import {
   consultingKnowledgeFilterSchema,
 } from "../../../shared/consulting-knowledge.schema.js"
 import { requireActingUser } from "../lib/auth-context.js"
+import { logger } from "../lib/application-logger.js"
 import { failureIdentity } from "../lib/failure-identity.js"
 import {
   authorizeEngagementAction,
@@ -78,7 +79,7 @@ router.get("/", async (req, res) => {
       data: { results },
     })
   } catch (error) {
-    console.error("LOAD_KNOWLEDGE_FAILED", failureIdentity(error))
+    logger.error("LOAD_KNOWLEDGE_FAILED", failureIdentity(error))
     return internalError(res)
   }
 })
@@ -105,7 +106,7 @@ router.get("/entries/:code", async (req, res) => {
       data: { entry },
     })
   } catch (error) {
-    console.error("LOAD_KNOWLEDGE_ENTRY_FAILED", failureIdentity(error))
+    logger.error("LOAD_KNOWLEDGE_ENTRY_FAILED", failureIdentity(error))
     return internalError(res)
   }
 })
@@ -136,7 +137,7 @@ router.post("/entries", async (req, res) => {
       data: { entry: result.entry },
     })
   } catch (error) {
-    console.error("CREATE_KNOWLEDGE_ENTRY_FAILED", failureIdentity(error))
+    logger.error("CREATE_KNOWLEDGE_ENTRY_FAILED", failureIdentity(error))
     return internalError(res)
   }
 })
@@ -185,7 +186,7 @@ router.patch("/entries/:code", async (req, res) => {
       data: { entry: result.entry },
     })
   } catch (error) {
-    console.error("UPDATE_KNOWLEDGE_ENTRY_FAILED", failureIdentity(error))
+    logger.error("UPDATE_KNOWLEDGE_ENTRY_FAILED", failureIdentity(error))
     return internalError(res)
   }
 })
@@ -223,7 +224,7 @@ for (const [segment, stage] of Object.entries(RETRIEVAL_STAGE)) {
         data: { knowledgePackage },
       })
     } catch (error) {
-      console.error("LOAD_KNOWLEDGE_PACKAGE_FAILED", failureIdentity(error))
+      logger.error("LOAD_KNOWLEDGE_PACKAGE_FAILED", failureIdentity(error))
       return internalError(res)
     }
   })

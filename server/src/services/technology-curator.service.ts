@@ -22,11 +22,17 @@ import {
   listTechnologyCategories,
   listTechnologySources,
 } from "../repositories/technology-knowledge.repository.js"
+import {
+  complianceRelevantChanges,
+  requireReviewAfterTechnologyChange,
+  type ProviderComplianceFacts,
+} from "./ai-model-approval.service.js"
 
 import type { ActingUser } from "../domain/access/access.js"
 import type { TechnologyKnowledgeMessageId } from "../../../shared/technology-knowledge-messages.js"
 import type {
   TechnologyHistoryFilter,
+  TechnologyProfile,
   TechnologyProposalFilter,
   TechnologyProposalReview,
   TechnologyUpdateHistoryEntry,
@@ -172,6 +178,16 @@ export const decideTechnologyProposal = async (
   if (coherenceFailure !== null) return refuseDecision("apply_failed")
 
   const appliedProfile = applyProposal(proposal, currentProfile)
+  const appliedComplianceProfile: TechnologyProfile = {
+    ...appliedProfile,
+    origin: "curator",
+    originSourceCodes: [],
+    revision: (currentProfile?.revision ?? -1) + 1,
+  }
+  const complianceChanges = complianceRelevantChanges(
+    complianceFactsOf(currentProfile),
+    complianceFactsOf(appliedComplianceProfile),
+  )
 
   const result = await applyApprovedProposal(
     proposalId,
@@ -181,6 +197,12 @@ export const decideTechnologyProposal = async (
   )
 
   if (!result.applied) return refuseDecision("already_decided")
+
+  await requireReviewAfterTechnologyChange({
+    technologyProfileCode: proposal.profileCode,
+    changedFields: complianceChanges,
+    actorUserId: actor.id,
+  })
 
   return {
     success: true,
@@ -221,6 +243,110 @@ export const getTechnologyProposals = (
 export const getTechnologyUpdateHistory = (
   filter: TechnologyHistoryFilter,
 ): Promise<TechnologyUpdateHistoryEntry[]> => listTechnologyUpdateHistory(filter)
+
+// The compliance-relevant facts of a Technology Profile, as far as the current
+// profile shape can express them.
+//
+// **What is structural and what is not.** Lifecycle and deprecation come from
+// `profile.status`, a typed field: a profile that is deprecated says so in a
+// place that cannot be worded away. Everything else a workspace approval rests
+// on — processing regions, retention, training/input use, subprocessors, DPA,
+// international transfers — has no field of its own today, so it is recovered
+// by **conservative keyword matching** over the profile's curated prose
+// (summary, role, strengths, limitations, suitability, tags).
+//
+// **What that heuristic gets wrong, in both directions.** It over-flags: a term
+// can appear in an ordinary sentence, so an editorial re-wording can look like
+// a compliance change and send approvals back for review that did not need it.
+// It also under-detects: a genuinely compliance-relevant change phrased without
+// any recognized term is not seen here at all. Neither failure is silent about
+// what it is — this function claims to compare *statements containing known
+// terms*, not to have understood the profile.
+//
+// **Why that is nevertheless safe.** Nothing here approves anything. A detected
+// change only moves affected approvals to `needs_review`, which stops AI
+// processing until an Administrator looks again; a missed change leaves the
+// existing human approval standing, exactly as it stood before this comparison
+// existed. The enforcement control is the Administrator's re-review, not the
+// keyword list, and the workspace's own approval decision remains the thing AI
+// processing is actually gated on (`decideAiProcessing`).
+//
+// **What replaces it.** When the Technology Knowledge Base gains typed fields
+// for these facts, this function becomes a structural comparison and the
+// keyword lists disappear. That is a Technology KB schema change, deliberately
+// not made here.
+const complianceFactsOf = (
+  profile: TechnologyProfile | null,
+): ProviderComplianceFacts | null => {
+  if (profile === null) return null
+
+  const statements = [
+    profile.summary,
+    profile.details.role,
+    ...profile.details.strengths,
+    ...profile.details.limitations,
+    ...profile.details.suitability,
+    ...profile.tags,
+  ]
+
+  return {
+    lifecycleStatus: profile.status,
+    dataProcessingRegions: matchingStatements(statements, [
+      "region",
+      "data region",
+      "processing region",
+      "eu",
+      "europe",
+      "drittland",
+    ]),
+    retentionPolicy:
+      matchingStatements(statements, [
+        "retention",
+        "aufbewahrung",
+        "speicher",
+      ]).join("\n") || null,
+    trainingUsePolicy:
+      matchingStatements(statements, [
+        "training",
+        "input use",
+        "model training",
+        "trainings",
+      ]).join("\n") || null,
+    subprocessorSource:
+      matchingStatements(statements, [
+        "subprocessor",
+        "unterauftrag",
+      ]).join("\n") || null,
+    dpaInformation:
+      matchingStatements(statements, [
+        "dpa",
+        "data processing agreement",
+        "avv",
+      ]).join("\n") || null,
+    internationalTransfers:
+      matchingStatements(statements, [
+        "third country",
+        "international transfer",
+        "drittland",
+        "transfer",
+      ]).join("\n") || null,
+  }
+}
+
+const matchingStatements = (
+  statements: readonly string[],
+  needles: readonly string[],
+): string[] => {
+  const normalizedNeedles = needles.map((needle) => needle.toLowerCase())
+
+  return statements
+    .map((statement) => statement.trim())
+    .filter((statement) => {
+      const lower = statement.toLowerCase()
+      return normalizedNeedles.some((needle) => lower.includes(needle))
+    })
+    .sort()
+}
 
 const refuseProposal = (
   failure: ProposeFailure,

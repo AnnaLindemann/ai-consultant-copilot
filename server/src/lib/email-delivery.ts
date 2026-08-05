@@ -4,10 +4,10 @@ import { fileURLToPath } from "node:url"
 import { Resend } from "resend"
 
 import { createDevMailbox, type DevMailbox } from "./dev-mailbox.js"
+import { logger } from "./application-logger.js"
 import { failureIdentity } from "./failure-identity.js"
 
 import type {
-  EmailChannel,
   EmailDeliveryProvider,
   EmailDeliveryResult,
   EmailMessage,
@@ -148,8 +148,8 @@ export const createResendEmailDelivery = (
       })
 
       if (error) {
-        console.error("EMAIL_SEND_REJECTED", {
-          ...safeMetadata("resend", message),
+        logger.error("EMAIL_SEND_REJECTED", {
+          ...safeMetadata("resend", "provider_rejected"),
           ...vendorFailure(error.name),
         })
 
@@ -165,8 +165,8 @@ export const createResendEmailDelivery = (
       // The error object never appears here — not its message, not its stack,
       // not its attached request. Only its class and machine code survive, and
       // only if they have the shape of identifiers (`failure-identity.ts`).
-      console.error("EMAIL_SEND_FAILED", {
-        ...safeMetadata("resend", message),
+      logger.error("EMAIL_SEND_FAILED", {
+        ...safeMetadata("resend", "provider_unavailable"),
         ...failureIdentity(error),
       })
 
@@ -180,23 +180,25 @@ export const createResendEmailDelivery = (
 })
 
 // Development and test, with no local mailbox configured. Nothing is sent and
-// nothing is claimed: the line below records that a message was raised, for
-// whom, and of what size — enough to see that a flow reached the mail step, and
-// not enough to follow the link it carried. A developer who needs the link runs
-// with `EMAIL_DEV_MAILBOX=1` and reads it with `npm run mail:dev`.
+// nothing is claimed: the log line records only that the local non-delivery
+// path was used. A developer who needs the link runs with `EMAIL_DEV_MAILBOX=1`
+// and reads it with `npm run mail:dev`.
 export const createLoggingEmailDelivery = (): EmailDeliveryProvider => ({
   channel: "log",
-  send: async (message: EmailMessage): Promise<EmailDeliveryResult> => {
-    console.info("EMAIL_NOT_SENT_LOGGED_LOCALLY", safeMetadata("log", message))
+  send: async (_message: EmailMessage): Promise<EmailDeliveryResult> => {
+    logger.info(
+      "EMAIL_NOT_SENT_LOGGED_LOCALLY",
+      safeMetadata("local_log", "logged_not_sent"),
+    )
 
     return { delivered: false, channel: "log", reason: "logged_not_sent" }
   },
 })
 
 // Development, with the local mailbox. The message is written to the
-// developer's own machine and the console line stays metadata-only, exactly as
-// on every other channel — the mailbox is a place to read a link deliberately,
-// not a way to get one into the logs.
+// developer's own machine and the log line stays metadata-only, exactly as on
+// every other channel — the mailbox is a place to read a link deliberately, not
+// a way to get one into the logs.
 export const createDevMailboxEmailDelivery = (
   mailbox: DevMailbox,
 ): EmailDeliveryProvider => ({
@@ -205,8 +207,8 @@ export const createDevMailboxEmailDelivery = (
     try {
       await mailbox.store(message)
     } catch (error) {
-      console.error("EMAIL_DEV_MAILBOX_WRITE_FAILED", {
-        ...safeMetadata("dev_mailbox", message),
+      logger.error("EMAIL_DEV_MAILBOX_WRITE_FAILED", {
+        ...safeMetadata("dev_mailbox", "provider_unavailable"),
         ...failureIdentity(error),
       })
 
@@ -217,9 +219,9 @@ export const createDevMailboxEmailDelivery = (
       }
     }
 
-    console.info(
+    logger.info(
       "EMAIL_NOT_SENT_STORED_IN_DEV_MAILBOX",
-      safeMetadata("dev_mailbox", message),
+      safeMetadata("dev_mailbox", "stored_in_dev_mailbox"),
     )
 
     return {
@@ -230,15 +232,17 @@ export const createDevMailboxEmailDelivery = (
   },
 })
 
-// The only shape of an email that is allowed into a log. Subjects come from the
-// server-side catalogue and are fixed strings; the recipient is the operational
-// fact a delivery question is asked about. The body — and therefore every
-// token, verification value, reset value, and link — is reduced to its length.
-const safeMetadata = (channel: EmailChannel, message: EmailMessage) => ({
-  channel,
-  to: message.to,
-  subject: message.subject,
-  bodyBytes: message.text.length,
+// Email logs describe the delivery channel and outcome only. Recipient,
+// subject, body, and byte counts are intentionally absent: every message can
+// carry a single-use link, and logs are not a mailbox.
+const safeMetadata = (
+  provider: "resend" | "local_log" | "dev_mailbox",
+  outcome: string,
+) => ({
+  provider,
+  outcome,
+  category: "email_delivery",
+  count: 1,
 })
 
 // What a vendor is allowed to contribute to a log line.
@@ -255,8 +259,8 @@ const safeMetadata = (channel: EmailChannel, message: EmailMessage) => ({
 // admitted is a single value matched against the fixed set of error names
 // Resend documents. Anything outside the set — including any message text, and
 // including a name a future API version invents — becomes `unrecognized`, and
-// the operator still learns from `EMAIL_SEND_REJECTED` and the recipient that a
-// message was refused.
+// the operator still learns from `EMAIL_SEND_REJECTED` that a message was
+// refused.
 const RESEND_ERROR_NAMES: ReadonlySet<string> = new Set([
   "application_error",
   "concurrent_idempotent_requests",

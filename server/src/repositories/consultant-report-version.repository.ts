@@ -1,6 +1,12 @@
 import { Prisma } from "@prisma/client"
 
+import { logger } from "../lib/application-logger.js"
 import { prisma } from "../lib/prisma.js"
+import {
+  decryptDocument,
+  encryptDocument,
+  isEncryptionAvailable,
+} from "../lib/document-encryption.js"
 import { engagementScopeWhere } from "./engagement.repository.js"
 
 import type { DatabaseClient } from "../lib/prisma.js"
@@ -79,6 +85,14 @@ export const createReportVersion = async (
         data: { status: "superseded" },
       })
 
+      // A report assembled from an engagement's content is never less protected
+      // than that content, so the version is created carrying the engagement's
+      // own classification (roadmap Phase 10).
+      const engagement = await tx.engagement.findUniqueOrThrow({
+        where: { id: input.engagementId },
+        select: { dataClassification: true },
+      })
+
       const created = await tx.consultantReportVersion.create({
         data: {
           workspaceId: input.workspaceId,
@@ -86,6 +100,7 @@ export const createReportVersion = async (
           versionNumber: (highest?.versionNumber ?? 0) + 1,
           status: "active",
           reviewState: "draft",
+          dataClassification: engagement.dataClassification,
           content: input.report as unknown as Prisma.InputJsonValue,
           sourceSnapshot: input.sourceSnapshot as unknown as Prisma.InputJsonValue,
           ...snapshotColumns(input.sourceSnapshot),
@@ -624,6 +639,11 @@ export const getActivePublicationForClient = async (
   return publication && toPublicationSummary(publication)
 }
 
+// Store a rendered PDF. The bytes are encrypted at rest where the deployment
+// has a key configured and the workspace's Compliance Policy asks for it
+// (roadmap Phase 10); `pdfHash` is computed by the caller from the *rendered*
+// bytes, so it still identifies the document the client received once what is
+// stored is ciphertext.
 export const createReportPdfArtifact = async (
   scope: EngagementScope,
   input: {
@@ -634,9 +654,27 @@ export const createReportPdfArtifact = async (
     contentHash: string
     pdfHash: string
     bytes: Buffer
+    encryptAtRest: boolean
   },
 ) => {
   await assertEngagementInScope(input.engagementId, scope)
+
+  // A policy that asks for encryption but a deployment with no key configured
+  // stores the bytes as rendered rather than pretending: the Compliance
+  // Dashboard reports what the policy asks for, and `isEncryptionAvailable()`
+  // is what says whether the deployment can honour it.
+  const wrapped = input.encryptAtRest ? encryptDocument(input.bytes) : null
+
+  if (input.encryptAtRest && !isEncryptionAvailable()) {
+    // The policy asks for something the deployment cannot do. It is reported as
+    // an event an operator can alert on rather than failing the consultant's
+    // publication or, worse, being silently ignored (coding-standards.md §7).
+    logger.error("DOCUMENT_ENCRYPTION_KEY_MISSING", {
+      workspaceId: input.workspaceId,
+      engagementId: input.engagementId,
+      reportVersionId: input.reportVersionId,
+    })
+  }
 
   return prisma.reportPdfArtifact.upsert({
     where: {
@@ -652,7 +690,9 @@ export const createReportPdfArtifact = async (
       rendererVersion: input.rendererVersion,
       contentHash: input.contentHash,
       pdfHash: input.pdfHash,
-      bytes: new Uint8Array(input.bytes),
+      bytes: new Uint8Array(wrapped?.bytes ?? input.bytes),
+      encryptionAlgorithm: wrapped?.algorithm ?? null,
+      encryptionKeyId: wrapped?.keyId ?? null,
     },
     update: {},
   })
@@ -671,10 +711,12 @@ export const getReportPdfArtifactBytes = async (
       engagement: engagementScopeWhere(scope),
     },
     orderBy: { createdAt: "desc" },
-    select: { bytes: true },
+    select: { bytes: true, encryptionAlgorithm: true },
   })
 
-  return artifact?.bytes ? Buffer.from(artifact.bytes) : null
+  return artifact?.bytes
+    ? decryptDocument(Buffer.from(artifact.bytes), artifact.encryptionAlgorithm)
+    : null
 }
 
 export const getPublishedPdfArtifactBytesForClient = async (
@@ -692,10 +734,15 @@ export const getPublishedPdfArtifactBytesForClient = async (
       pdfArtifactId: { not: null },
       title: { not: null },
     },
-    select: { pdfArtifact: { select: { bytes: true } } },
+    select: {
+      pdfArtifact: { select: { bytes: true, encryptionAlgorithm: true } },
+    },
   })
 
-  return publication?.pdfArtifact?.bytes ? Buffer.from(publication.pdfArtifact.bytes) : null
+  const artifact = publication?.pdfArtifact
+  return artifact?.bytes
+    ? decryptDocument(Buffer.from(artifact.bytes), artifact.encryptionAlgorithm)
+    : null
 }
 
 export const reservePublicationEmailAttempt = async (

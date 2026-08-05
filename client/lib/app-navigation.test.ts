@@ -31,7 +31,14 @@ test("the navigation names exactly the routes the application implements", () =>
     allItems()
       .map((item) => item.href)
       .sort(),
-    ["/", "/engagements", "/knowledge", "/technology", "/technology/proposals"],
+    [
+      "/",
+      "/compliance",
+      "/engagements",
+      "/knowledge",
+      "/technology",
+      "/technology/proposals",
+    ],
   )
 })
 

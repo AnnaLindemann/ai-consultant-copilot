@@ -1,4 +1,5 @@
 import { authenticationProvider } from "../lib/auth/authentication-provider.js"
+import { getCompliancePolicy } from "./compliance.service.js"
 import {
   generateInvitationToken,
   hashInvitationToken,
@@ -112,6 +113,12 @@ export const bootstrapFirstAdministrator = async (input: BootstrapAuthInput) => 
   const workspace =
     (await findSingleWorkspaceForBootstrap()) ??
     (await createWorkspace({ name: input.workspaceName }))
+
+  // Every engagement operates under an explicit Workspace Compliance Policy
+  // (roadmap Phase 10 Definition of Done), so the policy exists from the moment
+  // the workspace does — not from the moment an administrator first opens the
+  // settings. Reading it is what creates it if it is somehow absent.
+  await getCompliancePolicy({ workspaceId: workspace.id })
 
   const placeholderOwner = await findUnlinkedAdministrator({
     workspaceId: workspace.id,

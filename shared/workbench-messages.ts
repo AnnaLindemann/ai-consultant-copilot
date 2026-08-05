@@ -10,6 +10,9 @@
 // renaming one is a contract change.
 
 export const workbenchMessageIds = [
+  // Global server boundary.
+  "server.error.internal",
+
   // Organizations.
   "organization.message.list_loaded",
   "organization.message.loaded",
@@ -36,6 +39,10 @@ export const workbenchMessageIds = [
   "assessment.error.consultant_edits_protected",
   "assessment.error.ai_step_failed",
   "assessment.error.ai_output_invalid",
+  // The compliance policy refused the request (roadmap Phase 10). It is the
+  // fallback: the route reports the specific compliance identifier the gate
+  // named, so the consultant is told which rule stopped it.
+  "assessment.error.ai_not_permitted",
   "assessment.error.internal",
 
   // The Phase 0 analysis run and its audit trail.

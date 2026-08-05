@@ -2,6 +2,7 @@ import { Router } from "express"
 
 import { engagementScopeOf } from "../domain/access/access.js"
 import { requireActingUser } from "../lib/auth-context.js"
+import { logger } from "../lib/application-logger.js"
 import {
   authorizeWorkspaceAction,
   denyRequest,
@@ -40,7 +41,7 @@ router.get("/", async (req, res) => {
       data: organizations,
     })
   } catch (error) {
-    console.error("LOAD_ORGANIZATIONS_FAILED", failureIdentity(error))
+    logger.error("LOAD_ORGANIZATIONS_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -80,7 +81,7 @@ router.post("/", async (req, res) => {
       data: organization,
     })
   } catch (error) {
-    console.error("CREATE_ORGANIZATION_FAILED", failureIdentity(error))
+    logger.error("CREATE_ORGANIZATION_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -120,7 +121,7 @@ router.get("/:id", async (req, res) => {
       data: organization,
     })
   } catch (error) {
-    console.error("LOAD_ORGANIZATION_DETAILS_FAILED", failureIdentity(error))
+    logger.error("LOAD_ORGANIZATION_DETAILS_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -165,7 +166,7 @@ router.get("/:id/engagements", async (req, res) => {
       data: engagements,
     })
   } catch (error) {
-    console.error("LOAD_ORGANIZATION_ENGAGEMENTS_FAILED", failureIdentity(error))
+    logger.error("LOAD_ORGANIZATION_ENGAGEMENTS_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,

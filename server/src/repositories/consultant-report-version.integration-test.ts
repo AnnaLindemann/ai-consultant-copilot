@@ -254,6 +254,7 @@ if (!environment) {
       reportVersionId: version.id,
       rendererVersion: "report-pdf.v1",
       contentHash: "old_content",
+      encryptAtRest: false,
       pdfHash: "old_pdf",
       bytes: Buffer.from("old renderer bytes"),
     })

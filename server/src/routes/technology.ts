@@ -11,6 +11,7 @@ import {
   technologyUpdateProposalDraftSchema,
 } from "../../../shared/technology-knowledge.schema.js"
 import { requireActingUser } from "../lib/auth-context.js"
+import { logger } from "../lib/application-logger.js"
 import { failureIdentity } from "../lib/failure-identity.js"
 import {
   authorizeWorkspaceAction,
@@ -84,7 +85,7 @@ router.get("/profiles", async (req, res) => {
       data: { profiles },
     })
   } catch (error) {
-    console.error("LOAD_TECHNOLOGY_PROFILES_FAILED", failureIdentity(error))
+    logger.error("LOAD_TECHNOLOGY_PROFILES_FAILED", failureIdentity(error))
     return internalError(res)
   }
 })
@@ -109,7 +110,7 @@ router.get("/profiles/:code", async (req, res) => {
       data: { profile },
     })
   } catch (error) {
-    console.error("LOAD_TECHNOLOGY_PROFILE_FAILED", failureIdentity(error))
+    logger.error("LOAD_TECHNOLOGY_PROFILE_FAILED", failureIdentity(error))
     return internalError(res)
   }
 })
@@ -139,7 +140,7 @@ router.get("/registries", async (req, res) => {
       data: { categories, sources },
     })
   } catch (error) {
-    console.error("LOAD_TECHNOLOGY_REGISTRIES_FAILED", failureIdentity(error))
+    logger.error("LOAD_TECHNOLOGY_REGISTRIES_FAILED", failureIdentity(error))
     return internalError(res)
   }
 })
@@ -183,7 +184,7 @@ router.put("/categories/:code", async (req, res) => {
       data: { category: result.record },
     })
   } catch (error) {
-    console.error("CURATE_TECHNOLOGY_CATEGORY_FAILED", failureIdentity(error))
+    logger.error("CURATE_TECHNOLOGY_CATEGORY_FAILED", failureIdentity(error))
     return internalError(res)
   }
 })
@@ -221,7 +222,7 @@ router.put("/sources/:code", async (req, res) => {
       data: { source: result.record },
     })
   } catch (error) {
-    console.error("CURATE_TECHNOLOGY_SOURCE_FAILED", failureIdentity(error))
+    logger.error("CURATE_TECHNOLOGY_SOURCE_FAILED", failureIdentity(error))
     return internalError(res)
   }
 })
@@ -253,7 +254,7 @@ router.get("/proposals", async (req, res) => {
       data: { proposals },
     })
   } catch (error) {
-    console.error("LOAD_TECHNOLOGY_PROPOSALS_FAILED", failureIdentity(error))
+    logger.error("LOAD_TECHNOLOGY_PROPOSALS_FAILED", failureIdentity(error))
     return internalError(res)
   }
 })
@@ -280,7 +281,7 @@ router.get("/proposals/:id", async (req, res) => {
       data: { review },
     })
   } catch (error) {
-    console.error("LOAD_TECHNOLOGY_PROPOSAL_FAILED", failureIdentity(error))
+    logger.error("LOAD_TECHNOLOGY_PROPOSAL_FAILED", failureIdentity(error))
     return internalError(res)
   }
 })
@@ -324,7 +325,7 @@ router.post("/proposals", async (req, res) => {
       data: { proposal: result.proposal },
     })
   } catch (error) {
-    console.error("CREATE_TECHNOLOGY_PROPOSAL_FAILED", failureIdentity(error))
+    logger.error("CREATE_TECHNOLOGY_PROPOSAL_FAILED", failureIdentity(error))
     return internalError(res)
   }
 })
@@ -383,7 +384,7 @@ router.post("/proposals/:id/decision", async (req, res) => {
       },
     })
   } catch (error) {
-    console.error("DECIDE_TECHNOLOGY_PROPOSAL_FAILED", failureIdentity(error))
+    logger.error("DECIDE_TECHNOLOGY_PROPOSAL_FAILED", failureIdentity(error))
     return internalError(res)
   }
 })
@@ -415,7 +416,7 @@ router.get("/history", async (req, res) => {
       data: { entries },
     })
   } catch (error) {
-    console.error("LOAD_TECHNOLOGY_HISTORY_FAILED", failureIdentity(error))
+    logger.error("LOAD_TECHNOLOGY_HISTORY_FAILED", failureIdentity(error))
     return internalError(res)
   }
 })
@@ -450,7 +451,7 @@ router.post("/retrieval-preview", async (req, res) => {
       data: { technologyPackage },
     })
   } catch (error) {
-    console.error("PREVIEW_TECHNOLOGY_RETRIEVAL_FAILED", failureIdentity(error))
+    logger.error("PREVIEW_TECHNOLOGY_RETRIEVAL_FAILED", failureIdentity(error))
     return internalError(res)
   }
 })
@@ -490,7 +491,7 @@ const appendCuratorAudit = async (
   try {
     await appendAuditTrail({ workspaceId, userId, eventType, payload: rest })
   } catch (error) {
-    console.error("AUDIT_APPEND_FAILED", {
+    logger.error("AUDIT_APPEND_FAILED", {
       eventType,
       workspaceId,
       userId,

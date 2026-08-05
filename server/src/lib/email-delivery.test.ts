@@ -322,8 +322,10 @@ test("an allow-listed vendor error name is kept, because it is diagnostic", asyn
   const transcript = logged.join("\n")
 
   assert.match(transcript, /"vendorError":"invalid_from_address"/)
-  assert.match(transcript, /invitee@example\.com/)
-  assert.match(transcript, /bodyBytes/)
+  assert.match(transcript, /"provider":"resend"/)
+  assert.match(transcript, /"outcome":"provider_rejected"/)
+  assert.match(transcript, /"count":1/)
+  assert.equal(transcript.includes("invitee@example.com"), false)
   assert.equal(transcript.includes(SECRET_URL), false)
 })
 
@@ -353,8 +355,9 @@ for (const [name, build] of loggingPaths) {
     assertNoSecrets(logged.join("\n"), message, name)
 
     // The safe metadata is still there, so a failed flow is still diagnosable.
-    assert.match(logged.join("\n"), /invitee@example\.com/)
-    assert.match(logged.join("\n"), /bodyBytes/)
+    assert.match(logged.join("\n"), /"category":"email_delivery"/)
+    assert.match(logged.join("\n"), /"count":1/)
+    assert.equal(logged.join("\n").includes("invitee@example.com"), false)
   })
 }
 

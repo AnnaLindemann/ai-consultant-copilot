@@ -12,8 +12,8 @@ import {
   resolveCitations,
 } from "../domain/engagement/opportunities.js"
 import { createSha256Hash } from "../lib/create-sha256-hash.js"
+import { getCurrentRequestId, logger } from "../lib/application-logger.js"
 import { callLlm } from "../lib/llm-client.js"
-import { getDefaultLlmConfig } from "../lib/llm-config.js"
 import { parseOpportunities } from "../lib/parse-opportunities.js"
 import { langfuse } from "../observability/langfuse.js"
 import { OPPORTUNITIES_PROMPT } from "../prompts/opportunities-prompt.js"
@@ -36,7 +36,13 @@ import {
 } from "../repositories/opportunity-version.repository.js"
 
 import type { Assessment, AssessmentFindingId } from "../../../shared/assessment.schema.js"
+import {
+  authorizeAiProcessing,
+  reviewAiOutput,
+} from "./ai-compliance.service.js"
+
 import type { OpportunityMessageId } from "../../../shared/opportunity-messages.js"
+import type { ComplianceMessageId } from "../../../shared/compliance-messages.js"
 import type {
   OpportunityPrioritizationSubmission,
   OpportunityReviewState,
@@ -59,6 +65,10 @@ const STAGE = "prioritization" as const
 export type PrioritizeOpportunitiesFailure =
   | "assessment_not_ready"
   | "consultant_edits_protected"
+  // The Workspace Compliance Policy, the engagement's AI consent, or its data
+  // classification refused the request before it reached the provider (roadmap
+  // Phase 10).
+  | "ai_not_permitted"
   | "ai_step_failed"
   | "ai_output_invalid"
   | "ai_output_ungrounded"
@@ -73,8 +83,12 @@ export type SaveOpportunitiesFailure =
   | "historical_version_readonly"
   | "stale_update"
 
+// `ai_not_permitted` is deliberately absent: a compliance refusal is reported
+// with the identifier the gate named — which rule refused it — rather than with
+// one fixed message for every rule.
 const FAILURE_MESSAGE: Record<
-  PrioritizeOpportunitiesFailure | SaveOpportunitiesFailure,
+  | Exclude<PrioritizeOpportunitiesFailure, "ai_not_permitted">
+  | SaveOpportunitiesFailure,
   OpportunityMessageId
 > = {
   assessment_not_ready: "opportunity.error.assessment_not_ready",
@@ -101,7 +115,9 @@ export type PrioritizeOpportunitiesResult =
   | {
       success: false
       failure: PrioritizeOpportunitiesFailure
-      messageId: OpportunityMessageId
+      // A compliance refusal names the rule that stopped it, so the identifier
+      // may come from either contract.
+      messageId: OpportunityMessageId | ComplianceMessageId
       evaluation?: EvaluationResult
       // The finding ids the citation named but the Assessment does not contain,
       // so the consultant can see *what* was fabricated rather than only that
@@ -164,6 +180,7 @@ export const prioritizeOpportunities = async (
     metadata: {
       engagementId: engagement.id,
       workspaceId: scope.workspaceId,
+      requestId: getCurrentRequestId(),
       stage: STAGE,
       promptVersion: OPPORTUNITIES_PROMPT.version,
       promptFingerprint: OPPORTUNITIES_PROMPT.fingerprint,
@@ -184,13 +201,42 @@ export const prioritizeOpportunities = async (
     assessment: assessedState,
   })
 
-  // Resolved up front so a provider failure can still be attributed to the
-  // provider and model it was attempted with.
-  const llmConfig = getDefaultLlmConfig()
+  // The compliance gate: the Workspace Compliance Policy, the engagement's AI
+  // consent and its data classification are asked *before* anything leaves for
+  // the provider, and personal data is removed where the policy requires it
+  // (roadmap Phase 10). The prompt the gate hands back is the only one that may
+  // be sent, and a refusal leaves the version the consultant was working on
+  // exactly as they left it.
+  const gate = await authorizeAiProcessing({
+    engagement,
+    scope,
+    stage: STAGE,
+    purpose: "opportunity_prioritization",
+    prompt,
+    promptVersion: OPPORTUNITIES_PROMPT.version,
+    promptFingerprint: OPPORTUNITIES_PROMPT.fingerprint,
+  })
+
+  if (!gate.permitted) {
+    trace?.update({
+      metadata: {
+        engagementId: engagement.id,
+        workspaceId: scope.workspaceId,
+        stage: STAGE,
+        success: false,
+        complianceDenial: gate.reason,
+      },
+    })
+    await langfuse?.flushAsync()
+
+    return refusedByCompliance(gate.messageId)
+  }
+
+  const llmConfig = { provider: gate.provider, model: gate.model }
 
   let llmResponse
   try {
-    llmResponse = await callLlm(prompt)
+    llmResponse = await callLlm(gate.prompt)
   } catch (error) {
     // A provider failure is still a failed AI-assisted step: it is recorded so
     // the audit trail survives (coding-standards.md §7), and no version is
@@ -219,12 +265,20 @@ export const prioritizeOpportunities = async (
       jsonParseSuccess: false,
       schemaValid: false,
       errorMessage,
+      compliance: gate.compliance,
     })
 
     return refused("ai_step_failed")
   }
 
   const parsedResult = parseOpportunities(llmResponse.content)
+  const outputReview = await reviewAiOutput({
+    engagement,
+    scope,
+    stage: STAGE,
+    decision: gate,
+    responseText: llmResponse.content,
+  })
 
   // Grounding is checked as part of validity, not after the fact: a citation
   // naming a finding the Assessment does not contain is fabricated grounding,
@@ -278,7 +332,7 @@ export const prioritizeOpportunities = async (
   // each one gets a stable id that a Recommendation cites and that survives
   // every later re-wording of its title and re-ordering of its rank.
   const persisted =
-    citations?.resolved === true
+    outputReview.accepted && citations?.resolved === true
       ? await persistVersion(
           engagement,
           scope,
@@ -287,7 +341,12 @@ export const prioritizeOpportunities = async (
         )
       : null
 
-  const runErrorMessage = generationError(parsedResult, citations, persisted)
+  const runErrorMessage = generationError(
+    parsedResult,
+    outputReview,
+    citations,
+    persisted,
+  )
 
   const analysisRunId = await recordPrioritizationRun({
     workspaceId: scope.workspaceId,
@@ -307,6 +366,7 @@ export const prioritizeOpportunities = async (
     // is, so the run records it as such rather than as a valid run.
     schemaValid: parsedResult.schemaValid && grounded,
     errorMessage: runErrorMessage,
+    compliance: outputReview.compliance,
   })
 
   trace?.update({
@@ -330,6 +390,15 @@ export const prioritizeOpportunities = async (
   // (architecture.md §13; agent-rules.md §10).
   if (!parsedResult.success) {
     return { ...refused("ai_output_invalid"), evaluation }
+  }
+
+  if (!outputReview.accepted) {
+    return {
+      success: false,
+      failure: "ai_output_invalid",
+      messageId: outputReview.messageId,
+      evaluation,
+    }
   }
 
   if (citations?.resolved !== true) {
@@ -495,12 +564,23 @@ const persistVersion = async (
       ? { stored: true, version: created.version }
       : { stored: false, reason: created.reason }
   } catch (error) {
-    console.error("STORE_OPPORTUNITY_VERSION_FAILED", failureIdentity(error))
+    logger.error("STORE_OPPORTUNITY_VERSION_FAILED", failureIdentity(error))
     return { stored: false, reason: "persistence_failed" }
   }
 }
 
-const refused = (failure: PrioritizeOpportunitiesFailure) =>
+// A compliance refusal carries the identifier the gate named rather than this
+// stage's own, so the consultant is told which rule stopped the request.
+const refusedByCompliance = (messageId: ComplianceMessageId) =>
+  ({
+    success: false,
+    failure: "ai_not_permitted",
+    messageId,
+  }) as const
+
+const refused = (
+  failure: Exclude<PrioritizeOpportunitiesFailure, "ai_not_permitted">,
+) =>
   ({
     success: false,
     failure,
@@ -545,9 +625,14 @@ const containsPlaceholderSuccessCriteria = (
 // raw provider response reaches either (coding-standards.md §7, §12A).
 const generationError = (
   parsedResult: { success: boolean; error?: string },
+  outputReview: { accepted: boolean },
   citations: { resolved: boolean; unknownFindingIds?: string[] } | null,
   persisted: PersistOutcome | null,
 ): string | undefined => {
+  if (!outputReview.accepted) {
+    return "AI output contained personal data and was refused."
+  }
+
   if (!parsedResult.success) return parsedResult.error
 
   if (citations && !citations.resolved) {
@@ -571,7 +656,7 @@ const linkAnalysisRun = async (versionId: string, analysisRunId: string) => {
   try {
     await linkOpportunityVersionAnalysisRun(versionId, analysisRunId)
   } catch (error) {
-    console.error(
+    logger.error(
       "LINK_OPPORTUNITY_VERSION_ANALYSIS_RUN_FAILED",
       failureIdentity(error),
     )
@@ -587,7 +672,7 @@ const recordPrioritizationRun = async (
     const analysisRun = await createAnalysisRun(input)
     return analysisRun.id
   } catch (error) {
-    console.error(
+    logger.error(
       "CREATE_PRIORITIZATION_ANALYSIS_RUN_FAILED",
       failureIdentity(error),
     )

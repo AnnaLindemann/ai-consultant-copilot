@@ -5,6 +5,7 @@ import type { RoadmapMessageId } from "../../shared/implementation-roadmap-messa
 import type { OpportunityMessageId } from "../../shared/opportunity-messages"
 import type { RecommendationMessageId } from "../../shared/recommendation-messages"
 import type { WorkbenchMessageId } from "../../shared/workbench-messages"
+import type { ComplianceMessageId } from "../../shared/compliance-messages"
 
 // The German string catalogue — the MVP's single active locale
 // (architecture.md §7.1). Keys are named after what a string *is* (its surface
@@ -245,6 +246,9 @@ const feedbackServerMessages: Record<FeedbackMessageId, string> = {
 // prose, which the workbench then displayed verbatim; the wording lives here
 // now and only the identifier travels.
 const workbenchServerMessages: Record<WorkbenchMessageId, string> = {
+  "server.error.internal":
+    "Unerwarteter Serverfehler. Bitte erneut versuchen und bei Rückfragen die Anfrage-ID angeben.",
+
   "organization.message.list_loaded": "Organisationen geladen",
   "organization.message.loaded": "Organisation geladen",
   "organization.message.created": "Organisation angelegt",
@@ -277,6 +281,8 @@ const workbenchServerMessages: Record<WorkbenchMessageId, string> = {
     "Der KI-Anbieter war nicht erreichbar. Es wurde nichts verändert – bitte erneut versuchen.",
   "assessment.error.ai_output_invalid":
     "Die KI-Antwort war unbrauchbar. Es wurde kein Entwurf erstellt und nichts verändert.",
+  "assessment.error.ai_not_permitted":
+    "Die Compliance-Richtlinie hat diese KI-Anfrage abgelehnt. Es wurde nichts an einen Anbieter gesendet.",
   "assessment.error.internal":
     "Unerwarteter Serverfehler. Das Assessment wurde nicht verändert. Bitte erneut versuchen.",
 
@@ -1389,6 +1395,7 @@ const uiMessages = {
   "shell.nav.aria_label": "Primäre Navigation",
   "shell.group.work": "Arbeit",
   "shell.group.knowledge": "Wissen",
+  "shell.group.governance": "Governance",
   "shell.nav.new_engagement": "Neues Engagement",
   "shell.nav.engagements": "Engagements",
   "shell.nav.knowledge_base": "Consulting Knowledge Base",
@@ -2120,6 +2127,352 @@ const uiMessages = {
   "roadmap.readonly": "Frühere Roadmap-Fassungen sind nur lesbar.",
 } as const
 
+// The Security, Privacy & AI Compliance surfaces (roadmap Phase 10). The server
+// answers with identifiers — which rule refused an AI request, which
+// classification an engagement carries — and every one of them is mapped to
+// German here. The identifiers themselves stay English (§12A).
+const complianceServerMessages: Record<ComplianceMessageId, string> = {
+  "compliance.message.policy_loaded": "Compliance-Richtlinie geladen",
+  "compliance.message.policy_saved": "Compliance-Richtlinie gespeichert",
+  "compliance.message.engagement_saved": "Compliance-Angaben des Engagements gespeichert",
+  "compliance.message.privacy_processing_saved":
+    "DSGVO-Verarbeitungsangaben gespeichert",
+  "compliance.message.consent_recorded": "Einwilligung erfasst",
+  "compliance.message.consent_withdrawn": "Einwilligung widerrufen",
+  "compliance.message.dpia_saved": "DSFA/DPIA-Angaben gespeichert",
+  "compliance.message.dpia_loaded": "DSFA/DPIA-Angaben geladen",
+  "compliance.message.model_approvals_loaded": "Modellfreigaben geladen",
+  "compliance.message.model_approval_saved": "Modellfreigabe gespeichert",
+  "compliance.message.model_approval_removed": "Modellfreigabe entfernt",
+  "compliance.message.retention_preview_ready":
+    "Aufbewahrungsvorschau erstellt",
+  "compliance.message.retention_executed":
+    "Aufbewahrungsaktion ausgeführt",
+  "compliance.message.identifier_preview_ready":
+    "Vorschau der Kennzeichenregeln erstellt",
+  "compliance.message.ai_output_reviewed": "KI-Ergebnis als geprüft markiert",
+  "compliance.message.download_link_issued":
+    "Zeitlich begrenzter Download-Link erstellt",
+  "compliance.message.client_data_exported": "Kundendaten exportiert",
+  "compliance.message.client_data_erased": "Kundendaten endgültig gelöscht",
+  "compliance.error.invalid_input":
+    "Die Angaben sind unvollständig oder ungültig. Bitte prüfen Sie die markierten Felder.",
+  "compliance.error.not_found": "Dieser Eintrag wurde nicht gefunden.",
+  "compliance.error.export_not_permitted":
+    "Der Export von Kundendaten ist in dieser Compliance-Richtlinie nicht erlaubt.",
+  "compliance.error.legal_hold_active":
+    "Für dieses Engagement besteht eine gesetzliche Aufbewahrungspflicht. Die Löschung ist erst nach deren Aufhebung möglich.",
+  "compliance.error.confirmation_mismatch":
+    "Die Bestätigung stimmt nicht mit dem Engagement überein. Die Löschung wurde nicht ausgeführt.",
+  "compliance.error.download_link_invalid":
+    "Dieser Download-Link ist ungültig oder abgelaufen. Bitte fordern Sie einen neuen an.",
+  "compliance.error.insecure_transport":
+    "Diese Anfrage wurde unverschlüsselt gestellt und deshalb abgelehnt.",
+  "compliance.error.consent_requires_consent_basis":
+    "Eine Einwilligung kann nur erfasst werden, wenn die Rechtsgrundlage dieses Engagements auf Einwilligung steht.",
+  "compliance.error.consent_already_withdrawn":
+    "Diese Einwilligung wurde bereits widerrufen.",
+  "compliance.error.legal_basis_not_supported":
+    "Diese Rechtsgrundlage ist in der Workspace-Richtlinie nicht zugelassen.",
+  "compliance.error.human_review_required":
+    "Dieses KI-Ergebnis muss zuerst von einer berechtigten Person geprüft werden.",
+  "compliance.error.internal":
+    "Unerwarteter Serverfehler. Es wurde nichts verändert. Bitte erneut versuchen.",
+  "compliance.ai.denied.workspace_ai_processing_disabled":
+    "KI-Verarbeitung ist in dieser Compliance-Richtlinie deaktiviert. Es wurde nichts an einen Anbieter gesendet.",
+  "compliance.ai.denied.engagement_ai_processing_prohibited":
+    "Für dieses Engagement ist KI-Verarbeitung ausdrücklich untersagt. Es wurde nichts an einen Anbieter gesendet.",
+  "compliance.ai.denied.engagement_ai_processing_restricted_classification":
+    "Für dieses Engagement ist KI-Unterstützung auf nicht vertrauliche Inhalte beschränkt. Es wurde nichts an einen Anbieter gesendet.",
+  "compliance.ai.denied.content_ai_restricted":
+    "Dieser Inhalt ist als „für KI gesperrt“ eingestuft und wird nie an einen Anbieter gesendet.",
+  "compliance.ai.denied.confidential_processing_not_permitted":
+    "Vertrauliche Inhalte dürfen nach dieser Compliance-Richtlinie nicht durch KI verarbeitet werden. Es wurde nichts an einen Anbieter gesendet.",
+  "compliance.ai.denied.processing_purpose_not_recorded":
+    "Für dieses Engagement ist kein DSGVO-Verarbeitungszweck erfasst. Personenbezogene Daten wurden nicht an einen Anbieter gesendet.",
+  "compliance.ai.denied.legal_basis_not_assessed":
+    "Die DSGVO-Rechtsgrundlage wurde für dieses Engagement noch nicht bewertet. Personenbezogene Daten wurden nicht an einen Anbieter gesendet.",
+  "compliance.ai.denied.consent_record_missing":
+    "Als Rechtsgrundlage ist Einwilligung angegeben, aber es liegt keine wirksame Einwilligung vor. Es wurde nichts gesendet.",
+  "compliance.ai.denied.consent_withdrawn":
+    "Die Einwilligung wurde widerrufen. KI-Verarbeitung, die auf dieser Einwilligung beruht, wurde abgelehnt.",
+  "compliance.ai.denied.dpia_not_screened":
+    "Die DSFA/DPIA-Prüfung für dieses Engagement wurde noch nicht erfasst. Personenbezogene Daten wurden nicht an einen Anbieter gesendet.",
+  "compliance.ai.denied.dpia_required_not_completed":
+    "Für dieses Engagement ist eine zusätzliche DSFA/DPIA erforderlich und noch nicht abgeschlossen. Es wurde nichts gesendet.",
+  "compliance.ai.denied.workspace_dpia_not_approved":
+    "Die Standard-DSFA/DPIA des Workspace ist nicht freigegeben. Es wurde nichts gesendet.",
+  "compliance.ai.denied.provider_model_not_approved":
+    "Für den konfigurierten KI-Anbieter und das Modell gibt es keine Workspace-Freigabe. Es wurde nichts gesendet.",
+  "compliance.ai.denied.provider_model_approval_needs_review":
+    "Die Workspace-Freigabe für diesen KI-Anbieter und dieses Modell muss überprüft werden. Es wurde nichts gesendet.",
+  "compliance.ai.denied.provider_model_approval_revoked":
+    "Die Workspace-Freigabe für diesen KI-Anbieter und dieses Modell wurde widerrufen. Es wurde nichts gesendet.",
+  "compliance.ai.denied.pii_redaction_failed":
+    "Personenbezogene Daten konnten nicht vollständig entfernt werden. Die Anfrage wurde nicht gesendet.",
+  "compliance.ai.output_rejected.output_personal_data_detected":
+    "Die KI-Antwort enthielt erkannte personenbezogene Kennzeichen und wurde nicht übernommen.",
+}
+
+const complianceUiMessages = {
+  "compliance.ai_review.action": "KI-Ergebnis geprüft",
+  "compliance.ai_review.description":
+    "Bestätigt die menschliche Prüfung des aktuellen KI-Ergebnisses für {stage}. Speichern allein schließt diese Prüfung nicht ab.",
+  "compliance.ai_review.failed":
+    "Die KI-Prüfung konnte nicht gespeichert werden.",
+  "compliance.ai_review.none_pending": "Keine KI-Prüfung offen",
+  "compliance.ai_review.pending": "KI-Prüfung ausstehend",
+  "compliance.ai_review.success": "KI-Ergebnis als geprüft markiert.",
+  "compliance.page.title": "Sicherheit, Datenschutz & KI-Compliance",
+  "compliance.page.intro":
+    "Legen Sie fest, wie Kundendaten in diesem Workspace gespeichert, verarbeitet, geteilt, aufbewahrt und von KI genutzt werden dürfen — und sehen Sie, was daraus folgt.",
+  "compliance.access_denied":
+    "Diese Ansicht ist Administratorinnen und Administratoren dieses Workspace vorbehalten.",
+  "compliance.load_failed": "Die Compliance-Angaben konnten nicht geladen werden.",
+  "compliance.save_failed": "Die Änderung konnte nicht gespeichert werden.",
+
+  "compliance.policy.title": "Compliance-Richtlinie",
+  "compliance.policy.never_configured":
+    "Diese Richtlinie steht noch auf den Startwerten des Workspace und wurde nie bewusst konfiguriert.",
+  "compliance.policy.configured_at": "Zuletzt konfiguriert: {value}",
+  "compliance.policy.read_only":
+    "Sie sehen die Regeln, unter denen Ihre Arbeit steht. Ändern kann sie die Administration des Workspace.",
+  "compliance.policy.save": "Richtlinie speichern",
+
+  "compliance.policy.section.data": "Umgang mit Daten",
+  "compliance.policy.default_classification": "Standard-Einstufung neuer Engagements",
+  "compliance.policy.export_permitted": "Export von Kundendaten erlauben",
+  "compliance.policy.download_ttl": "Gültigkeit von Download-Links (Minuten)",
+  "compliance.policy.encrypt_at_rest": "Dokumente verschlüsselt speichern",
+  "compliance.policy.require_https": "Verschlüsselte Übertragung verlangen",
+
+  "compliance.policy.section.ai": "KI-Richtlinie",
+  "compliance.policy.ai_permitted": "KI-Verarbeitung erlauben",
+  "compliance.policy.approved_providers": "Freigegebene KI-Anbieter",
+  "compliance.policy.approved_models": "Freigegebene KI-Modelle",
+  "compliance.policy.list_hint":
+    "Ein Eintrag pro Zeile. Eine leere Liste gibt nichts frei.",
+  "compliance.policy.confidential_ai": "Vertrauliche Inhalte durch KI verarbeiten",
+  "compliance.policy.redact_personal_data":
+    "Personenbezogene Daten vor KI-Verarbeitung entfernen",
+  "compliance.policy.human_approval":
+    "Menschliche Freigabe, bevor KI-Ergebnisse übernommen werden",
+
+  "compliance.policy.section.retention": "Aufbewahrung",
+  "compliance.policy.retention_hint":
+    "Angabe in Tagen. Leer bedeutet: aufbewahren bis zur ausdrücklichen Löschung.",
+  "compliance.policy.retention_engagements": "Engagements",
+  "compliance.policy.retention_documents": "Dokumente",
+  "compliance.policy.retention_audit": "Audit-Einträge",
+  "compliance.policy.retention_ai": "KI-Artefakte",
+
+  "compliance.policy.section.rules": "Konfigurierbare Regeln",
+  "compliance.policy.frameworks": "Geltende Regelwerke",
+  "compliance.policy.identifier_rules": "Eigene personenbezogene Kennzeichen",
+  "compliance.policy.identifier_rules.empty":
+    "Bisher sind keine eigenen Kennzeichen hinterlegt.",
+  "compliance.policy.identifier_rule.label": "Bezeichnung",
+  "compliance.policy.identifier_rule.kind": "Art",
+  "compliance.policy.identifier_rule.match": "Abgleich",
+  "compliance.policy.identifier_rule.value": "Wert oder Muster",
+  "compliance.policy.identifier_rule.add": "Kennzeichenregel hinzufügen",
+  "compliance.policy.identifier_rule.remove": "Entfernen",
+  "compliance.policy.identifier_preview.text": "Vorschautext",
+  "compliance.policy.identifier_preview.run": "Regeln prüfen",
+  "compliance.policy.identifier_preview.empty": "Keine Treffer im Vorschautext",
+  "compliance.policy.identifier_preview.match": "{kind}: {count}",
+
+  "compliance.identifier_kind.person_name": "Name",
+  "compliance.identifier_kind.email": "E-Mail",
+  "compliance.identifier_kind.phone": "Telefon",
+  "compliance.identifier_kind.postal_address": "Postanschrift",
+  "compliance.identifier_kind.contract_identifier": "Vertragskennung",
+  "compliance.identifier_kind.iban": "IBAN",
+  "compliance.identifier_kind.custom": "Benutzerdefiniert",
+  "compliance.identifier_match.literal": "Exakter Text",
+  "compliance.identifier_match.pattern": "Regulärer Ausdruck",
+
+  "compliance.dpia.title": "Workspace-DSFA/DPIA",
+  "compliance.dpia.status": "Status",
+  "compliance.dpia.review_due": "Nächste Prüfung",
+  "compliance.dpia.scope": "Umfang",
+  "compliance.dpia.rationale": "Begründung",
+  "compliance.dpia.document_reference": "Geschützte Dokumentreferenz",
+  "compliance.dpia.save": "DSFA/DPIA speichern",
+  "compliance.workspace_dpia.not_started": "Nicht begonnen",
+  "compliance.workspace_dpia.in_progress": "In Bearbeitung",
+  "compliance.workspace_dpia.approved": "Freigegeben",
+  "compliance.workspace_dpia.not_required": "Nicht erforderlich",
+
+  "compliance.model.title": "KI-Anbieter und Modelle",
+  "compliance.model.empty": "Keine Modellfreigaben vorhanden.",
+  "compliance.model.provider": "Anbieter",
+  "compliance.model.model": "Modell",
+  "compliance.model.profile": "Technology-Profile-Code",
+  "compliance.model.status": "Freigabestatus",
+  "compliance.model.dpa_status": "AVV/DPA-Status",
+  "compliance.model.dpa_reference": "DPA-/Vertragsreferenz",
+  "compliance.model.region": "Gewählte Datenregion",
+  "compliance.model.retention": "Prompt-Aufbewahrung",
+  "compliance.model.training": "Training/Input-Nutzung",
+  "compliance.model.transfer": "Transfer-Schutzmaßnahme",
+  "compliance.model.save": "Freigabe speichern",
+  "compliance.model.review": "Zur Prüfung übernehmen",
+  "compliance.model.revoke": "Widerrufen",
+  "compliance.model.status.approved": "Freigegeben",
+  "compliance.model.status.needs_review": "Prüfung erforderlich",
+  "compliance.model.status.revoked": "Widerrufen",
+  "compliance.model.dpa.in_place": "Vorhanden",
+  "compliance.model.dpa.not_required": "Nicht erforderlich",
+  "compliance.model.dpa.pending": "Ausstehend",
+  "compliance.model.dpa.not_assessed": "Nicht bewertet",
+  "compliance.model.retention.not_retained": "Nicht aufbewahrt",
+  "compliance.model.retention.retained_limited": "Begrenzt aufbewahrt",
+  "compliance.model.retention.retained_unknown": "Unbekannt",
+  "compliance.model.training.excluded": "Ausgeschlossen",
+  "compliance.model.training.permitted": "Erlaubt",
+  "compliance.model.training.unknown": "Unbekannt",
+
+  "compliance.retention.title": "Manuelle Aufbewahrungsaktion",
+  "compliance.retention.preview": "Vorschau erstellen",
+  "compliance.retention.execute": "Ausführbare Kategorien löschen",
+  "compliance.retention.empty": "Noch keine Aufbewahrungsvorschau erstellt.",
+  "compliance.retention.confirmation_hint":
+    "Die Ausführung löscht nur fällige Dokumente, KI-Artefakte und Audit-Einträge aus der Vorschau. Engagements werden hier nur gemeldet und nicht gelöscht.",
+  "compliance.retention.entry": "{count} fällig, {held} durch Legal Hold geschützt",
+  "compliance.retention.entry_failed":
+    "Kategorie fehlgeschlagen ({errorName}, Code {errorCode}). Vorherige Kategorien bleiben protokolliert.",
+  "compliance.retention.entry_skipped":
+    "{count} Einträge wurden nicht gelöscht oder waren nur berichtspflichtig.",
+  "compliance.retention.category.engagements": "Engagements",
+  "compliance.retention.category.documents": "Dokumente",
+  "compliance.retention.category.audit_entries": "Audit-Einträge",
+  "compliance.retention.category.ai_artifacts": "KI-Artefakte",
+
+  "compliance.data_subject.title": "Export und Löschung",
+  "compliance.data_subject.scope":
+    "Diese Aktionen beziehen sich auf genau ein Engagement. Exportinhalte werden nicht in der Oberfläche angezeigt.",
+  "compliance.data_subject.engagement_id": "Engagement-ID",
+  "compliance.data_subject.export": "Export erstellen",
+  "compliance.data_subject.export_ready":
+    "Export erstellt. Umfang: {size} Zeichen strukturierte Daten.",
+  "compliance.data_subject.reason_code": "Sicherer Löschgrund",
+  "compliance.data_subject.confirm": "Engagement-ID zur Löschung erneut eingeben",
+  "compliance.data_subject.erase": "Endgültig löschen",
+  "compliance.erasure_reason.client_request": "Anfrage der betroffenen Person",
+  "compliance.erasure_reason.retention_follow_up": "Aufbewahrung nacharbeiten",
+  "compliance.erasure_reason.admin_correction": "Administrative Korrektur",
+
+  "compliance.dashboard.title": "Compliance-Überblick",
+  "compliance.dashboard.confidential": "Vertrauliche Engagements",
+  "compliance.dashboard.ai_restricted": "Engagements mit KI-Einschränkung",
+  "compliance.dashboard.legal_hold": "Engagements mit Aufbewahrungspflicht",
+  "compliance.dashboard.denied_ai": "Abgelehnte KI-Anfragen",
+  "compliance.dashboard.pii_redaction_failures":
+    "Fehlgeschlagene PII-Redaktionen",
+  "compliance.dashboard.ai_outputs_with_personal_data":
+    "KI-Antworten mit erkannten personenbezogenen Kennzeichen",
+  "compliance.dashboard.without_legal_basis":
+    "Engagements ohne bewertete Rechtsgrundlage",
+  "compliance.dashboard.withdrawn_consent":
+    "Engagements ohne wirksame Einwilligung",
+  "compliance.dashboard.dpia_screening":
+    "Engagements mit offener DSFA/DPIA-Prüfung",
+  "compliance.dashboard.model_review":
+    "Modellfreigaben mit Prüfbedarf",
+  "compliance.dashboard.denied_permissions": "Abgelehnte Zugriffsversuche",
+  "compliance.dashboard.awaiting_review": "KI-Ergebnisse ohne menschliche Prüfung",
+  "compliance.dashboard.retention.title": "Aufbewahrungsfristen überschritten",
+  "compliance.dashboard.retention.engagements": "Engagements",
+  "compliance.dashboard.retention.documents": "Dokumente",
+  "compliance.dashboard.retention.audit": "Audit-Einträge",
+  "compliance.dashboard.retention.ai": "KI-Artefakte",
+  "compliance.dashboard.by_classification": "Engagements nach Einstufung",
+  "compliance.dashboard.classification_count": "{label}: {count}",
+
+  "compliance.engagement.title": "Schutz & KI-Freigabe",
+  "compliance.engagement.intro":
+    "Wie die Inhalte dieses Engagements eingestuft sind, ob KI dabei unterstützen darf und ob eine Aufbewahrungspflicht besteht.",
+  "compliance.engagement.classification": "Einstufung der Inhalte",
+  "compliance.engagement.consent": "KI-Verarbeitung im Engagement",
+  "compliance.engagement.consent_notes":
+    "Anmerkung zur internen KI-Verarbeitungsfreigabe",
+  "compliance.engagement.ai_permission_not_gdpr_consent":
+    "Diese KI-Verarbeitungsfreigabe ist eine interne Engagement-Entscheidung. Sie ist nicht automatisch eine DSGVO-Einwilligung.",
+  "compliance.engagement.processing_purpose": "DSGVO-Verarbeitungszweck",
+  "compliance.engagement.legal_basis": "DSGVO-Rechtsgrundlage",
+  "compliance.engagement.legal_basis_note": "Begründung oder Referenz",
+  "compliance.engagement.privacy_save": "Verarbeitungsangaben speichern",
+  "compliance.engagement.dpia_screening": "DSFA/DPIA-Screening",
+  "compliance.engagement.dpia_note": "DSFA/DPIA-Notiz oder Referenz",
+  "compliance.engagement.dpia_save": "Screening speichern",
+  "compliance.engagement.consent_active": "Wirksame Einwilligung liegt vor",
+  "compliance.engagement.consent_missing": "Keine wirksame Einwilligung",
+  "compliance.engagement.consent_withdraw": "Einwilligung widerrufen",
+  "compliance.engagement.consent_subject": "Einwilligende Person",
+  "compliance.engagement.consent_subject_role": "Rolle der Person",
+  "compliance.engagement.consent_text_version": "Version des Einwilligungstexts",
+  "compliance.engagement.privacy_notice_version": "Version des Datenschutzhinweises",
+  "compliance.engagement.consent_text": "Einwilligungstext",
+  "compliance.engagement.consent_purpose": "Zweck laut Einwilligung",
+  "compliance.engagement.consent_record": "Einwilligung erfassen",
+  "compliance.engagement.legal_hold": "Gesetzliche Aufbewahrungspflicht",
+  "compliance.engagement.legal_hold_reason": "Grund der Aufbewahrungspflicht",
+  "compliance.engagement.save": "Speichern",
+  "compliance.engagement.confidential_hint":
+    "Vertrauliche Inhalte: Zugriffe werden protokolliert, und die KI-Nutzung richtet sich zusätzlich nach der Compliance-Richtlinie des Workspace.",
+
+  "compliance.classification.public": "Öffentlich",
+  "compliance.classification.internal": "Intern",
+  "compliance.classification.confidential": "Vertraulich",
+  "compliance.classification.personal_data": "Personenbezogene Daten (DSGVO)",
+  "compliance.classification.strictly_confidential": "Streng vertraulich",
+  "compliance.classification.ai_restricted": "Für KI gesperrt",
+
+  "compliance.ai_processing_permission.allowed": "KI-Unterstützung erlaubt",
+  "compliance.ai_processing_permission.restricted":
+    "KI-Unterstützung eingeschränkt",
+  "compliance.ai_processing_permission.prohibited":
+    "KI-Unterstützung untersagt",
+
+  "compliance.legal_basis.contract": "Vertrag",
+  "compliance.legal_basis.legitimate_interest": "Berechtigtes Interesse",
+  "compliance.legal_basis.legal_obligation": "Rechtliche Verpflichtung",
+  "compliance.legal_basis.consent": "Einwilligung",
+  "compliance.legal_basis.not_assessed": "Nicht bewertet",
+
+  "compliance.dpia_screening.not_assessed": "Nicht bewertet",
+  "compliance.dpia_screening.within_standard_dpia":
+    "Durch Standard-DSFA/DPIA abgedeckt",
+  "compliance.dpia_screening.additional_not_required":
+    "Zusätzliche Prüfung nicht erforderlich",
+  "compliance.dpia_screening.additional_required":
+    "Zusätzliche Prüfung erforderlich",
+  "compliance.dpia_screening.additional_completed":
+    "Zusätzliche Prüfung abgeschlossen",
+
+  "compliance.pii_redaction.not_required": "Nicht erforderlich",
+  "compliance.pii_redaction.applied": "Durchgeführt",
+  "compliance.pii_redaction.failed": "Fehlgeschlagen",
+
+  "compliance.human_review.not_required": "Nicht erforderlich",
+  "compliance.human_review.pending": "Prüfung ausstehend",
+  "compliance.human_review.reviewed": "Geprüft",
+
+  // The AI-assisted steps a human review can name. Deliberately its own family
+  // rather than the Consulting Knowledge stages: `analysis` is an AI-assisted
+  // step with no methodology stage of its own, and it still has to be nameable
+  // in the review action.
+  "compliance.ai_stage.analysis": "Analyse",
+  "compliance.ai_stage.assessment": "Assessment",
+  "compliance.ai_stage.prioritization": "Priorisierung",
+  "compliance.ai_stage.solution_matching": "Solution Matching",
+  "compliance.ai_stage.roadmap": "Roadmap",
+  "compliance.ai_stage.report": "Report",
+
+  "shell.nav.compliance": "Compliance",
+} as const
+
 export const de = {
   ...serverMessages,
   ...opportunityServerMessages,
@@ -2128,7 +2481,9 @@ export const de = {
   ...consultantReportServerMessages,
   ...feedbackServerMessages,
   ...workbenchServerMessages,
+  ...complianceServerMessages,
   ...uiMessages,
+  ...complianceUiMessages,
 }
 
 export type MessageKey = keyof typeof de

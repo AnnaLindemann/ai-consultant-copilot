@@ -4,6 +4,8 @@ import { after, beforeEach, mock, test } from "node:test"
 
 import express from "express"
 
+import { compliancePolicyRepositoryMock } from "../domain/compliance/compliance-policy.fixture.js"
+
 import type { AuditEventType } from "../../../shared/access.schema.js"
 
 // The access-control gate at the boundary (implementation-workflow §13.6a):
@@ -21,6 +23,20 @@ type Row = {
   id: string
   workspaceId: string
   owningManagerId: string
+  dataClassification: string
+  aiProcessingPermission: string
+  aiProcessingPermissionNotes: string | null
+  aiProcessingPermissionUpdatedAt: Date | null
+  aiProcessingPermissionUpdatedByUserId: string | null
+  processingPurpose: string | null
+  legalBasis: string
+  legalBasisNote: string | null
+  privacyProcessingConfirmedAt: Date | null
+  privacyProcessingConfirmedByUserId: string | null
+  dpiaScreening: string
+  dpiaScreeningNote: string | null
+  legalHold: boolean
+  legalHoldReason: string | null
   organization: { id: string; name: string; industry: string | null }
 }
 
@@ -41,6 +57,20 @@ const ownedByOwner: Row = {
   id: "eng_owner",
   workspaceId: WORKSPACE,
   owningManagerId: "user_owner",
+  dataClassification: "confidential",
+  aiProcessingPermission: "allowed",
+  aiProcessingPermissionNotes: null,
+  aiProcessingPermissionUpdatedAt: null,
+  aiProcessingPermissionUpdatedByUserId: null,
+  processingPurpose: null,
+  legalBasis: "not_assessed",
+  legalBasisNote: null,
+  privacyProcessingConfirmedAt: null,
+  privacyProcessingConfirmedByUserId: null,
+  dpiaScreening: "not_assessed",
+  dpiaScreeningNote: null,
+  legalHold: false,
+  legalHoldReason: null,
   organization: { id: "org_1", name: "Example Org", industry: null },
 }
 
@@ -48,6 +78,20 @@ const ownedByColleague: Row = {
   id: "eng_colleague",
   workspaceId: WORKSPACE,
   owningManagerId: "user_colleague",
+  dataClassification: "confidential",
+  aiProcessingPermission: "allowed",
+  aiProcessingPermissionNotes: null,
+  aiProcessingPermissionUpdatedAt: null,
+  aiProcessingPermissionUpdatedByUserId: null,
+  processingPurpose: null,
+  legalBasis: "not_assessed",
+  legalBasisNote: null,
+  privacyProcessingConfirmedAt: null,
+  privacyProcessingConfirmedByUserId: null,
+  dpiaScreening: "not_assessed",
+  dpiaScreeningNote: null,
+  legalHold: false,
+  legalHoldReason: null,
   organization: { id: "org_1", name: "Example Org", industry: null },
 }
 
@@ -55,6 +99,20 @@ const inOtherWorkspace: Row = {
   id: "eng_other_workspace",
   workspaceId: OTHER_WORKSPACE,
   owningManagerId: "user_other_owner",
+  dataClassification: "confidential",
+  aiProcessingPermission: "allowed",
+  aiProcessingPermissionNotes: null,
+  aiProcessingPermissionUpdatedAt: null,
+  aiProcessingPermissionUpdatedByUserId: null,
+  processingPurpose: null,
+  legalBasis: "not_assessed",
+  legalBasisNote: null,
+  privacyProcessingConfirmedAt: null,
+  privacyProcessingConfirmedByUserId: null,
+  dpiaScreening: "not_assessed",
+  dpiaScreeningNote: null,
+  legalHold: false,
+  legalHoldReason: null,
   organization: { id: "org_2", name: "Other Org", industry: null },
 }
 
@@ -193,6 +251,13 @@ mock.module("../repositories/engagement.repository.js", {
     toDiscoveryProfile: () => ({}),
     toDiscoveryWorkflowState: () => ({}),
     toAssessment: () => null,
+  },
+})
+
+mock.module("../repositories/compliance.repository.js", {
+  namedExports: {
+    ...compliancePolicyRepositoryMock(),
+    listConsentRecords: async () => [],
   },
 })
 

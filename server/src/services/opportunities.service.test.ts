@@ -1,6 +1,11 @@
 import assert from "node:assert/strict"
 import { beforeEach, mock, test } from "node:test"
 
+import {
+  compliancePolicyRepositoryMock,
+  compliancePolicyRowFixture,
+} from "../domain/compliance/compliance-policy.fixture.js"
+
 import type { Assessment } from "../../../shared/assessment.schema.js"
 import type {
   OpportunityPrioritization,
@@ -44,7 +49,30 @@ mock.module("../lib/llm-client.js", {
 
 mock.module("../repositories/engagement.repository.js", {
   namedExports: {
+    // The compliance repository derives its reach filter from this same rule,
+    // so the mock provides it too (roadmap Phase 10).
+    engagementScopeWhere: () => ({}),
     toAssessment: () => assessment,
+  },
+})
+
+// The Workspace Compliance Policy the AI compliance gate asks before this stage
+// may send anything to a provider (roadmap Phase 10). Only the *storage* seam is
+// replaced, so the real gate and the real policy rules run — a stage that
+// stopped consulting them would fail here rather than pass quietly.
+let compliancePolicyRow = compliancePolicyRowFixture()
+const complianceAuditEntries: { eventType: string }[] = []
+
+mock.module("../repositories/compliance.repository.js", {
+  namedExports: compliancePolicyRepositoryMock(() => compliancePolicyRow),
+})
+
+mock.module("../repositories/access.repository.js", {
+  namedExports: {
+    appendAuditTrail: async (entry: { eventType: string }) => {
+      complianceAuditEntries.push(entry)
+      return entry
+    },
   },
 })
 
@@ -268,6 +296,12 @@ const engagementFixture = (
     title: "Customer Operations review",
     department: "Customer Support",
     assessmentRevision: 1,
+    workspaceId: "ws_1",
+    dataClassification: "internal",
+    aiProcessingPermission: "allowed",
+    processingPurpose: null,
+    legalBasis: "not_assessed",
+    dpiaScreening: "not_assessed",
     organization: {
       name: "Northwind Support",
       industry: "Retail",
@@ -431,6 +465,42 @@ test("a prioritization records its Analysis Run with the stage's trust signals",
   assert.equal(run.jsonParseSuccess, true)
   assert.equal(run.schemaValid, true)
   assert.equal(run.errorMessage, undefined)
+  assert.equal(run.compliance?.outputScanOutcome, "clean")
+  assert.equal(run.compliance?.outputClassification, "internal")
+})
+
+test("AI output containing recognized PII creates no Opportunity version", async () => {
+  llmCall = async () =>
+    llmResponse(
+      validOutput([
+        opportunity({
+          title: "Contact support@nordwind.example before triage",
+        }),
+      ]),
+    )
+
+  const result = await prioritizeOpportunities(engagementFixture(), scope)
+
+  assert.equal(result.success, false)
+  assert.equal(
+    result.success === false && result.messageId,
+    "compliance.ai.output_rejected.output_personal_data_detected",
+  )
+  assert.equal(storedVersions.length, 0)
+  assert.equal(linkedRuns.length, 0)
+  assert.equal(
+    recordedRuns[0].compliance?.outputScanOutcome,
+    "personal_data_detected",
+  )
+  assert.equal(recordedRuns[0].compliance?.outputClassification, "personal_data")
+  assert.equal(
+    complianceAuditEntries.some(
+      (entry) => entry.eventType === "ai_output_personal_data_detected",
+    ),
+    true,
+  )
+  assert.equal(JSON.stringify(recordedRuns).includes("support@nordwind.example"), false)
+  assert.equal(JSON.stringify(complianceAuditEntries).includes("support@nordwind.example"), false)
 })
 
 // --- Regeneration adds; it never overwrites --------------------------------

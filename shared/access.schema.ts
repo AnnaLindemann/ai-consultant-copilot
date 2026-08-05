@@ -93,6 +93,41 @@ export const auditEventTypeSchema = z.enum([
   "technology_proposal_created",
   "technology_proposal_approved",
   "technology_proposal_rejected",
+  // Security, privacy and AI compliance (Phase 10). The roadmap expands *this*
+  // log rather than adding a fourth one: access to confidential information,
+  // document downloads and exports, AI policy decisions, PII redaction actions,
+  // denied AI requests, and compliance-related administrative actions are all
+  // access-and-collaboration events, which is what the Audit Trail records.
+  "compliance_policy_updated",
+  "engagement_classification_changed",
+  "engagement_ai_processing_permission_changed",
+  "engagement_legal_hold_changed",
+  "confidential_content_accessed",
+  "document_download_link_issued",
+  "ai_request_denied",
+  "ai_pii_redaction_applied",
+  "ai_pii_redaction_failed",
+  // An AI *result* refused because personal identifiers came back in the
+  // response. Recorded with kinds and counts only, never values.
+  "ai_output_personal_data_detected",
+  "client_data_exported",
+  "client_data_erased",
+  // The privacy-processing record, real GDPR consent, the DPIA, the governed
+  // provider/model approvals and the retention action (Phase 10 corrections).
+  // Each is an administrative decision with an author, which is exactly what
+  // this log is for.
+  "engagement_privacy_processing_updated",
+  "engagement_consent_recorded",
+  "engagement_consent_withdrawn",
+  "engagement_dpia_screening_changed",
+  "workspace_dpia_updated",
+  "ai_model_approval_updated",
+  "ai_model_approval_removed",
+  "ai_model_approval_needs_review",
+  "retention_preview_generated",
+  "retention_action_executed",
+  // Audit entries surviving an erasure, reduced to their event and their time.
+  "audit_entries_minimized",
 ])
 
 export type UserRole = z.infer<typeof userRoleSchema>

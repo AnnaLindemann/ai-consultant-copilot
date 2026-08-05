@@ -2,6 +2,13 @@ import type { Prisma } from "@prisma/client"
 
 import { prisma } from "../lib/prisma.js"
 
+import type {
+  AiOutputScanOutcome,
+  DataClassification,
+  HumanReviewStatus,
+  PiiRedactionStatus,
+} from "../../../shared/compliance.schema.js"
+
 
 // Which methodology stage an AI-assisted step supported. Recording it keeps one
 // shared run mechanism while letting runs be filtered by stage (architecture.md
@@ -43,6 +50,28 @@ export type CreateAnalysisRunInput = {
   // (coding-standards.md §12). Omitted by a stage that retrieves no technology
   // knowledge.
   technologyProfileCodes?: readonly string[]
+  // The compliance metadata the roadmap requires on every AI-assisted run
+  // (Phase 10): purpose, input and output classification, PII redaction status,
+  // output scan outcome, model approval and human review status. Provider,
+  // model and prompt version are the fields
+  // above — this extends the one shared recording mechanism rather than adding
+  // a parallel one (coding-standards.md §8).
+  //
+  // Optional so that a run recorded outside the compliance gate is still
+  // recorded rather than rejected; the gate supplies it on every engagement AI
+  // step.
+  compliance?: AnalysisRunCompliance
+}
+
+export type AnalysisRunCompliance = {
+  purpose: string
+  inputClassification: DataClassification
+  outputClassification: DataClassification
+  piiRedactionStatus: PiiRedactionStatus
+  piiRedactionCount: number
+  outputScanOutcome: AiOutputScanOutcome
+  humanReviewStatus: HumanReviewStatus
+  aiModelApprovalId: string | null
 }
 
 export const createAnalysisRun = async (input: CreateAnalysisRunInput) => {
@@ -71,6 +100,14 @@ export const createAnalysisRun = async (input: CreateAnalysisRunInput) => {
         input.technologyProfileCodes === undefined
           ? undefined
           : [...input.technologyProfileCodes],
+      purpose: input.compliance?.purpose,
+      inputClassification: input.compliance?.inputClassification,
+      outputClassification: input.compliance?.outputClassification,
+      piiRedactionStatus: input.compliance?.piiRedactionStatus,
+      piiRedactionCount: input.compliance?.piiRedactionCount,
+      outputScanOutcome: input.compliance?.outputScanOutcome,
+      humanReviewStatus: input.compliance?.humanReviewStatus,
+      aiModelApprovalId: input.compliance?.aiModelApprovalId,
     },
   })
 }
@@ -102,6 +139,14 @@ export const getAnalysisRunsByEngagementId = async (
       jsonParseSuccess: true,
       schemaValid: true,
       errorMessage: true,
+      purpose: true,
+      inputClassification: true,
+      outputClassification: true,
+      piiRedactionStatus: true,
+      piiRedactionCount: true,
+      outputScanOutcome: true,
+      humanReviewStatus: true,
+      aiModelApprovalId: true,
       createdAt: true,
     },
   })

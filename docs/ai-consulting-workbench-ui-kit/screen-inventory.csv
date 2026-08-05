@@ -27,6 +27,8 @@ M13,Manager,Published proposal view,Verify exact client view,Report delivery
 M14,Manager,Engagement history,Review meaningful business events,Multi-user
 M15,Manager,Knowledge search,Find grounded consulting knowledge,Knowledge
 M16,Manager,Reports overview,Track reports across owned engagements,Report delivery
+M17,Manager,Engagement compliance panel,Review engagement compliance state and mark pending AI output reviewed,Compliance
+M18,Manager,Compliance overview,Read workspace compliance policy and dashboard,Compliance
 A01,Administrator,Dashboard,Show workspace operations,Multi-user
 A02,Administrator,All engagements,Manage workspace engagement overview,Multi-user
 A03,Administrator,Organizations,Manage client organizations,Multi-user
@@ -41,3 +43,5 @@ A11,Administrator,Technology update proposals,Approve or reject sourced updates,
 A12,Administrator,Technology update history,Inspect approved KB changes,Knowledge
 A13,Administrator,Notification operations,Resolve failed or pending notifications,Report delivery
 A14,Administrator,System settings,Manage supported configuration,Foundation
+A15,Administrator,Compliance dashboard,Manage workspace compliance policy retention DPIA and AI model approvals,Compliance
+A16,Administrator,Engagement compliance panel,Review engagement compliance state and mark pending AI output reviewed,Compliance

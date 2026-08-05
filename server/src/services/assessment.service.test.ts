@@ -1,6 +1,11 @@
 import assert from "node:assert/strict"
 import { beforeEach, mock, test } from "node:test"
 
+import {
+  compliancePolicyRepositoryMock,
+  compliancePolicyRowFixture,
+} from "../domain/compliance/compliance-policy.fixture.js"
+
 import type { Assessment } from "../../../shared/assessment.schema.js"
 import { emptyValueMeasurementBaseline } from "../../../shared/discovery-profile.schema.js"
 import type { DiscoveryProfile } from "../../../shared/discovery-profile.schema.js"
@@ -36,6 +41,9 @@ mock.module("../lib/llm-client.js", {
 
 mock.module("../repositories/engagement.repository.js", {
   namedExports: {
+    // The compliance repository derives its reach filter from this same rule,
+    // so the mock provides it too (roadmap Phase 10).
+    engagementScopeWhere: () => ({}),
     toDiscoveryProfile: () => discoveryProfile,
     toAssessment: () => null,
     updateEngagementAssessment: async (
@@ -96,6 +104,26 @@ mock.module("../repositories/consulting-knowledge.repository.js", {
     },
     updateConsultingKnowledgeEntry: async () => {
       throw new Error("an engagement stage wrote to the Consulting Knowledge Base")
+    },
+  },
+})
+
+// The Workspace Compliance Policy the AI compliance gate asks before this stage
+// may send anything to a provider (roadmap Phase 10). Only the *storage* seam is
+// replaced, so the real gate and the real policy rules run — a stage that
+// stopped consulting them would fail here rather than pass quietly.
+let compliancePolicyRow = compliancePolicyRowFixture()
+const complianceAuditEntries: { eventType: string }[] = []
+
+mock.module("../repositories/compliance.repository.js", {
+  namedExports: compliancePolicyRepositoryMock(() => compliancePolicyRow),
+})
+
+mock.module("../repositories/access.repository.js", {
+  namedExports: {
+    appendAuditTrail: async (entry: { eventType: string }) => {
+      complianceAuditEntries.push(entry)
+      return entry
     },
   },
 })
@@ -200,6 +228,14 @@ const engagementFixture = (
     title: "Customer Operations review",
     department: "Customer Support",
     assessmentReviewState: null,
+    // The engagement's own compliance state, which the AI compliance gate reads
+    // before anything may be sent (roadmap Phase 10).
+    workspaceId: "ws_1",
+    dataClassification: "internal",
+    aiProcessingPermission: "allowed",
+    processingPurpose: null,
+    legalBasis: "not_assessed",
+    dpiaScreening: "not_assessed",
     organization: {
       name: "Northwind Support",
       industry: "Retail",
@@ -217,6 +253,8 @@ beforeEach(() => {
   recordedRuns.length = 0
   savedAssessments.length = 0
   llmCallCount = 0
+  complianceAuditEntries.length = 0
+  compliancePolicyRow = compliancePolicyRowFixture()
   discoveryProfile = capturedDiscoveryProfile
   llmCall = async () => llmResponse(validAssessmentOutput)
 })
@@ -332,6 +370,112 @@ test("an empty Discovery Profile is refused before any AI call is made", async (
   assert.equal(llmCallCount, 0)
   assert.equal(recordedRuns.length, 0)
   assert.equal(savedAssessments.length, 0)
+})
+
+test("an engagement that prohibits AI is refused before any provider call", async () => {
+  // The engagement's own restriction is enforced by the stage, not merely
+  // recorded on it: no prompt leaves, no Analysis Run is written because
+  // nothing ran, and the Assessment is untouched (roadmap Phase 10).
+  const result = await generateAssessment(
+    engagementFixture({ aiProcessingPermission: "prohibited" } as never),
+    scope,
+    { replaceConsultantEdits: false },
+  )
+
+  assert.equal(result.success, false)
+  assert.equal(result.success === false && result.failure, "ai_not_permitted")
+  assert.equal(
+    result.success === false && result.messageId,
+    "compliance.ai.denied.engagement_ai_processing_prohibited",
+  )
+  assert.equal(llmCallCount, 0)
+  assert.equal(recordedRuns.length, 0)
+  assert.equal(savedAssessments.length, 0)
+
+  // And the refusal is a denied AI request in the append-only Audit Trail,
+  // which is where the roadmap puts it.
+  assert.equal(
+    complianceAuditEntries.some(
+      (entry) => entry.eventType === "ai_request_denied",
+    ),
+    true,
+  )
+})
+
+test("an unapproved model is refused, and the refusal names that rule", async () => {
+  process.env.LLM_MODEL = "some-other-model"
+
+  try {
+    const result = await generateAssessment(engagementFixture(), scope, {
+      replaceConsultantEdits: false,
+    })
+
+    assert.equal(result.success === false && result.failure, "ai_not_permitted")
+    assert.equal(
+      result.success === false && result.messageId,
+      "compliance.ai.denied.provider_model_not_approved",
+    )
+    assert.equal(llmCallCount, 0)
+  } finally {
+    process.env.LLM_MODEL = "llama-3.3-70b-versatile"
+  }
+})
+
+test("the prompt that is sent is the one the compliance gate returned", async () => {
+  // Personal data is removed before AI processing where the policy requires it,
+  // and what the provider receives is the redacted text — never the original
+  // (roadmap Phase 10 Definition of Done).
+  discoveryProfile = {
+    ...capturedDiscoveryProfile,
+    statedProblem: "Anfragen an support@nordwind.example bleiben liegen.",
+  }
+
+  await generateAssessment(engagementFixture(), scope, {
+    replaceConsultantEdits: false,
+  })
+
+  assert.equal(llmCallCount, 1)
+  assert.equal(lastPrompt.includes("support@nordwind.example"), false)
+  assert.equal(lastPrompt.includes("[EMAIL_1]"), true)
+
+  // And the run records what was done about it.
+  assert.equal(recordedRuns[0].compliance?.piiRedactionStatus, "applied")
+  assert.equal(recordedRuns[0].compliance?.purpose, "assessment_generation")
+  assert.equal(recordedRuns[0].compliance?.inputClassification, "internal")
+  assert.equal(recordedRuns[0].compliance?.outputScanOutcome, "clean")
+  assert.equal(recordedRuns[0].compliance?.outputClassification, "internal")
+  assert.equal(recordedRuns[0].compliance?.humanReviewStatus, "pending")
+})
+
+test("AI output containing recognized PII is rejected before Assessment persistence", async () => {
+  llmCall = async () =>
+    llmResponse(
+      validAssessmentOutput.replace(
+        "Support triage is manual.",
+        "Contact support@nordwind.example before changing triage.",
+      ),
+    )
+
+  const result = await generateAssessment(engagementFixture(), scope, {
+    replaceConsultantEdits: false,
+  })
+
+  assert.equal(result.success, false)
+  assert.equal(
+    result.success === false && result.messageId,
+    "compliance.ai.output_rejected.output_personal_data_detected",
+  )
+  assert.equal(savedAssessments.length, 0)
+  assert.equal(recordedRuns[0].compliance?.outputScanOutcome, "personal_data_detected")
+  assert.equal(recordedRuns[0].compliance?.outputClassification, "personal_data")
+  assert.equal(
+    complianceAuditEntries.some(
+      (entry) => entry.eventType === "ai_output_personal_data_detected",
+    ),
+    true,
+  )
+  assert.equal(JSON.stringify(recordedRuns).includes("support@nordwind.example"), false)
+  assert.equal(JSON.stringify(complianceAuditEntries).includes("support@nordwind.example"), false)
 })
 
 test("a re-run never silently replaces the consultant's own Assessment", async () => {

@@ -1,3 +1,4 @@
+import { logger } from "../lib/application-logger.js"
 import { failureIdentity } from "../lib/failure-identity.js"
 import {
   createNotification,
@@ -39,7 +40,7 @@ export const raiseNotification = async (request: NotificationRequest) => {
     // happened and stays valid; only the notification is lost. Reported as
     // identifiers — a database error arrives with the failing statement and its
     // parameters attached, which is not a thing to put in a log.
-    console.error("NOTIFICATION_RAISE_FAILED", {
+    logger.error("NOTIFICATION_RAISE_FAILED", {
       kind: request.kind,
       workspaceId: request.workspaceId,
       userId: request.userId,
@@ -74,7 +75,7 @@ export const notifyEngagementClient = async (input: {
       payload: input.payload,
     })
   } catch (error) {
-    console.error("NOTIFICATION_CLIENT_LOOKUP_FAILED", {
+    logger.error("NOTIFICATION_CLIENT_LOOKUP_FAILED", {
       kind: input.kind,
       workspaceId: input.workspaceId,
       engagementId: input.engagementId,

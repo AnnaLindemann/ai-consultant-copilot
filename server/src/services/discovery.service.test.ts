@@ -36,6 +36,9 @@ const workflowWrites: {
 
 mock.module("../repositories/engagement.repository.js", {
   namedExports: {
+    // The compliance repository derives its reach filter from this same rule,
+    // so the mock provides it too (roadmap Phase 10).
+    engagementScopeWhere: () => ({}),
     toDiscoveryProfile: () => persistedProfile,
     toDiscoveryWorkflowState: () => persistedWorkflow,
     updateEngagementDiscovery: async (

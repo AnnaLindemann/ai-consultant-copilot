@@ -1,6 +1,7 @@
 import { APIError } from "better-auth"
 
 import { auth } from "./better-auth.js"
+import { logger } from "../application-logger.js"
 import { failureIdentity } from "../failure-identity.js"
 import { prisma } from "../prisma.js"
 
@@ -191,6 +192,6 @@ const toProviderError = (error: unknown): AuthProviderError => {
   // error's class and machine code are reported (`failure-identity.ts`), which
   // is what distinguishes "the database is unreachable" from "the SDK threw"
   // without putting a credential in a log line.
-  console.error("AUTH_PROVIDER_FAILED", failureIdentity(error))
+  logger.error("AUTH_PROVIDER_FAILED", failureIdentity(error))
   return "provider_unavailable"
 }

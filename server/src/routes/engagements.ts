@@ -9,6 +9,7 @@ import {
   type EngagementScope,
 } from "../domain/access/access.js"
 import { requireActingUser } from "../lib/auth-context.js"
+import { logger } from "../lib/application-logger.js"
 import {
   authorizeEngagementAction,
   authorizeWorkspaceAction,
@@ -37,6 +38,7 @@ import {
 import { getOrganizationById } from "../repositories/organization.repository.js"
 import { analyzeEngagement } from "../services/analysis.service.js"
 import { getAnalysisRunsByEngagementId } from "../repositories/analysis-run.repository.js"
+import type { AnalysisRunStage } from "../repositories/analysis-run.repository.js"
 import { appendAuditTrail } from "../repositories/access.repository.js"
 import {
   notifyEngagementClient,
@@ -131,7 +133,17 @@ import {
   type FeedbackFailure,
 } from "../services/feedback.service.js"
 import { retrieveKnowledgePackage } from "../services/consulting-knowledge.service.js"
+import {
+  getCompliancePolicy,
+  recordConfidentialAccess,
+} from "../services/compliance.service.js"
+import {
+  recordHumanReviewOfAiOutput,
+  stageAwaitsHumanReview,
+} from "../services/ai-compliance.service.js"
+import { getEngagementCompliance } from "../services/engagement-compliance.service.js"
 import { failureIdentity } from "../lib/failure-identity.js"
+import { reviewAiOutputSchema } from "../../../shared/compliance.schema.js"
 
 const router = Router()
 
@@ -144,12 +156,16 @@ const router = Router()
 // How a refused or failed assessment generation is reported at the boundary:
 // the consultant is missing a precondition (422), their own edits are protected
 // (409), or the AI provider itself failed (502).
-const assessmentFailureStatus = {
+const assessmentFailureStatus: Record<GenerateAssessmentFailure, number> = {
   discovery_not_ready: 422,
   consultant_edits_protected: 409,
+  // The compliance policy refused the request. It is a refusal to act on this
+  // caller's request, not a missing precondition, so it is reported as
+  // forbidden (roadmap Phase 10).
+  ai_not_permitted: 403,
   ai_output_invalid: 422,
   ai_step_failed: 502,
-} as const
+}
 
 // What the consultant is told, as an identifier. The service's `error` is a
 // diagnostic — a provider's own failure text, a parser's complaint — and it is
@@ -161,6 +177,7 @@ const assessmentFailureMessageIds: Record<
 > = {
   discovery_not_ready: "assessment.error.discovery_not_ready",
   consultant_edits_protected: "assessment.error.consultant_edits_protected",
+  ai_not_permitted: "assessment.error.ai_not_permitted",
   ai_output_invalid: "assessment.error.ai_output_invalid",
   ai_step_failed: "assessment.error.ai_step_failed",
 }
@@ -176,6 +193,9 @@ const opportunitiesFailureStatus: Record<
 > = {
   assessment_not_ready: 422,
   consultant_edits_protected: 409,
+  // The compliance policy refused the request: a refusal to act on this
+  // caller's request rather than a missing precondition (roadmap Phase 10).
+  ai_not_permitted: 403,
   ai_output_invalid: 422,
   ai_output_ungrounded: 422,
   ai_step_failed: 502,
@@ -209,6 +229,9 @@ const recommendationsFailureStatus: Record<
   opportunities_not_ready: 422,
   knowledge_unavailable: 422,
   consultant_edits_protected: 409,
+  // The compliance policy refused the request: a refusal to act on this
+  // caller's request rather than a missing precondition (roadmap Phase 10).
+  ai_not_permitted: 403,
   ai_output_invalid: 422,
   ai_output_ungrounded: 422,
   ai_step_failed: 502,
@@ -220,6 +243,9 @@ const roadmapFailureStatus: Record<GenerateRoadmapFailure, number> = {
   recommendations_not_ready: 422,
   knowledge_unavailable: 422,
   consultant_edits_protected: 409,
+  // The compliance policy refused the request: a refusal to act on this
+  // caller's request rather than a missing precondition (roadmap Phase 10).
+  ai_not_permitted: 403,
   ai_output_invalid: 422,
   ai_output_ungrounded: 422,
   ai_step_failed: 502,
@@ -238,6 +264,9 @@ const saveRoadmapFailureStatus: Record<SaveRoadmapFailure, number> = {
 const reportFailureStatus: Record<GenerateReportFailure, number> = {
   sources_not_ready: 422,
   consultant_edits_protected: 409,
+  // The compliance policy refused the request: a refusal to act on this
+  // caller's request rather than a missing precondition (roadmap Phase 10).
+  ai_not_permitted: 403,
   ai_step_failed: 502,
   ai_output_invalid: 422,
   ai_output_ungrounded: 422,
@@ -323,7 +352,7 @@ router.get("/", async (req, res) => {
       data: engagements,
     })
   } catch (error) {
-    console.error("LOAD_ENGAGEMENTS_FAILED", failureIdentity(error))
+    logger.error("LOAD_ENGAGEMENTS_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -342,6 +371,17 @@ router.get("/:id", async (req, res) => {
     req.params.id,
   )
   if (!authorized.permitted) return denyRequest(res, authorized)
+
+  // Opening a confidential engagement discloses its confidential content, so
+  // the access is recorded (roadmap Phase 10). It is best-effort and records
+  // nothing for content that is not confidential.
+  await recordConfidentialAccess({
+    workspaceId: authorized.scope.workspaceId,
+    userId: actingUser.id,
+    engagementId: authorized.resource.id,
+    classification: authorized.resource.dataClassification,
+    surface: "engagement.read",
+  })
 
   try {
     // The Opportunity stage answers with the version being worked on and
@@ -397,10 +437,18 @@ router.get("/:id", async (req, res) => {
         report,
         feedback,
         knowledgePackage,
+        // How this engagement's content is classified, whether AI may assist
+        // with it, and whether a legal hold prevents its erasure (roadmap
+        // Phase 10). The client renders what the backend holds; it decides
+        // nothing about compliance itself (architecture.md §7).
+        compliance: await getEngagementCompliance(
+          authorized.resource,
+          authorized.scope,
+        ),
       },
     })
   } catch (error) {
-    console.error("LOAD_ENGAGEMENT_FAILED", failureIdentity(error))
+    logger.error("LOAD_ENGAGEMENT_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -443,9 +491,18 @@ router.post("/", async (req, res) => {
       })
     }
 
+    // A new engagement starts under the classification the workspace's
+    // Compliance Policy sets, so it is protected from its first save rather
+    // than from the moment somebody remembers to classify it (roadmap
+    // Phase 10).
+    const policy = await getCompliancePolicy({
+      workspaceId: actingUser.workspaceId,
+    })
+
     const engagement = await createEngagement(
       engagementScopeOf(actingUser),
       parseResult.data,
+      policy.defaultDataClassification,
     )
 
     return res.status(201).json({
@@ -454,7 +511,7 @@ router.post("/", async (req, res) => {
       data: engagement,
     })
   } catch (error) {
-    console.error("CREATE_ENGAGEMENT_FAILED", failureIdentity(error))
+    logger.error("CREATE_ENGAGEMENT_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -499,7 +556,7 @@ router.patch("/:id", async (req, res) => {
       data: engagement,
     })
   } catch (error) {
-    console.error("SAVE_ENGAGEMENT_FAILED", failureIdentity(error))
+    logger.error("SAVE_ENGAGEMENT_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -547,7 +604,7 @@ router.patch("/:id/discovery", async (req, res) => {
       data: withDiscoveryState(engagement),
     })
   } catch (error) {
-    console.error("SAVE_DISCOVERY_PROFILE_FAILED", failureIdentity(error))
+    logger.error("SAVE_DISCOVERY_PROFILE_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -683,16 +740,17 @@ router.post("/:id/assessment", async (req, res) => {
     if (!result.success) {
       // The consultant sees why no draft was produced, named as an identifier;
       // engagement state is unchanged in every failure case (architecture.md
-      // §13). The service's own diagnostic goes to the log, not to the screen.
-      console.error("GENERATE_ASSESSMENT_REFUSED", {
+      // §13). A refusal is a business/compliance outcome, not a server fault.
+      logger.warn("GENERATE_ASSESSMENT_REFUSED", {
         engagementId: authorized.resource.id,
         failure: result.failure,
-        detail: result.error,
       })
 
       return res.status(assessmentFailureStatus[result.failure]).json({
         status: false,
-        message: assessmentFailureMessageIds[result.failure],
+        // A compliance refusal names the rule that stopped it; every other
+        // failure has one fixed identifier.
+        message: result.messageId ?? assessmentFailureMessageIds[result.failure],
         data: {
           failure: result.failure,
           evaluation: result.evaluation,
@@ -710,7 +768,7 @@ router.post("/:id/assessment", async (req, res) => {
       },
     })
   } catch (error) {
-    console.error("GENERATE_ASSESSMENT_FAILED", failureIdentity(error))
+    logger.error("GENERATE_ASSESSMENT_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -742,6 +800,18 @@ router.patch("/:id/assessment", async (req, res) => {
   }
 
   try {
+    if (
+      parseResult.data.reviewState === "accepted" &&
+      (await refuseIfHumanReviewPending(
+        res,
+        authorized.scope,
+        req.params.id,
+        "assessment",
+      ))
+    ) {
+      return
+    }
+
     const engagement = await saveAssessment(
       req.params.id,
       authorized.scope,
@@ -755,7 +825,7 @@ router.patch("/:id/assessment", async (req, res) => {
       data: engagement,
     })
   } catch (error) {
-    console.error("SAVE_ASSESSMENT_FAILED", failureIdentity(error))
+    logger.error("SAVE_ASSESSMENT_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -826,7 +896,7 @@ router.post("/:id/opportunities", async (req, res) => {
       },
     })
   } catch (error) {
-    console.error("PRIORITIZE_OPPORTUNITIES_FAILED", failureIdentity(error))
+    logger.error("PRIORITIZE_OPPORTUNITIES_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -860,6 +930,18 @@ router.patch("/:id/opportunities", async (req, res) => {
   }
 
   try {
+    if (
+      parseResult.data.reviewState === "accepted" &&
+      (await refuseIfHumanReviewPending(
+        res,
+        authorized.scope,
+        req.params.id,
+        "prioritization",
+      ))
+    ) {
+      return
+    }
+
     const result = await saveOpportunities(
       authorized.resource,
       authorized.scope,
@@ -892,7 +974,7 @@ router.patch("/:id/opportunities", async (req, res) => {
       data: { version: result.version },
     })
   } catch (error) {
-    console.error("SAVE_OPPORTUNITIES_FAILED", failureIdentity(error))
+    logger.error("SAVE_OPPORTUNITIES_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -927,7 +1009,7 @@ router.get("/:id/opportunities/versions", async (req, res) => {
       data: { versions },
     })
   } catch (error) {
-    console.error("LOAD_OPPORTUNITY_VERSIONS_FAILED", failureIdentity(error))
+    logger.error("LOAD_OPPORTUNITY_VERSIONS_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -969,7 +1051,7 @@ router.get("/:id/opportunities/versions/:versionId", async (req, res) => {
       data: { version },
     })
   } catch (error) {
-    console.error("LOAD_OPPORTUNITY_VERSION_FAILED", failureIdentity(error))
+    logger.error("LOAD_OPPORTUNITY_VERSION_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1043,7 +1125,7 @@ router.post("/:id/recommendations", async (req, res) => {
       },
     })
   } catch (error) {
-    console.error("GENERATE_RECOMMENDATIONS_FAILED", failureIdentity(error))
+    logger.error("GENERATE_RECOMMENDATIONS_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1077,6 +1159,18 @@ router.patch("/:id/recommendations", async (req, res) => {
   }
 
   try {
+    if (
+      parseResult.data.reviewState === "accepted" &&
+      (await refuseIfHumanReviewPending(
+        res,
+        authorized.scope,
+        req.params.id,
+        "solution_matching",
+      ))
+    ) {
+      return
+    }
+
     const result = await saveRecommendations(
       authorized.resource,
       authorized.scope,
@@ -1112,7 +1206,7 @@ router.patch("/:id/recommendations", async (req, res) => {
       data: { version: result.version },
     })
   } catch (error) {
-    console.error("SAVE_RECOMMENDATIONS_FAILED", failureIdentity(error))
+    logger.error("SAVE_RECOMMENDATIONS_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1147,7 +1241,7 @@ router.get("/:id/recommendations/versions", async (req, res) => {
       data: { versions },
     })
   } catch (error) {
-    console.error("LOAD_RECOMMENDATION_VERSIONS_FAILED", failureIdentity(error))
+    logger.error("LOAD_RECOMMENDATION_VERSIONS_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1190,7 +1284,7 @@ router.get("/:id/recommendations/versions/:versionId", async (req, res) => {
       data: { version },
     })
   } catch (error) {
-    console.error("LOAD_RECOMMENDATION_VERSION_FAILED", failureIdentity(error))
+    logger.error("LOAD_RECOMMENDATION_VERSION_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1256,7 +1350,7 @@ router.post("/:id/roadmap", async (req, res) => {
       },
     })
   } catch (error) {
-    console.error("GENERATE_ROADMAP_FAILED", failureIdentity(error))
+    logger.error("GENERATE_ROADMAP_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1286,6 +1380,18 @@ router.patch("/:id/roadmap", async (req, res) => {
   }
 
   try {
+    if (
+      parseResult.data.reviewState === "accepted" &&
+      (await refuseIfHumanReviewPending(
+        res,
+        authorized.scope,
+        req.params.id,
+        "roadmap",
+      ))
+    ) {
+      return
+    }
+
     const result = await saveImplementationRoadmap(
       authorized.resource,
       authorized.scope,
@@ -1324,7 +1430,7 @@ router.patch("/:id/roadmap", async (req, res) => {
       data: { version: result.version },
     })
   } catch (error) {
-    console.error("SAVE_ROADMAP_FAILED", failureIdentity(error))
+    logger.error("SAVE_ROADMAP_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1353,7 +1459,7 @@ router.get("/:id/roadmap/versions", async (req, res) => {
       data: { versions },
     })
   } catch (error) {
-    console.error("LOAD_ROADMAP_VERSIONS_FAILED", failureIdentity(error))
+    logger.error("LOAD_ROADMAP_VERSIONS_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1393,7 +1499,7 @@ router.get("/:id/roadmap/versions/:versionId", async (req, res) => {
       data: { version },
     })
   } catch (error) {
-    console.error("LOAD_ROADMAP_VERSION_FAILED", failureIdentity(error))
+    logger.error("LOAD_ROADMAP_VERSION_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1453,7 +1559,7 @@ router.post("/:id/report", async (req, res) => {
       data: { version: result.version, evaluation: result.evaluation },
     })
   } catch (error) {
-    console.error("GENERATE_REPORT_FAILED", failureIdentity(error))
+    logger.error("GENERATE_REPORT_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1484,6 +1590,18 @@ router.patch("/:id/report", async (req, res) => {
 
   try {
     const reviewState = parseResult.data.reviewState ?? "draft"
+    if (
+      reviewState === "manager_review" &&
+      (await refuseIfHumanReviewPending(
+        res,
+        authorized.scope,
+        req.params.id,
+        "report",
+      ))
+    ) {
+      return
+    }
+
     const result = await saveConsultantReport(
       authorized.resource,
       authorized.scope,
@@ -1521,7 +1639,7 @@ router.patch("/:id/report", async (req, res) => {
       data: { version: result.version },
     })
   } catch (error) {
-    console.error("SAVE_REPORT_FAILED", failureIdentity(error))
+    logger.error("SAVE_REPORT_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1545,6 +1663,17 @@ router.post("/:id/report/versions/:versionId/approve", async (req, res) => {
   if (!parseResult.success) return invalidReportInput(res, parseResult.error)
 
   try {
+    if (
+      await refuseIfHumanReviewPending(
+        res,
+        authorized.scope,
+        req.params.id,
+        "report",
+      )
+    ) {
+      return
+    }
+
     const result = await approveConsultantReport(
       authorized.resource,
       authorized.scope,
@@ -1571,7 +1700,7 @@ router.post("/:id/report/versions/:versionId/approve", async (req, res) => {
       data: { version: result.version },
     })
   } catch (error) {
-    console.error("APPROVE_REPORT_FAILED", failureIdentity(error))
+    logger.error("APPROVE_REPORT_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1603,7 +1732,7 @@ router.get("/:id/feedback", async (req, res) => {
       data: feedback,
     })
   } catch (error) {
-    console.error("LOAD_FEEDBACK_FAILED", failureIdentity(error))
+    logger.error("LOAD_FEEDBACK_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1651,7 +1780,7 @@ router.patch("/:id/feedback/:feedbackId/classification", async (req, res) => {
       data: { feedback: result.feedback },
     })
   } catch (error) {
-    console.error("CLASSIFY_FEEDBACK_FAILED", failureIdentity(error))
+    logger.error("CLASSIFY_FEEDBACK_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1699,7 +1828,7 @@ router.patch("/:id/feedback/:feedbackId/close-no-action", async (req, res) => {
       data: { feedback: result.feedback },
     })
   } catch (error) {
-    console.error("CLOSE_FEEDBACK_NO_ACTION_FAILED", failureIdentity(error))
+    logger.error("CLOSE_FEEDBACK_NO_ACTION_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1746,7 +1875,7 @@ router.post("/:id/feedback/reentries", async (req, res) => {
       data: { feedback: result.feedback, reentry: result.reentry },
     })
   } catch (error) {
-    console.error("OPEN_FEEDBACK_REENTRY_FAILED", failureIdentity(error))
+    logger.error("OPEN_FEEDBACK_REENTRY_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1794,7 +1923,7 @@ router.post("/:id/feedback/reentries/:reentryId/complete", async (req, res) => {
       data: { reentry: result.reentry },
     })
   } catch (error) {
-    console.error("COMPLETE_FEEDBACK_REENTRY_FAILED", failureIdentity(error))
+    logger.error("COMPLETE_FEEDBACK_REENTRY_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1823,7 +1952,7 @@ router.get("/:id/report/versions", async (req, res) => {
       data: { versions },
     })
   } catch (error) {
-    console.error("LOAD_REPORT_VERSIONS_FAILED", failureIdentity(error))
+    logger.error("LOAD_REPORT_VERSIONS_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1863,7 +1992,7 @@ router.get("/:id/report/versions/:versionId", async (req, res) => {
       data: { version },
     })
   } catch (error) {
-    console.error("LOAD_REPORT_VERSION_FAILED", failureIdentity(error))
+    logger.error("LOAD_REPORT_VERSION_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1897,11 +2026,19 @@ router.get("/:id/report/versions/:versionId/pdf", async (req, res) => {
       })
     }
 
+    await recordConfidentialAccess({
+      workspaceId: authorized.scope.workspaceId,
+      userId: actingUser.id,
+      engagementId: authorized.resource.id,
+      classification: authorized.resource.dataClassification,
+      surface: "report.export_pdf",
+    })
+
     res.setHeader("content-type", "application/pdf")
     res.setHeader("content-disposition", `inline; filename="report-${req.params.versionId}.pdf"`)
     return res.send(pdf)
   } catch (error) {
-    console.error("REPORT_PDF_FAILED", failureIdentity(error))
+    logger.error("REPORT_PDF_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1946,7 +2083,7 @@ router.post("/:id/report/versions/:versionId/publish", async (req, res) => {
       data: { publication: result.publication },
     })
   } catch (error) {
-    console.error("PUBLISH_REPORT_FAILED", failureIdentity(error))
+    logger.error("PUBLISH_REPORT_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -1986,7 +2123,7 @@ router.post("/:id/report/publication/revoke", async (req, res) => {
       data: { publication: result.publication },
     })
   } catch (error) {
-    console.error("REVOKE_REPORT_PUBLICATION_FAILED", failureIdentity(error))
+    logger.error("REVOKE_REPORT_PUBLICATION_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -2030,7 +2167,7 @@ router.post("/:id/report/publication/notify", async (req, res) => {
       data: { publication: result.publication },
     })
   } catch (error) {
-    console.error("RETRY_REPORT_NOTIFICATION_FAILED", failureIdentity(error))
+    logger.error("RETRY_REPORT_NOTIFICATION_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
@@ -2064,11 +2201,52 @@ router.get("/:id/analysis-runs", async (req, res) => {
       data: analysisRuns,
     })
   } catch (error) {
-    console.error("GET_ANALYSIS_RUNS_FAILED", failureIdentity(error))
+    logger.error("GET_ANALYSIS_RUNS_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,
       message: "analysis.error.runs_not_loaded",
+    })
+  }
+})
+
+router.post("/:id/ai-output-review", async (req, res) => {
+  const actingUser = await requireActingUser(req, res)
+  if (!actingUser) return
+
+  const authorized = await authorizeEngagementAction(
+    actingUser,
+    "engagement.ai_output.review",
+    req.params.id,
+  )
+  if (!authorized.permitted) return denyRequest(res, authorized)
+
+  const parseResult = reviewAiOutputSchema.safeParse(req.body ?? {})
+  if (!parseResult.success) {
+    return res.status(400).json({
+      status: false,
+      message: "compliance.error.invalid_input",
+      errors: parseResult.error.flatten(),
+    })
+  }
+
+  try {
+    await recordHumanReviewOfAiOutput(
+      authorized.scope,
+      req.params.id,
+      parseResult.data.stage,
+    )
+
+    return res.json({
+      status: true,
+      message: "compliance.message.ai_output_reviewed",
+    })
+  } catch (error) {
+    logger.error("AI_OUTPUT_REVIEW_FAILED", failureIdentity(error))
+
+    return res.status(500).json({
+      status: false,
+      message: "compliance.error.internal",
     })
   }
 })
@@ -2086,6 +2264,25 @@ router.post("/:id/analyze", async (req, res) => {
 
   try {
     const result = await analyzeEngagement(authorized.resource, authorized.scope)
+
+    // The compliance policy refused the request: a refusal to act on this
+    // caller's request rather than unusable output (roadmap Phase 10).
+    if (!result.success && "complianceDenial" in result) {
+      return res.status(403).json({
+        status: false,
+        message: result.messageId,
+      })
+    }
+
+    if (!result.success && "outputRejected" in result) {
+      return res.status(422).json({
+        status: false,
+        message: result.messageId,
+        data: {
+          evaluation: result.evaluation,
+        },
+      })
+    }
 
     if (!result.success) {
       return res.status(422).json({
@@ -2107,7 +2304,7 @@ router.post("/:id/analyze", async (req, res) => {
       },
     })
   } catch (error) {
-    console.error("RUN_ANALYSIS_FAILED", failureIdentity(error))
+    logger.error("RUN_ANALYSIS_FAILED", failureIdentity(error))
     return res.status(500).json({ status: false, message: "analysis.error.failed" })
   }
 })
@@ -2141,6 +2338,23 @@ const invalidFeedbackInput = (res: Response, error: ZodError) =>
     message: "feedback.error.invalid_input",
     errors: error.flatten(),
   })
+
+const refuseIfHumanReviewPending = async (
+  res: Response,
+  scope: EngagementScope,
+  engagementId: string,
+  stage: AnalysisRunStage,
+): Promise<boolean> => {
+  if (!(await stageAwaitsHumanReview(scope, engagementId, stage))) return false
+
+  res.status(409).json({
+    status: false,
+    message: "compliance.error.human_review_required",
+    data: { stage },
+  })
+
+  return true
+}
 
 // The four review transitions differ only in their payload, so they share one
 // path from an authorized engagement to a structured outcome, one audit entry,
@@ -2186,7 +2400,7 @@ const runDiscoveryTransition = async (
       data: withDiscoveryState(result.engagement),
     })
   } catch (error) {
-    console.error("DISCOVERY_TRANSITION_FAILED", failureIdentity(error))
+    logger.error("DISCOVERY_TRANSITION_FAILED", failureIdentity(error))
 
     return res.status(500).json({
       status: false,

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict"
 import { beforeEach, test } from "node:test"
+
+import { compliancePolicyRepositoryMock } from "../domain/compliance/compliance-policy.fixture.js"
 import { mock } from "node:test"
 
 import type { UserRole } from "../../../shared/access.schema.js"
@@ -71,6 +73,14 @@ mock.module("../lib/auth/authentication-provider.js", {
       },
     },
   },
+})
+
+// Bootstrapping a workspace also creates its Workspace Compliance Policy, so
+// that every engagement operates under an explicit one from the moment the
+// workspace exists (roadmap Phase 10). Replaced at the storage seam like every
+// other repository here.
+mock.module("../repositories/compliance.repository.js", {
+  namedExports: compliancePolicyRepositoryMock(),
 })
 
 mock.module("../repositories/access.repository.js", {

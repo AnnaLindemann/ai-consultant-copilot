@@ -124,6 +124,31 @@ export type AccessAction =
   | "role.change"
   | "discovery_access.grant"
   | "discovery_access.revoke"
+  // Security, privacy and AI compliance (roadmap Phase 10). The phase inherits
+  // the existing decision point and adds no role: reading and configuring the
+  // Workspace Compliance Policy, and reading the Compliance Dashboard, are
+  // workspace administration, while classifying an engagement and deciding its
+  // AI consent belong to whoever runs that engagement.
+  //
+  // Exporting and erasing a client's data are separated from both: they are
+  // irreversible or wholesale disclosures of one client's entire record, so
+  // they are the Administrator's alone even though a Manager owns the
+  // engagement they concern.
+  | "compliance.policy.read"
+  | "compliance.policy.manage"
+  | "compliance.dashboard.read"
+  | "engagement.compliance.manage"
+  | "engagement.privacy_processing.manage"
+  | "engagement.consent.manage"
+  | "engagement.dpia_screening.manage"
+  | "engagement.ai_output.review"
+  | "workspace.dpia.manage"
+  | "ai_model_approval.manage"
+  | "retention.manage"
+  | "compliance.export_client_data"
+  | "compliance.erase_client_data"
+  // Issuing an expiring, signed link to a rendered report PDF.
+  | "document.download_link.issue"
   // The Client Discovery Portal.
   | "portal.discovery.read"
   | "portal.discovery.save"
@@ -239,6 +264,25 @@ const ROLES_PERMITTED: Record<AccessAction, readonly UserRole[]> = {
   "role.change": ["ADMIN"],
   "discovery_access.grant": ["ADMIN", "MANAGER"],
   "discovery_access.revoke": ["ADMIN", "MANAGER"],
+
+  // Compliance (roadmap Phase 10). A Manager may *read* the policy their work
+  // is governed by — being told the rules is not being able to change them —
+  // but only an Administrator configures it, reads the workspace-wide
+  // dashboard, or exports or erases a client's data.
+  "compliance.policy.read": ["ADMIN", "MANAGER"],
+  "compliance.policy.manage": ["ADMIN"],
+  "compliance.dashboard.read": ["ADMIN"],
+  "engagement.compliance.manage": ["ADMIN", "MANAGER"],
+  "engagement.privacy_processing.manage": ["ADMIN", "MANAGER"],
+  "engagement.consent.manage": ["ADMIN"],
+  "engagement.dpia_screening.manage": ["ADMIN", "MANAGER"],
+  "engagement.ai_output.review": ["ADMIN", "MANAGER"],
+  "workspace.dpia.manage": ["ADMIN"],
+  "ai_model_approval.manage": ["ADMIN"],
+  "retention.manage": ["ADMIN"],
+  "compliance.export_client_data": ["ADMIN"],
+  "compliance.erase_client_data": ["ADMIN"],
+  "document.download_link.issue": ["ADMIN", "MANAGER"],
 
   // The portal is the Client's surface and nobody else's. A consultant reviews
   // discovery through the workbench, not by acting as the client.

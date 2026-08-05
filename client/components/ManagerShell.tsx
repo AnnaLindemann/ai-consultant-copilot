@@ -257,6 +257,13 @@ function SidebarIcon({ kind }: { kind: NavIconKind | "brand" }) {
           <path d="M20 4v5h-5" />
         </svg>
       )
+    case "compliance":
+      return (
+        <svg {...common}>
+          <path d="M12 3 5 6v5c0 4.2 2.9 8.1 7 9 4.1-.9 7-4.8 7-9V6l-7-3Z" />
+          <path d="m9 12 2 2 4-4" />
+        </svg>
+      )
   }
 }
 

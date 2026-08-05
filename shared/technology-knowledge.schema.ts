@@ -314,7 +314,7 @@ export const technologyUpdateHistoryEntrySchema = z.object({
 // `TechnologyRetrieval` (architecture.md §3, §9.2): deterministic and
 // structured, filtering by **category** and matching on curated terms, over a
 // separate store from the Consulting Knowledge Base. It stays structured —
-// RAG over the Technology Knowledge Base is not part of Phase 10.
+// RAG over the Technology Knowledge Base is not part of Phase 11.
 
 export const technologyRetrievalContextSchema = z.object({
   // Which kinds of technology are wanted. Empty means "any category".

@@ -10,6 +10,7 @@ import {
   type ActingUser,
   type EngagementScope,
 } from "../domain/access/access.js"
+import { logger, updateLogContext } from "../lib/application-logger.js"
 import { failureIdentity } from "../lib/failure-identity.js"
 import {
   appendAuditTrail,
@@ -101,6 +102,8 @@ export const authorizeEngagementAction = async (
     })
   }
 
+  updateLogContext({ engagementId: engagement.id })
+
   const decision = decideAccess(actingUser, action, {
     kind: "engagement",
     workspaceId: engagement.workspaceId,
@@ -167,6 +170,8 @@ export const authorizePortalDiscoveryAction = async (
       requestedEngagementId: engagementId,
     })
   }
+
+  updateLogContext({ engagementId: engagement.id })
 
   return { permitted: true, resource: engagement, scope }
 }
@@ -322,7 +327,7 @@ const reportAuditFailure = (
   error: unknown,
   afterRetry: boolean,
 ) => {
-  console.error("AUDIT_APPEND_FAILED", {
+  logger.error("AUDIT_APPEND_FAILED", {
     eventType: "denied_permission",
     workspaceId: entry.workspaceId,
     userId: entry.userId,

@@ -8,11 +8,14 @@ import {
   identifyAssessmentFindings,
 } from "../domain/engagement/assessment.js"
 import { callLlm } from "../lib/llm-client.js"
-import { getDefaultLlmConfig } from "../lib/llm-config.js"
 import { parseAssessment } from "../lib/parse-assessment.js"
 import { langfuse } from "../observability/langfuse.js"
 import { ASSESSMENT_PROMPT } from "../prompts/assessment-prompt.js"
 import { buildAssessmentPrompt } from "../prompts/build-assessment-prompt.js"
+import {
+  authorizeAiProcessing,
+  reviewAiOutput,
+} from "./ai-compliance.service.js"
 import { retrieveKnowledgePackage } from "./consulting-knowledge.service.js"
 import {
   createAnalysisRun,
@@ -32,6 +35,7 @@ import type {
   AssessmentSubmission,
 } from "../../../shared/assessment.schema.js"
 import type { EvaluationResult } from "../evaluation/evaluation.types.js"
+import { getCurrentRequestId, logger } from "../lib/application-logger.js"
 import { failureIdentity } from "../lib/failure-identity.js"
 
 // Why an assessment could not be generated. Each is a domain-meaningful
@@ -39,6 +43,10 @@ import { failureIdentity } from "../lib/failure-identity.js"
 export type GenerateAssessmentFailure =
   | "discovery_not_ready"
   | "consultant_edits_protected"
+  // The Workspace Compliance Policy, the engagement's AI consent, or its data
+  // classification refused the request before it reached the provider (roadmap
+  // Phase 10).
+  | "ai_not_permitted"
   | "ai_step_failed"
   | "ai_output_invalid"
 
@@ -53,6 +61,10 @@ export type GenerateAssessmentResult =
       success: false
       failure: GenerateAssessmentFailure
       error: string
+      // Which compliance rule refused the request, as an identifier the
+      // frontend localizes. Present only on `ai_not_permitted`, where the
+      // consultant needs to know *which* rule stopped it.
+      messageId?: string
       evaluation?: EvaluationResult
     }
 
@@ -102,6 +114,7 @@ export const generateAssessment = async (
     metadata: {
       engagementId: engagement.id,
       workspaceId: scope.workspaceId,
+      requestId: getCurrentRequestId(),
       stage: "assessment",
       promptVersion: ASSESSMENT_PROMPT.version,
       promptFingerprint: ASSESSMENT_PROMPT.fingerprint,
@@ -133,13 +146,47 @@ export const generateAssessment = async (
     knowledgePackage,
   })
 
-  // Resolved up front so a provider failure can still be attributed to the
-  // provider and model it was attempted with.
-  const llmConfig = getDefaultLlmConfig()
+  // The compliance gate: the Workspace Compliance Policy, the engagement's AI
+  // consent and its data classification are asked *before* anything leaves for
+  // the provider, and personal data is removed where the policy requires it
+  // (roadmap Phase 10). The prompt the gate hands back is the only one that may
+  // be sent. A refusal leaves engagement state untouched and records a denied
+  // AI request in the Audit Trail rather than an Analysis Run — nothing ran.
+  const gate = await authorizeAiProcessing({
+    engagement,
+    scope,
+    stage: "assessment",
+    purpose: "assessment_generation",
+    prompt,
+    promptVersion: ASSESSMENT_PROMPT.version,
+    promptFingerprint: ASSESSMENT_PROMPT.fingerprint,
+  })
+
+  if (!gate.permitted) {
+    trace?.update({
+      metadata: {
+        engagementId: engagement.id,
+        workspaceId: scope.workspaceId,
+        stage: "assessment",
+        success: false,
+        complianceDenial: gate.reason,
+      },
+    })
+    await langfuse?.flushAsync()
+
+    return {
+      success: false,
+      failure: "ai_not_permitted",
+      error: `AI processing was refused by the compliance policy: ${gate.reason}`,
+      messageId: gate.messageId,
+    }
+  }
+
+  const llmConfig = { provider: gate.provider, model: gate.model }
 
   let llmResponse
   try {
-    llmResponse = await callLlm(prompt)
+    llmResponse = await callLlm(gate.prompt)
   } catch (error) {
     // A provider failure is still a failed AI-assisted step: it is recorded so
     // the audit trail survives (coding-standards.md §7), and engagement state
@@ -169,6 +216,7 @@ export const generateAssessment = async (
       schemaValid: false,
       errorMessage,
       knowledgeEntryCodes: knowledgePackage.codes,
+      compliance: gate.compliance,
     })
 
     return {
@@ -179,6 +227,13 @@ export const generateAssessment = async (
   }
 
   const parsedResult = parseAssessment(llmResponse.content)
+  const outputReview = await reviewAiOutput({
+    engagement,
+    scope,
+    stage: "assessment",
+    decision: gate,
+    responseText: llmResponse.content,
+  })
 
   const costEstimateUsd = calculateLlmCost({
     promptTokens: llmResponse.promptTokens,
@@ -230,8 +285,14 @@ export const generateAssessment = async (
     costEstimateUsd,
     jsonParseSuccess: parsedResult.jsonParseSuccess,
     schemaValid: parsedResult.schemaValid,
-    errorMessage: parsedResult.success ? undefined : parsedResult.error,
+    errorMessage:
+      !outputReview.accepted
+        ? "AI output contained personal data and was refused."
+        : parsedResult.success
+          ? undefined
+          : parsedResult.error,
     knowledgeEntryCodes: knowledgePackage.codes,
+    compliance: outputReview.compliance,
   })
 
   trace?.update({
@@ -255,6 +316,16 @@ export const generateAssessment = async (
       success: false,
       failure: "ai_output_invalid",
       error: parsedResult.error,
+      evaluation,
+    }
+  }
+
+  if (!outputReview.accepted) {
+    return {
+      success: false,
+      failure: "ai_output_invalid",
+      error: "AI output contained personal data and was refused.",
+      messageId: outputReview.messageId,
       evaluation,
     }
   }
@@ -286,13 +357,16 @@ export const saveAssessment = async (
   scope: EngagementScope,
   submitted: AssessmentSubmission,
   reviewState: Exclude<AssessmentReviewState, "ai_draft">,
-) =>
-  updateEngagementAssessment(
+) => {
+  const saved = await updateEngagementAssessment(
     engagementId,
     scope,
     identifyAssessmentFindings(submitted, mintFindingId),
     reviewState,
   )
+
+  return saved
+}
 
 // A finding's identity is opaque and unrelated to its text, so re-wording a
 // title can never change what cites it.
@@ -307,7 +381,7 @@ const recordAssessmentRun = async (
     const analysisRun = await createAnalysisRun(input)
     return analysisRun.id
   } catch (error) {
-    console.error("CREATE_ASSESSMENT_ANALYSIS_RUN_FAILED", failureIdentity(error))
+    logger.error("CREATE_ASSESSMENT_ANALYSIS_RUN_FAILED", failureIdentity(error))
     return undefined
   } finally {
     await langfuse?.flushAsync()

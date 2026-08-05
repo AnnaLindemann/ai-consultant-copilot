@@ -48,6 +48,36 @@ import {
   TECHNOLOGY_PROPOSAL_STATUSES,
 } from "../lib/technology-options.ts"
 import {
+  aiAssistedStageSchema,
+  dataClassificationSchema,
+  dpaStatusSchema,
+  engagementAiProcessingPermissionSchema,
+  engagementDpiaScreeningSchema,
+  humanReviewStatusSchema,
+  legalBasisSchema,
+  personalIdentifierKindSchema,
+  piiRedactionStatusSchema,
+  promptRetentionDecisionSchema,
+  trainingUseDecisionSchema,
+  aiModelApprovalStatusSchema,
+  workspaceDpiaStatusSchema,
+} from "../../shared/compliance.schema.ts"
+import { complianceMessageIds } from "../../shared/compliance-messages.ts"
+import {
+  AI_PROCESSING_PERMISSIONS,
+  AI_MODEL_APPROVAL_STATUSES,
+  DATA_CLASSIFICATIONS,
+  DPA_STATUSES,
+  DPIA_SCREENINGS,
+  HUMAN_REVIEW_STATUSES,
+  LEGAL_BASES,
+  PERSONAL_IDENTIFIER_KINDS,
+  PII_REDACTION_STATUSES,
+  PROMPT_RETENTION_DECISIONS,
+  TRAINING_USE_DECISIONS,
+  WORKSPACE_DPIA_STATUSES,
+} from "../lib/compliance-options.ts"
+import {
   DISCOVERY_SECTIONS,
   discoveryActorSchema,
   discoveryProvenanceSchema,
@@ -272,6 +302,97 @@ test("every technology identifier the interface renders has a German label", () 
       has(`technology.profile.origin.${origin}`),
       true,
       `technology.profile.origin.${origin} has no German sentence`,
+    )
+  }
+})
+
+test("every compliance outcome the server reports has a German message", () => {
+  for (const messageId of complianceMessageIds) {
+    assert.equal(has(messageId), true, `${messageId} has no German message`)
+  }
+})
+
+// The compliance surfaces repeat their identifiers locally for the same reason
+// the technology surfaces do: a client file may import from `shared/` type-only.
+test("the compliance surfaces offer exactly the identifiers the domain defines", () => {
+  assert.deepEqual([...DATA_CLASSIFICATIONS], [...dataClassificationSchema.options])
+  assert.deepEqual(
+    [...AI_PROCESSING_PERMISSIONS],
+    [...engagementAiProcessingPermissionSchema.options],
+  )
+  assert.deepEqual(
+    [...PII_REDACTION_STATUSES],
+    [...piiRedactionStatusSchema.options],
+  )
+  assert.deepEqual(
+    [...HUMAN_REVIEW_STATUSES],
+    [...humanReviewStatusSchema.options],
+  )
+  assert.deepEqual([...LEGAL_BASES], [...legalBasisSchema.options])
+  assert.deepEqual([...DPIA_SCREENINGS], [...engagementDpiaScreeningSchema.options])
+  assert.deepEqual(
+    [...WORKSPACE_DPIA_STATUSES],
+    [...workspaceDpiaStatusSchema.options],
+  )
+  assert.deepEqual(
+    [...AI_MODEL_APPROVAL_STATUSES],
+    [...aiModelApprovalStatusSchema.options],
+  )
+  assert.deepEqual([...DPA_STATUSES], [...dpaStatusSchema.options])
+  assert.deepEqual(
+    [...PROMPT_RETENTION_DECISIONS],
+    [...promptRetentionDecisionSchema.options],
+  )
+  assert.deepEqual(
+    [...TRAINING_USE_DECISIONS],
+    [...trainingUseDecisionSchema.options],
+  )
+  assert.deepEqual(
+    [...PERSONAL_IDENTIFIER_KINDS],
+    [...personalIdentifierKindSchema.options],
+  )
+})
+
+test("every compliance identifier the interface renders has a German label", () => {
+  // A classification, an AI-processing permission, or a PII redaction status that
+  // reached a screen without a label would render as its English identifier,
+  // which is exactly what §12A forbids.
+  const labelled: [string, readonly string[]][] = [
+    ["compliance.classification", dataClassificationSchema.options],
+    [
+      "compliance.ai_processing_permission",
+      engagementAiProcessingPermissionSchema.options,
+    ],
+    ["compliance.pii_redaction", piiRedactionStatusSchema.options],
+    ["compliance.human_review", humanReviewStatusSchema.options],
+    // Including `analysis`: the human-review action can name it, so it needs a
+    // German label like every other AI-assisted step.
+    ["compliance.ai_stage", aiAssistedStageSchema.options],
+    ["compliance.legal_basis", legalBasisSchema.options],
+    ["compliance.dpia_screening", engagementDpiaScreeningSchema.options],
+    ["compliance.workspace_dpia", workspaceDpiaStatusSchema.options],
+    ["compliance.model.status", aiModelApprovalStatusSchema.options],
+    ["compliance.model.dpa", dpaStatusSchema.options],
+    ["compliance.model.retention", promptRetentionDecisionSchema.options],
+    ["compliance.model.training", trainingUseDecisionSchema.options],
+    ["compliance.identifier_kind", personalIdentifierKindSchema.options],
+  ]
+
+  for (const [prefix, identifiers] of labelled) {
+    for (const identifier of identifiers) {
+      assert.equal(
+        has(`${prefix}.${identifier}`),
+        true,
+        `${prefix}.${identifier} has no German label`,
+      )
+    }
+  }
+
+  for (const match of ["literal", "pattern"]) {
+    assert.equal(
+      has(`compliance.identifier_match.${match}`),
+      true,
+      `compliance.identifier_match.${match} has no German label`,
     )
   }
 })

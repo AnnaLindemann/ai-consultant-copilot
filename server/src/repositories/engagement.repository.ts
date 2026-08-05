@@ -28,6 +28,7 @@ import {
   engagementReach,
   type EngagementScope,
 } from "../domain/access/access.js"
+import type { DataClassification } from "../../../shared/compliance.schema.js"
 
 // Persistence for the Engagement aggregate — the single engagement store that
 // later phases attach their stage content to, not a parallel store (roadmap
@@ -98,6 +99,10 @@ const assertEngagementInScope = async (id: string, scope: EngagementScope) => {
 export const createEngagement = async (
   scope: EngagementScope,
   input: CreateEngagementInput,
+  // The classification new engagements start under, from the workspace's
+  // Compliance Policy (roadmap Phase 10). Passed in rather than read here: the
+  // policy is application-layer state, and a repository does not decide it.
+  dataClassification: DataClassification,
 ) => {
   const { organizationId, ...content } = input
 
@@ -106,6 +111,7 @@ export const createEngagement = async (
       workspaceId: scope.workspaceId,
       owningManagerId: scope.userId,
       organizationId,
+      dataClassification,
       ...content,
     },
     include: { organization: true },

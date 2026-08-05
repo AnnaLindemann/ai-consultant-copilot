@@ -213,6 +213,48 @@ The most prominent kinds of knowledge are described below; §4.1 gives the compl
 - **Responsibilities.** Records sign-in, invitation issued/accepted/revoked/expired, discovery submission, return, acceptance, document publication, publication revocation, document download, engagement ownership transfer, role change, and **denied permission attempts**. Entries are never rewritten or deleted (append-only, as Consultant Report versions and the Technology Update History are). It exists so that access to client data can be reconstructed and accounted for afterwards.
 - **Relationships.** Belongs to a **Workspace** and, where the event concerns one, references an **Engagement** and the acting **User**. It is the **third governance record** and is deliberately distinct from the other two: the **Analysis Run** records engagement AI assistance, the **Technology Update History** records approved knowledge curation, and the **Audit Trail** records access and collaboration. None is written by another's path, and none may be merged into another.
 
+### Security, Privacy, and AI Compliance Concepts
+
+Phase 10 adds governance concepts around the existing engagement and access
+model:
+
+- **Workspace Compliance Policy** — the workspace-level rules for data
+  classification, AI use, document protection, retention, export, and
+  regulatory configuration.
+- **Data Classification** — the protection label for engagement content,
+  documents, and generated outputs: public, internal, confidential, personal
+  data, strictly confidential, or AI restricted.
+- **Engagement AI Processing Permission** — the engagement-level permission to
+  allow, restrict, or prohibit AI assistance. This is not GDPR consent.
+- **Engagement Privacy Processing Record** — the engagement's personal-data
+  processing purpose, legal basis, and explanatory note.
+- **Engagement Consent Record** — a real consent record where consent is the
+  legal basis. Consent history is immutable during the normal lifecycle, though
+  authorized erasure may minimize or remove personal data where the law permits.
+- **Workspace DPIA Assessment** and **Engagement DPIA Screening** — the
+  standard workspace assessment and the engagement-specific screening that gates
+  AI processing where required.
+- **Workspace AI Model Approval** — the governed approval of a provider/model
+  pair, including status and re-review when compliance-relevant technology facts
+  change.
+- **Legal Hold** — an engagement-level record that a legal obligation prevents
+  erasure.
+- **Retention Policy** — the configured time after which engagements,
+  documents, audit entries, or AI artifacts become due for governed retention
+  action.
+
+Legal basis and processing purpose are engagement-level facts. They are not
+inferred from the workspace policy, from AI-processing permission, or from
+ordinary content edits.
+
+The Audit Trail is append-only during ordinary operation. Approved retention and
+GDPR erasure are explicit governed exceptions. Audit minimization may rewrite
+payloads only for authorized erasure privacy protection; it must never become a
+general audit-edit path.
+
+Technology Update History remains separate from the Audit Trail and Analysis
+Runs. It records approved knowledge curation changes only.
+
 ---
 
 ## 3. Engagement Lifecycle

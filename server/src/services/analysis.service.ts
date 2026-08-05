@@ -13,7 +13,12 @@ import type {
 } from "../repositories/engagement.repository.js"
 import { ANALYSIS_PROMPT } from "../prompts/analysis-prompt.js"
 import { langfuse } from "../observability/langfuse.js"
+import { getCurrentRequestId, logger } from "../lib/application-logger.js"
 import { failureIdentity } from "../lib/failure-identity.js"
+import {
+  authorizeAiProcessing,
+  reviewAiOutput,
+} from "./ai-compliance.service.js"
 
 export type AnalyzeEngagementResult =
   | {
@@ -26,6 +31,21 @@ export type AnalyzeEngagementResult =
       evaluation: EvaluationResult
       error: string
     }
+  // The Workspace Compliance Policy, the engagement's AI consent, or its data
+  // classification refused the request before it reached the provider (roadmap
+  // Phase 10). No report was produced and no Analysis Run was recorded —
+  // nothing ran — but the refusal is in the append-only Audit Trail.
+  | {
+      success: false
+      complianceDenial: true
+      messageId: string
+    }
+  | {
+      success: false
+      outputRejected: true
+      messageId: string
+      evaluation: EvaluationResult
+    }
 
 export const analyzeEngagement = async (
   input: EngagementWithOrganization,
@@ -36,6 +56,7 @@ export const analyzeEngagement = async (
     metadata: {
       engagementId: input.id,
       workspaceId: scope.workspaceId,
+      requestId: getCurrentRequestId(),
       promptVersion: ANALYSIS_PROMPT.version,
       promptFingerprint: ANALYSIS_PROMPT.fingerprint,
     },
@@ -43,9 +64,44 @@ export const analyzeEngagement = async (
 
   const prompt = buildAnalysisPrompt(input)
 
-  const llmResponse = await callLlm(prompt)
+  // The compliance gate: policy, consent and classification are asked before
+  // anything leaves for the provider, and personal data is removed where the
+  // policy requires it. The prompt the gate hands back is the only one that may
+  // be sent (roadmap Phase 10).
+  const gate = await authorizeAiProcessing({
+    engagement: input,
+    scope,
+    stage: "analysis",
+    purpose: "engagement_analysis",
+    prompt,
+    promptVersion: ANALYSIS_PROMPT.version,
+    promptFingerprint: ANALYSIS_PROMPT.fingerprint,
+  })
+
+  if (!gate.permitted) {
+    trace?.update({
+      metadata: {
+        engagementId: input.id,
+        workspaceId: scope.workspaceId,
+        success: false,
+        complianceDenial: gate.reason,
+      },
+    })
+    await langfuse?.flushAsync()
+
+    return { success: false, complianceDenial: true, messageId: gate.messageId }
+  }
+
+  const llmResponse = await callLlm(gate.prompt)
 
   const parsedResult = parseAnalysisReport(llmResponse.content)
+  const outputReview = await reviewAiOutput({
+    engagement: input,
+    scope,
+    stage: "analysis",
+    decision: gate,
+    responseText: llmResponse.content,
+  })
 
   const costEstimateUsd = calculateLlmCost({
     promptTokens: llmResponse.promptTokens,
@@ -100,7 +156,13 @@ export const analyzeEngagement = async (
       costEstimateUsd,
       jsonParseSuccess: parsedResult.jsonParseSuccess,
       schemaValid: parsedResult.schemaValid,
-      errorMessage: parsedResult.success ? undefined : parsedResult.error,
+      errorMessage:
+        !outputReview.accepted
+          ? "AI output contained personal data and was refused."
+          : parsedResult.success
+            ? undefined
+            : parsedResult.error,
+      compliance: outputReview.compliance,
     })
 
       trace?.update({
@@ -116,7 +178,7 @@ export const analyzeEngagement = async (
       },
     })
   } catch (error) {
-    console.error("CREATE_ANALYSIS_RUN_FAILED", failureIdentity(error))
+    logger.error("CREATE_ANALYSIS_RUN_FAILED", failureIdentity(error))
   } finally {
     await langfuse?.flushAsync()
   }
@@ -126,6 +188,15 @@ export const analyzeEngagement = async (
       success: false,
       evaluation,
       error: parsedResult.error,
+    }
+  }
+
+  if (!outputReview.accepted) {
+    return {
+      success: false,
+      outputRejected: true,
+      messageId: outputReview.messageId,
+      evaluation,
     }
   }
 

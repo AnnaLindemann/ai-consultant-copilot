@@ -1,5 +1,6 @@
 import type { Request, Response } from "express"
 
+import { updateLogContext } from "./application-logger.js"
 import { authenticationProvider } from "./auth/authentication-provider.js"
 
 import type {
@@ -42,6 +43,10 @@ export const requireIdentity = async (
   }
 
   req.identity = identity
+  updateLogContext({
+    actorId: identity.actingUser?.id,
+    workspaceId: identity.actingUser?.workspaceId,
+  })
   return identity
 }
 

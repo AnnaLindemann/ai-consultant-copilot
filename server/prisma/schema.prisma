@@ -254,6 +254,127 @@ enum FeedbackReentryStatus {
   completed
 }
 
+// How sensitive a piece of engagement content, a document, or a generated
+// output is (roadmap Phase 10 "Data Classification"). `personal_data` and
+// `ai_restricted` are classifications in their own right rather than modifiers:
+// personal data must be redacted/pseudonymized before it reaches a provider, and
+// AI-restricted content never reaches one at all. Their relative protection
+// order lives in `shared/compliance.schema.ts`, not in the database.
+enum DataClassification {
+  public
+  internal
+  confidential
+  personal_data
+  strictly_confidential
+  ai_restricted
+}
+
+// The engagement's own **permission** for AI processing, asked in addition to
+// the workspace policy and never instead of it. `restricted` means AI may
+// assist, but only on non-confidential content and only after PII redaction.
+//
+// This is an internal permission, **not consent under GDPR Article 6(1)(a)**.
+// What makes processing lawful is `Engagement.legalBasis` and, where that basis
+// is consent, an `EngagementConsentRecord`.
+enum AiProcessingPermission {
+  allowed
+  restricted
+  prohibited
+}
+
+// The GDPR Article 6 legal basis an engagement's personal-data processing rests
+// on. `not_assessed` is the honest starting value and the only one the product
+// writes on its own — a legal basis is a human's determination.
+enum LegalBasis {
+  contract
+  legitimate_interest
+  legal_obligation
+  consent
+  not_assessed
+}
+
+// What was done about personal data before an AI request left for the provider.
+//
+// Deliberately **redaction**, not anonymization: recognized identifiers are
+// replaced with stable placeholders, which is pseudonymization at best and is
+// not irreversible. `failed` records a request that was refused because
+// redaction could not be completed — the pipeline never falls back to sending
+// the original text.
+enum PiiRedactionStatus {
+  not_required
+  applied
+  failed
+}
+
+// What the re-scan of the model's *response* found. An output is never assumed
+// clean because the input was redacted (roadmap Phase 10 corrections §5).
+enum AiOutputScanOutcome {
+  not_scanned
+  clean
+  personal_data_detected
+}
+
+// Where the engagement stands against the workspace's standard DPIA/DSFA. The
+// determination is a human's; `not_assessed` is what the product says until one
+// has been made.
+enum EngagementDpiaScreening {
+  not_assessed
+  within_standard_dpia
+  additional_not_required
+  additional_required
+  additional_completed
+}
+
+// Where the workspace's DPIA/DSFA for the standard processing operation stands.
+enum WorkspaceDpiaStatus {
+  not_started
+  in_progress
+  approved
+  not_required
+}
+
+// Where a workspace's approval of one provider/model stands. Deny-by-default:
+// only `approved` permits an AI request. `needs_review` means an Administrator
+// has to look at it again — either because it was carried over from a free-text
+// list, or because an approved Technology Update changed a compliance-relevant
+// fact beneath it.
+enum AiModelApprovalStatus {
+  approved
+  needs_review
+  revoked
+}
+
+// Whether a data-processing agreement covers this provider.
+enum DpaStatus {
+  in_place
+  not_required
+  pending
+  not_assessed
+}
+
+// What the workspace decided about the provider retaining prompts and inputs.
+enum PromptRetentionDecision {
+  not_retained
+  retained_limited
+  retained_unknown
+}
+
+// What the workspace decided about the provider training on its inputs.
+enum TrainingUseDecision {
+  excluded
+  permitted
+  unknown
+}
+
+// Whether a human has reviewed what an AI-assisted step produced.
+// `not_required` is recorded when the workspace policy does not demand approval
+// before AI output becomes accepted engagement content.
+enum HumanReviewStatus {
+  not_required
+  pending
+  reviewed
+}
+
 // Where an engagement currently stands in the consulting methodology
 // (domain-model.md §3). Phase 1 only tracks the stage marker; later phases
 // add the content each stage produces. `discovery` is the first stage, so a
@@ -408,19 +529,65 @@ model Engagement {
 
   // Grounded Recommendations (roadmap Phase 6), versioned for the same reason
   // the Opportunities are.
-  recommendationVersions RecommendationVersion[]
-  roadmapVersions        ImplementationRoadmapVersion[]
-  reportVersions         ConsultantReportVersion[]
-  documentPublications   DocumentPublication[]
-  reportPdfArtifacts     ReportPdfArtifact[]
+  recommendationVersions       RecommendationVersion[]
+  roadmapVersions              ImplementationRoadmapVersion[]
+  reportVersions               ConsultantReportVersion[]
+  documentPublications         DocumentPublication[]
+  reportPdfArtifacts           ReportPdfArtifact[]
   documentNotificationAttempts DocumentNotificationAttempt[]
-  clientFeedback         ClientFeedback[]
-  feedbackReentries      FeedbackReentry[]
+  clientFeedback               ClientFeedback[]
+  feedbackReentries            FeedbackReentry[]
 
   invitations       ClientInvitation[]
   discoveryAccesses DiscoveryAccess[]
   notifications     Notification[]
   auditTrails       AuditTrail[]
+
+  // Security, privacy and AI compliance (roadmap Phase 10). How this
+  // engagement's content is classified, whether AI may assist with it, and
+  // whether a legal obligation currently prevents its erasure. These are
+  // engagement state on the aggregate root, not a parallel store: they are
+  // asked before every AI request and before every erasure.
+  dataClassification DataClassification @default(confidential)
+
+  // The engagement's internal permission for AI assistance. **Not GDPR
+  // consent** — the fields below record what makes the processing lawful.
+  aiProcessingPermission                AiProcessingPermission @default(allowed)
+  aiProcessingPermissionNotes           String?
+  aiProcessingPermissionUpdatedAt       DateTime?
+  aiProcessingPermissionUpdatedByUserId String?
+  aiProcessingPermissionUpdatedBy       User?                  @relation("EngagementAiProcessingPermissionUpdatedBy", fields: [aiProcessingPermissionUpdatedByUserId], references: [id], onDelete: SetNull)
+
+  // The privacy-processing record: what this engagement's personal data is
+  // processed *for*, and what makes that lawful (roadmap Phase 10 corrections
+  // §2). AI processing of personal data is refused while either is missing;
+  // nothing here is ever back-filled, because an invented legal basis is worse
+  // than none.
+  processingPurpose                  String?
+  legalBasis                         LegalBasis @default(not_assessed)
+  legalBasisNote                     String?
+  privacyProcessingConfirmedAt       DateTime?
+  privacyProcessingConfirmedByUserId String?
+  privacyProcessingConfirmedBy       User?      @relation("EngagementPrivacyProcessingConfirmedBy", fields: [privacyProcessingConfirmedByUserId], references: [id], onDelete: SetNull)
+
+  // Real GDPR consent, recorded only where `legalBasis` is `consent`. A
+  // withdrawn record is kept: the account of what was lawful *then* has to
+  // survive the withdrawal.
+  consentRecords EngagementConsentRecord[]
+
+  // The engagement's screening against the workspace's standard DPIA.
+  dpiaScreening                EngagementDpiaScreening @default(not_assessed)
+  dpiaScreeningNote            String?
+  dpiaScreeningUpdatedAt       DateTime?
+  dpiaScreeningUpdatedByUserId String?
+  dpiaScreeningUpdatedBy       User?                   @relation("EngagementDpiaScreeningUpdatedBy", fields: [dpiaScreeningUpdatedByUserId], references: [id], onDelete: SetNull)
+
+  // A legal obligation to retain this engagement's data. It is the only thing
+  // that blocks erasure: a retention period says how long data is kept by
+  // default, a legal hold says it may not be removed at all yet.
+  legalHold          Boolean   @default(false)
+  legalHoldReason    String?
+  legalHoldUpdatedAt DateTime?
 
   @@index([organizationId])
   @@index([workspaceId])
@@ -430,6 +597,64 @@ model Engagement {
   @@index([createdAt])
   @@index([sensitiveData])
   @@index([gdprConcerns])
+  @@index([dataClassification])
+  @@index([aiProcessingPermission])
+  @@index([legalBasis])
+  @@index([dpiaScreening])
+  @@index([legalHold])
+}
+
+// Real consent under GDPR Article 6(1)(a), for one engagement (roadmap Phase 10
+// corrections §3).
+//
+// Deliberately narrow. It records that a named subject was shown a named
+// consent text describing a named purpose, and when — and it stops there. It
+// does **not** claim that a company representative's consent covers the
+// personal data of that company's employees, customers or other third parties,
+// and the product never asserts that it does. Anything wider is a legal
+// question for a human, not a column.
+//
+// Records are never deleted or rewritten: a withdrawal sets the withdrawal
+// fields, and the row stays as the account of what was lawful before it.
+model EngagementConsentRecord {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  // The exact wording agreed to, and the version it was published under. A
+  // consent nobody can reproduce is not evidence.
+  consentText        String
+  consentTextVersion String
+
+  // What the subject was told the processing is for. Held separately from the
+  // engagement's own purpose so a later edit there cannot silently re-describe
+  // what somebody consented to.
+  processingPurpose String
+
+  subjectName         String
+  subjectRole         String?
+  subjectOrganization String?
+
+  privacyNoticeVersion String?
+
+  grantedAt        DateTime @default(now())
+  recordedByUserId String?
+  recordedBy       User?    @relation("EngagementConsentRecordedBy", fields: [recordedByUserId], references: [id], onDelete: SetNull)
+
+  withdrawnAt       DateTime?
+  withdrawnByUserId String?
+  withdrawnBy       User?     @relation("EngagementConsentWithdrawnBy", fields: [withdrawnByUserId], references: [id], onDelete: SetNull)
+  withdrawalNote    String?
+
+  @@index([workspaceId])
+  @@index([engagementId])
+  @@index([withdrawnAt])
 }
 
 model ClientFeedback {
@@ -446,32 +671,37 @@ model ClientFeedback {
   sourcePublicationId String
   sourcePublication   DocumentPublication @relation(fields: [sourcePublicationId], references: [id], onDelete: Restrict)
 
-  sourceReportVersionId String
-  sourceReportVersion   ConsultantReportVersion @relation(fields: [sourceReportVersionId], references: [id], onDelete: Restrict)
-  sourceReportVersionNumber Int
+  sourceReportVersionId          String
+  sourceReportVersion            ConsultantReportVersion @relation(fields: [sourceReportVersionId], references: [id], onDelete: Restrict)
+  sourceReportVersionNumber      Int
   sourceReportVersionPublishedAt DateTime
 
-  submittedByUserId String
-  submittedBy       User   @relation("ClientFeedbackSubmittedBy", fields: [submittedByUserId], references: [id], onDelete: Restrict)
-  submittedAt       DateTime @default(now())
-  submissionKey     String
+  submittedByUserId     String
+  submittedBy           User     @relation("ClientFeedbackSubmittedBy", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  submittedAt           DateTime @default(now())
+  submissionKey         String
   submissionContentHash String
-  originalContent   String
+  originalContent       String
 
-  status ClientFeedbackStatus @default(submitted)
-  classification ClientFeedbackClassification?
-  impactedStages Json @default("[]")
-  managerSummary String?
-  managerDecision String?
+  status               ClientFeedbackStatus          @default(submitted)
+  classification       ClientFeedbackClassification?
+  impactedStages       Json                          @default("[]")
+  managerSummary       String?
+  managerDecision      String?
   closedNoActionReason String?
-  reviewedAt DateTime?
-  reviewedByUserId String?
-  reviewedBy User? @relation("ClientFeedbackReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  reviewedAt           DateTime?
+  reviewedByUserId     String?
+  reviewedBy           User?                         @relation("ClientFeedbackReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
 
   revision Int @default(0)
 
   reentries FeedbackReentry[]
 
+  // Idempotency is scoped to one publication and one submitter, so a retry key
+  // cannot collide across clients, engagements or workspaces: the publication
+  // fixes all three. Named explicitly because Prisma's derived name would
+  // exceed PostgreSQL's identifier limit and be truncated.
+  @@unique([sourcePublicationId, submittedByUserId, submissionKey], map: "ClientFeedback_publication_submitter_key_unique")
   @@index([workspaceId])
   @@index([engagementId])
   @@index([sourcePublicationId])
@@ -479,11 +709,6 @@ model ClientFeedback {
   @@index([submittedByUserId])
   @@index([status])
   @@index([submittedAt])
-  // Idempotency is scoped to one publication and one submitter, so a retry key
-  // cannot collide across clients, engagements or workspaces: the publication
-  // fixes all three. Named explicitly because Prisma's derived name would
-  // exceed PostgreSQL's identifier limit and be truncated.
-  @@unique([sourcePublicationId, submittedByUserId, submissionKey], map: "ClientFeedback_publication_submitter_key_unique")
 }
 
 model FeedbackReentry {
@@ -500,17 +725,17 @@ model FeedbackReentry {
   feedbackId String
   feedback   ClientFeedback @relation(fields: [feedbackId], references: [id], onDelete: Restrict)
 
-  status FeedbackReentryStatus @default(open)
+  status         FeedbackReentryStatus @default(open)
   impactedStages Json
-  plan String
-  outcomes Json @default("[]")
+  plan           String
+  outcomes       Json                  @default("[]")
 
-  sourceDiscoveryFingerprint String
-  sourceAssessmentRevision Int
-  sourceAssessmentFingerprint String
-  sourceOpportunityVersionId String?
+  sourceDiscoveryFingerprint    String
+  sourceAssessmentRevision      Int
+  sourceAssessmentFingerprint   String
+  sourceOpportunityVersionId    String?
   sourceRecommendationVersionId String?
-  sourceRoadmapVersionId String?
+  sourceRoadmapVersionId        String?
 
   // The published ReportVersion the re-entry started from. A real relation, so
   // the lineage `Feedback → source version → result version` cannot be left
@@ -519,14 +744,14 @@ model FeedbackReentry {
   sourceReportVersionId String
   sourceReportVersion   ConsultantReportVersion @relation("FeedbackReentrySourceReportVersion", fields: [sourceReportVersionId], references: [id], onDelete: Restrict)
 
-  openedAt DateTime @default(now())
+  openedAt       DateTime @default(now())
   openedByUserId String
-  openedBy User @relation("FeedbackReentryOpenedBy", fields: [openedByUserId], references: [id], onDelete: Restrict)
+  openedBy       User     @relation("FeedbackReentryOpenedBy", fields: [openedByUserId], references: [id], onDelete: Restrict)
 
-  completedAt DateTime?
+  completedAt       DateTime?
   completedByUserId String?
-  completedBy User? @relation("FeedbackReentryCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
-  completionNote String?
+  completedBy       User?     @relation("FeedbackReentryCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
+  completionNote    String?
 
   revision Int @default(0)
 
@@ -878,6 +1103,37 @@ model AnalysisRun {
   // Null on runs from a stage that does not retrieve technology knowledge.
   technologyProfileCodes Json?
 
+  // Compliance metadata, recorded on every AI-assisted run (roadmap Phase 10:
+  // "Record compliance metadata for every AI-assisted Analysis Run, including
+  // provider, model, purpose, prompt version, input classification, output
+  // classification, PII redaction status, output scan outcome, and human review
+  // status"). Provider,
+  // model and prompt version are the columns above — this phase adds the five
+  // that were missing rather than starting a parallel record.
+  //
+  // Nullable because runs recorded before this phase have no compliance
+  // decision behind them, and a back-filled value would be an invented one.
+  purpose              String?
+  inputClassification  DataClassification?
+  outputClassification DataClassification?
+  piiRedactionStatus   PiiRedactionStatus?
+  // How many distinct personal identifiers were replaced. The values
+  // themselves are never recorded: a log of what was removed would defeat the
+  // removal.
+  piiRedactionCount    Int?
+  // What the re-scan of the model's response found. The output classification
+  // above is assigned *after* this scan, never inferred from the input alone
+  // (roadmap Phase 10 corrections §5).
+  outputScanOutcome    AiOutputScanOutcome?
+  humanReviewStatus    HumanReviewStatus?
+  humanReviewedAt      DateTime?
+
+  // The governed Workspace approval the request was permitted under. Null on
+  // runs recorded before the approval relation existed, and on runs that were
+  // refused before one was resolved.
+  aiModelApprovalId String?
+  aiModelApproval   WorkspaceAiModelApproval? @relation(fields: [aiModelApprovalId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
 
   opportunityVersions    OpportunityVersion[]
@@ -889,6 +1145,10 @@ model AnalysisRun {
   @@index([workspaceId])
   @@index([provider, model])
   @@index([createdAt])
+  @@index([piiRedactionStatus])
+  @@index([outputScanOutcome])
+  @@index([humanReviewStatus])
+  @@index([aiModelApprovalId])
 }
 
 // One immutable, versioned snapshot of the engagement's Implementation Roadmap
@@ -950,6 +1210,11 @@ model ConsultantReportVersion {
   status        ReportVersionStatus @default(active)
   reviewState   ReportReviewState   @default(draft)
 
+  // How this document is classified (roadmap Phase 10). A report assembled from
+  // an engagement's content is never less protected than that content, so a
+  // version is created carrying at least its engagement's classification.
+  dataClassification DataClassification @default(confidential)
+
   content Json
 
   sourceDiscoveryFingerprint        String
@@ -984,10 +1249,10 @@ model ConsultantReportVersion {
   approvedBy                User?     @relation("ReportVersionApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
   approvedSourceFingerprint String?
 
-  publications DocumentPublication[]
-  pdfArtifacts  ReportPdfArtifact[]
-  clientFeedback ClientFeedback[]
-  feedbackReentries FeedbackReentry[] @relation("FeedbackReentrySourceReportVersion")
+  publications      DocumentPublication[]
+  pdfArtifacts      ReportPdfArtifact[]
+  clientFeedback    ClientFeedback[]
+  feedbackReentries FeedbackReentry[]     @relation("FeedbackReentrySourceReportVersion")
 
   @@unique([engagementId, versionNumber])
   @@index([engagementId, status])
@@ -1038,7 +1303,7 @@ model DocumentPublication {
   emailNotificationFailure     String?
 
   notificationAttempts DocumentNotificationAttempt[]
-  clientFeedback ClientFeedback[]
+  clientFeedback       ClientFeedback[]
 
   @@index([workspaceId])
   @@index([engagementId])
@@ -1064,8 +1329,19 @@ model ReportPdfArtifact {
 
   rendererVersion String
   contentHash     String
+  // The hash of the *rendered* PDF, computed before encryption, so it still
+  // identifies the document a client received once the stored bytes are
+  // ciphertext.
   pdfHash         String
   bytes           Bytes
+
+  // Encryption at rest (roadmap Phase 10). `null` means the bytes are stored as
+  // rendered — the state of every artifact produced before this phase, kept
+  // readable rather than rewritten. A value names the algorithm and the key the
+  // ciphertext was produced with, so a key rotation can tell which artifacts it
+  // still has to re-wrap.
+  encryptionAlgorithm String?
+  encryptionKeyId     String?
 
   publications DocumentPublication[]
 
@@ -1254,26 +1530,204 @@ model Workspace {
 
   name String
 
-  users                  User[]
-  organizations          Organization[]
-  engagements            Engagement[]
-  analysisRuns           AnalysisRun[]
-  opportunityVersions    OpportunityVersion[]
-  recommendationVersions RecommendationVersion[]
-  roadmapVersions        ImplementationRoadmapVersion[]
-  reportVersions         ConsultantReportVersion[]
-  documentPublications   DocumentPublication[]
-  reportPdfArtifacts     ReportPdfArtifact[]
+  users                        User[]
+  organizations                Organization[]
+  engagements                  Engagement[]
+  analysisRuns                 AnalysisRun[]
+  opportunityVersions          OpportunityVersion[]
+  recommendationVersions       RecommendationVersion[]
+  roadmapVersions              ImplementationRoadmapVersion[]
+  reportVersions               ConsultantReportVersion[]
+  documentPublications         DocumentPublication[]
+  reportPdfArtifacts           ReportPdfArtifact[]
   documentNotificationAttempts DocumentNotificationAttempt[]
-  clientFeedback         ClientFeedback[]
-  feedbackReentries      FeedbackReentry[]
-  invitations            ClientInvitation[]
-  discoveryAccesses      DiscoveryAccess[]
-  notifications          Notification[]
-  auditTrails            AuditTrail[]
+  clientFeedback               ClientFeedback[]
+  feedbackReentries            FeedbackReentry[]
+  invitations                  ClientInvitation[]
+  discoveryAccesses            DiscoveryAccess[]
+  notifications                Notification[]
+  auditTrails                  AuditTrail[]
+  compliancePolicy             WorkspaceCompliancePolicy?
+  aiModelApprovals             WorkspaceAiModelApproval[]
+  dpiaAssessment               WorkspaceDpiaAssessment?
+  consentRecords               EngagementConsentRecord[]
 
   @@index([name])
   @@index([createdAt])
+}
+
+// The unified Compliance Policy of one workspace (roadmap Phase 10). Its three
+// named parts — data handling, AI policy, and data retention — live on one row
+// because the roadmap describes one policy per workspace, and because a rule
+// split across records is a rule nobody can read in one place.
+//
+// Exactly one row per workspace, created with the workspace, so that "every
+// engagement operates under an explicit Workspace Compliance Policy" holds from
+// the moment the workspace exists rather than from the moment an administrator
+// first opens the settings.
+//
+// The policy is mutable — an administrator configures AI usage, retention and
+// data protection here without a code change. It is not a governance log: every
+// change appends a `compliance_policy_updated` entry to the append-only Audit
+// Trail, which is where the history of who changed what lives.
+model WorkspaceCompliancePolicy {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String    @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  // Data handling: how client data may be stored, shared and exported.
+  defaultDataClassification      DataClassification @default(confidential)
+  clientDataExportPermitted      Boolean            @default(true)
+  documentDownloadLinkTtlMinutes Int                @default(15)
+  encryptDocumentsAtRest         Boolean            @default(true)
+  requireEncryptedTransport      Boolean            @default(true)
+
+  // AI policy: whether AI processing is permitted at all, whether confidential
+  // information may be processed, whether personal identifiers are redacted
+  // before a prompt is sent, and whether human approval is required before AI
+  // output becomes accepted engagement content.
+  //
+  // Which provider and model are approved is deliberately **not** here: an
+  // approval carries a contract status, a processing region, retention and
+  // training decisions and an approving human, which a free-text list cannot
+  // hold. It lives in `WorkspaceAiModelApproval`.
+  aiProcessingPermitted             Boolean @default(true)
+  confidentialAiProcessingPermitted Boolean @default(true)
+  redactPersonalDataBeforeAi        Boolean @default(true)
+  humanApprovalRequiredForAiOutput  Boolean @default(true)
+
+  // Privacy processing: which legal bases this workspace's engagements may
+  // select, and which one a new engagement starts from. A default is a starting
+  // point, never a determination — the effective basis is always the individual
+  // engagement's own.
+  supportedLegalBases Json
+  defaultLegalBasis   LegalBasis @default(not_assessed)
+
+  // Data retention: how long each kind of record is kept. `null` means "kept
+  // until explicitly erased" — an explicit decision, not an unset field.
+  engagementRetentionDays Int?
+  documentRetentionDays   Int?
+  auditRetentionDays      Int?
+  aiArtifactRetentionDays Int?
+
+  // Configurable rules, so a new jurisdiction or a client's own identifier
+  // scheme is a policy change rather than a code change (roadmap Phase 10:
+  // "keeping regulatory rules configurable rather than hard-coded"). Validated
+  // against the Zod schemas in `shared/compliance.schema.ts` at the boundary.
+  personalIdentifierRules Json
+  regulatoryFrameworks    Json
+
+  // When an administrator last configured the policy deliberately, as opposed
+  // to it standing at the values the workspace was created with.
+  configuredAt       DateTime?
+  configuredByUserId String?
+  configuredBy       User?     @relation("CompliancePolicyConfiguredBy", fields: [configuredByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([configuredByUserId])
+}
+
+// One workspace's approval of one provider/model for AI processing (roadmap
+// Phase 10 corrections §6).
+//
+// **Two layers, deliberately separate.** The source-backed reusable facts about
+// a provider — its processing regions, published retention and training policy,
+// DPA and subprocessor documentation, lifecycle status, and the official source
+// each was read from — belong to the shared Technology Knowledge Base and change
+// only through the Technology Update Proposal approval flow. *This* row holds
+// what is nobody else's business: the workspace's own contract reference, the
+// region it selected, the decisions it took, and the Administrator who approved
+// them. A workspace's commercial arrangements are not curated knowledge.
+//
+// The AI compliance gate resolves the effective approval through this relation
+// rather than matching a free-text string, so an approval is a decision with an
+// author rather than a name on a list.
+model WorkspaceAiModelApproval {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  // The provider and model as the running deployment names them — what the gate
+  // matches against, and therefore the deployment's identity rather than a
+  // display name.
+  provider String
+  model    String
+
+  // The Technology Profile whose source-backed facts were reviewed, and the
+  // revision that was reviewed. Held as a code rather than a relation for the
+  // same reason a proposal is: a profile may later be retired, and this
+  // decision must keep saying what it said. Null on an approval carried over
+  // from the free-text lists — which is exactly why such a row is `needs_review`.
+  technologyProfileCode   String?
+  reviewedProfileRevision Int?
+
+  status       AiModelApprovalStatus @default(needs_review)
+  // Why the approval is awaiting review, where the product knows. Names facts
+  // about the provider, never an engagement.
+  statusReason String?
+
+  dpaStatus                     DpaStatus               @default(not_assessed)
+  dpaReference                  String?
+  processingRegion              String?
+  promptRetention               PromptRetentionDecision @default(retained_unknown)
+  trainingUse                   TrainingUseDecision     @default(unknown)
+  thirdCountryTransferMechanism String?
+
+  approvedAt       DateTime?
+  approvedByUserId String?
+  approvedBy       User?     @relation("AiModelApprovalApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  lastReviewedAt   DateTime?
+
+  analysisRuns AnalysisRun[]
+
+  // One decision per provider/model per workspace. A second row for the same
+  // pair would be two answers to one question.
+  @@unique([workspaceId, provider, model])
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@index([technologyProfileCode])
+}
+
+// The workspace's data protection impact assessment (DPIA/DSFA) for the
+// **standard** processing operation (roadmap Phase 10 corrections §8).
+//
+// Minimal and human-controlled: the product records status, scope, rationale, a
+// reference to the assessment document, who assessed and approved it, and when
+// it is next due. It identifies risk indicators elsewhere but never makes the
+// legal determination — that is a human's, and this row is where their answer
+// is written down. It is not a case-management system and not a high-risk
+// classification engine.
+model WorkspaceDpiaAssessment {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String    @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  status WorkspaceDpiaStatus @default(not_started)
+
+  scope             String?
+  rationale         String?
+  // Where the assessment document lives. A reference, never the document.
+  documentReference String?
+
+  assessedByUserId String?
+  assessedBy       User?   @relation("WorkspaceDpiaAssessedBy", fields: [assessedByUserId], references: [id], onDelete: SetNull)
+  approvedByUserId String?
+  approvedBy       User?   @relation("WorkspaceDpiaApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+
+  assessedAt  DateTime?
+  reviewDueAt DateTime?
+
+  @@index([workspaceId])
+  @@index([status])
 }
 
 model User {
@@ -1299,15 +1753,15 @@ model User {
   authUserId String?   @unique
   authUser   AuthUser? @relation(fields: [authUserId], references: [id], onDelete: SetNull)
 
-  issuedInvitations              ClientInvitation[]         @relation("InvitationIssuer")
-  acceptedInvitations            ClientInvitation[]         @relation("InvitationAcceptedBy")
-  discoveryAccessGranted         DiscoveryAccess[]          @relation("DiscoveryAccessGrantor")
-  discoveryAccesses              DiscoveryAccess[]          @relation("DiscoveryAccessRecipient")
-  ownedEngagements               Engagement[]               @relation("EngagementOwnedBy")
-  createdOpportunityVersions     OpportunityVersion[]       @relation("OpportunityVersionCreatedBy")
-  modifiedOpportunityVersions    OpportunityVersion[]       @relation("OpportunityVersionLastModifiedBy")
-  createdRecommendationVersions  RecommendationVersion[]    @relation("RecommendationVersionCreatedBy")
-  modifiedRecommendationVersions RecommendationVersion[]    @relation("RecommendationVersionLastModifiedBy")
+  issuedInvitations              ClientInvitation[]             @relation("InvitationIssuer")
+  acceptedInvitations            ClientInvitation[]             @relation("InvitationAcceptedBy")
+  discoveryAccessGranted         DiscoveryAccess[]              @relation("DiscoveryAccessGrantor")
+  discoveryAccesses              DiscoveryAccess[]              @relation("DiscoveryAccessRecipient")
+  ownedEngagements               Engagement[]                   @relation("EngagementOwnedBy")
+  createdOpportunityVersions     OpportunityVersion[]           @relation("OpportunityVersionCreatedBy")
+  modifiedOpportunityVersions    OpportunityVersion[]           @relation("OpportunityVersionLastModifiedBy")
+  createdRecommendationVersions  RecommendationVersion[]        @relation("RecommendationVersionCreatedBy")
+  modifiedRecommendationVersions RecommendationVersion[]        @relation("RecommendationVersionLastModifiedBy")
   createdRoadmapVersions         ImplementationRoadmapVersion[] @relation("RoadmapVersionCreatedBy")
   modifiedRoadmapVersions        ImplementationRoadmapVersion[] @relation("RoadmapVersionLastModifiedBy")
   createdReportVersions          ConsultantReportVersion[]      @relation("ReportVersionCreatedBy")
@@ -1322,7 +1776,20 @@ model User {
   completedFeedbackReentries     FeedbackReentry[]              @relation("FeedbackReentryCompletedBy")
   notifications                  Notification[]
   auditTrails                    AuditTrail[]
-  curatedKnowledgeEntries        ConsultingKnowledgeEntry[] @relation("ConsultingKnowledgeCuratedBy")
+  curatedKnowledgeEntries        ConsultingKnowledgeEntry[]     @relation("ConsultingKnowledgeCuratedBy")
+
+  // Security, privacy and AI compliance (roadmap Phase 10). Every relation is
+  // SET NULL on delete, so removing a user never removes the compliance state
+  // they last set — the decision survives its author.
+  configuredCompliancePolicies    WorkspaceCompliancePolicy[] @relation("CompliancePolicyConfiguredBy")
+  aiProcessingPermissionDecisions Engagement[]                @relation("EngagementAiProcessingPermissionUpdatedBy")
+  privacyProcessingConfirmations  Engagement[]                @relation("EngagementPrivacyProcessingConfirmedBy")
+  dpiaScreeningDecisions          Engagement[]                @relation("EngagementDpiaScreeningUpdatedBy")
+  recordedConsents                EngagementConsentRecord[]   @relation("EngagementConsentRecordedBy")
+  withdrawnConsents               EngagementConsentRecord[]   @relation("EngagementConsentWithdrawnBy")
+  approvedAiModels                WorkspaceAiModelApproval[]  @relation("AiModelApprovalApprovedBy")
+  assessedWorkspaceDpias          WorkspaceDpiaAssessment[]   @relation("WorkspaceDpiaAssessedBy")
+  approvedWorkspaceDpias          WorkspaceDpiaAssessment[]   @relation("WorkspaceDpiaApprovedBy")
 
   // The Technology Knowledge Base's curation trail (roadmap Phase 5A). A user
   // is referenced by what they curated, proposed, decided, and approved; every

@@ -16,3 +16,7 @@ Manage users and roles,no,no,yes,Administrators never see permanent passwords
 Transfer engagement ownership,no,no,yes,Audit event required
 View audit,no,relevant business history only,workspace audit,Append-only
 Manage knowledge bases,no,phase/policy dependent,yes,Client never has access
+View compliance policy,no,yes,yes,Client Portal exposes no internal compliance surface
+Manage compliance policy retention DPIA and model approvals,no,no,yes,Administrator-only governance actions
+Record explicit AI-output human review,no,owned engagements,all workspace engagements,Ordinary save does not clear pending review
+Accept trusted stage with pending AI review,no,no,no,Server blocks until explicit review is recorded

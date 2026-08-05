@@ -17,9 +17,9 @@ import {
   type RecommendationGroundingResolution,
 } from "../domain/engagement/recommendations.js"
 import { createSha256Hash } from "../lib/create-sha256-hash.js"
+import { getCurrentRequestId, logger } from "../lib/application-logger.js"
 import { failureIdentity } from "../lib/failure-identity.js"
 import { callLlm } from "../lib/llm-client.js"
-import { getDefaultLlmConfig } from "../lib/llm-config.js"
 import { parseRecommendations } from "../lib/parse-recommendations.js"
 import { langfuse } from "../observability/langfuse.js"
 import { buildRecommendationsPrompt } from "../prompts/build-recommendations-prompt.js"
@@ -56,7 +56,13 @@ import {
 
 import type { KnowledgePackage } from "../../../shared/consulting-knowledge.schema.js"
 import type { OpportunityVersionDetail } from "../../../shared/opportunity.schema.js"
+import {
+  authorizeAiProcessing,
+  reviewAiOutput,
+} from "./ai-compliance.service.js"
+
 import type { RecommendationMessageId } from "../../../shared/recommendation-messages.js"
+import type { ComplianceMessageId } from "../../../shared/compliance-messages.js"
 import type {
   RecommendationReviewState,
   RecommendationSetSubmission,
@@ -85,6 +91,10 @@ export type GenerateRecommendationsFailure =
   | "ai_output_ungrounded"
   | "version_conflict"
   | "persistence_failed"
+  // The Workspace Compliance Policy, the engagement's AI consent, or its data
+  // classification refused the request before it reached the provider (roadmap
+  // Phase 10).
+  | "ai_not_permitted"
 
 export type SaveRecommendationsFailure =
   | "opportunities_not_ready"
@@ -93,8 +103,11 @@ export type SaveRecommendationsFailure =
   | "historical_version_readonly"
   | "stale_update"
 
+// `ai_not_permitted` is deliberately absent: a compliance refusal is reported
+// with the identifier the gate named — which rule refused it — rather than with
+// one fixed message for every rule.
 const FAILURE_MESSAGE: Record<
-  GenerateRecommendationsFailure | SaveRecommendationsFailure,
+  Exclude<GenerateRecommendationsFailure, "ai_not_permitted"> | SaveRecommendationsFailure,
   RecommendationMessageId
 > = {
   opportunities_not_ready: "recommendation.error.opportunities_not_ready",
@@ -130,7 +143,9 @@ export type GenerateRecommendationsResult =
   | ({
       success: false
       failure: GenerateRecommendationsFailure
-      messageId: RecommendationMessageId
+      // A compliance refusal names the rule that stopped it, so the
+      // identifier may come from either contract.
+      messageId: RecommendationMessageId | ComplianceMessageId
       evaluation?: EvaluationResult
     } & UngroundedDetail)
 
@@ -209,6 +224,7 @@ export const generateRecommendations = async (
     metadata: {
       engagementId: engagement.id,
       workspaceId: scope.workspaceId,
+      requestId: getCurrentRequestId(),
       stage: STAGE,
       promptVersion: RECOMMENDATIONS_PROMPT.version,
       promptFingerprint: RECOMMENDATIONS_PROMPT.fingerprint,
@@ -234,9 +250,38 @@ export const generateRecommendations = async (
     technologyPackage,
   })
 
-  // Resolved up front so a provider failure can still be attributed to the
-  // provider and model it was attempted with.
-  const llmConfig = getDefaultLlmConfig()
+  // The compliance gate: the Workspace Compliance Policy, the engagement's AI
+  // consent and its data classification are asked *before* anything leaves for
+  // the provider, and personal data is removed where the policy requires it
+  // (roadmap Phase 10). The prompt the gate hands back is the only one that may
+  // be sent, and a refusal leaves the version the consultant was working on
+  // exactly as they left it.
+  const gate = await authorizeAiProcessing({
+    engagement,
+    scope,
+    stage: STAGE,
+    purpose: "solution_matching",
+    prompt,
+    promptVersion: RECOMMENDATIONS_PROMPT.version,
+    promptFingerprint: RECOMMENDATIONS_PROMPT.fingerprint,
+  })
+
+  if (!gate.permitted) {
+    trace?.update({
+      metadata: {
+        engagementId: engagement.id,
+        workspaceId: scope.workspaceId,
+        stage: STAGE,
+        success: false,
+        complianceDenial: gate.reason,
+      },
+    })
+    await langfuse?.flushAsync()
+
+    return refusedByCompliance(gate.messageId)
+  }
+
+  const llmConfig = { provider: gate.provider, model: gate.model }
 
   const groundingCodes = {
     knowledgeEntryCodes: knowledgePackage.codes,
@@ -245,7 +290,7 @@ export const generateRecommendations = async (
 
   let llmResponse
   try {
-    llmResponse = await callLlm(prompt)
+    llmResponse = await callLlm(gate.prompt)
   } catch (error) {
     // A provider failure is still a failed AI-assisted step: it is recorded so
     // the audit trail survives (coding-standards.md §7), and no version is
@@ -275,12 +320,20 @@ export const generateRecommendations = async (
       schemaValid: false,
       errorMessage,
       ...groundingCodes,
+      compliance: gate.compliance,
     })
 
     return refused("ai_step_failed")
   }
 
   const parsedResult = parseRecommendations(llmResponse.content)
+  const outputReview = await reviewAiOutput({
+    engagement,
+    scope,
+    stage: STAGE,
+    decision: gate,
+    responseText: llmResponse.content,
+  })
 
   // Grounding is checked as part of validity, not after the fact: a citation
   // naming an Opportunity, a curated entry, or a Technology Profile that was not
@@ -343,7 +396,7 @@ export const generateRecommendations = async (
   // Identity is added here, on the server: the model writes recommendations, and
   // each one gets a stable id the Implementation Roadmap will sequence.
   const persisted =
-    resolution?.resolved === true
+    outputReview.accepted && resolution?.resolved === true
       ? await persistVersion(
           engagement,
           scope,
@@ -374,8 +427,14 @@ export const generateRecommendations = async (
     // Ungrounded output is a broken contract as much as a missing field is, so
     // the run records it as such rather than as a valid run.
     schemaValid: parsedResult.schemaValid && grounded,
-    errorMessage: generationError(parsedResult, resolution, persisted),
+    errorMessage: generationError(
+      parsedResult,
+      outputReview,
+      resolution,
+      persisted,
+    ),
     ...groundingCodes,
+    compliance: outputReview.compliance,
   })
 
   trace?.update({
@@ -399,6 +458,15 @@ export const generateRecommendations = async (
   // (architecture.md §13; agent-rules.md §10).
   if (!parsedResult.success) {
     return { ...refused("ai_output_invalid"), evaluation }
+  }
+
+  if (!outputReview.accepted) {
+    return {
+      success: false,
+      failure: "ai_output_invalid",
+      messageId: outputReview.messageId,
+      evaluation,
+    }
   }
 
   if (resolution?.resolved !== true) {
@@ -731,12 +799,23 @@ const persistVersion = async (
       ? { stored: true, version: created.version }
       : { stored: false, reason: created.reason }
   } catch (error) {
-    console.error("STORE_RECOMMENDATION_VERSION_FAILED", failureIdentity(error))
+    logger.error("STORE_RECOMMENDATION_VERSION_FAILED", failureIdentity(error))
     return { stored: false, reason: "persistence_failed" }
   }
 }
 
-const refused = (failure: GenerateRecommendationsFailure) =>
+// A compliance refusal carries the identifier the gate named rather than this
+// stage's own, so the consultant is told which rule stopped the request.
+const refusedByCompliance = (messageId: ComplianceMessageId) =>
+  ({
+    success: false,
+    failure: "ai_not_permitted",
+    messageId,
+  }) as const
+
+const refused = (
+  failure: Exclude<GenerateRecommendationsFailure, "ai_not_permitted">,
+) =>
   ({
     success: false,
     failure,
@@ -784,9 +863,14 @@ const ungroundedDetail = (
 // response reaches either (coding-standards.md §7, §12A).
 const generationError = (
   parsedResult: { success: boolean; error?: string },
+  outputReview: { accepted: boolean },
   resolution: RecommendationGroundingResolution | null,
   persisted: PersistOutcome | null,
 ): string | undefined => {
+  if (!outputReview.accepted) {
+    return "AI output contained personal data and was refused."
+  }
+
   if (!parsedResult.success) return parsedResult.error
 
   if (resolution !== null && !resolution.resolved) {
@@ -827,7 +911,7 @@ const linkAnalysisRun = async (versionId: string, analysisRunId: string) => {
   try {
     await linkRecommendationVersionAnalysisRun(versionId, analysisRunId)
   } catch (error) {
-    console.error(
+    logger.error(
       "LINK_RECOMMENDATION_VERSION_ANALYSIS_RUN_FAILED",
       failureIdentity(error),
     )
@@ -843,7 +927,7 @@ const recordMatchingRun = async (
     const analysisRun = await createAnalysisRun(input)
     return analysisRun.id
   } catch (error) {
-    console.error(
+    logger.error(
       "CREATE_SOLUTION_MATCHING_ANALYSIS_RUN_FAILED",
       failureIdentity(error),
     )

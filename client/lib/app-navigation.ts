@@ -17,6 +17,7 @@ export type NavIconKind =
   | "knowledge"
   | "technology"
   | "updates"
+  | "compliance"
 
 export type NavItem = {
   href: string
@@ -93,6 +94,22 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         icon: "updates",
         matches: ["/technology/proposals", "/technology/history"],
         roles: ADMIN_ONLY,
+      },
+    ],
+  },
+  {
+    labelKey: "shell.group.governance",
+    items: [
+      {
+        // The Compliance Policy and the Compliance Dashboard. A Manager may
+        // read the policy their work is governed by, so the entry is offered to
+        // both internal roles; what each of them may *do* there is the server's
+        // answer, not the sidebar's.
+        href: "/compliance",
+        labelKey: "shell.nav.compliance",
+        icon: "compliance",
+        matches: ["/compliance"],
+        roles: INTERNAL_ROLES,
       },
     ],
   },

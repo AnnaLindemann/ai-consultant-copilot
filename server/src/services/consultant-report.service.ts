@@ -14,9 +14,9 @@ import {
   type ReportSourceBundle,
   type FollowUpResolution,
 } from "../domain/engagement/consultant-report.js"
+import { getCurrentRequestId, logger } from "../lib/application-logger.js"
 import { failureIdentity } from "../lib/failure-identity.js"
 import { callLlm } from "../lib/llm-client.js"
-import { getDefaultLlmConfig } from "../lib/llm-config.js"
 import { parseConsultantReport } from "../lib/parse-consultant-report.js"
 import { renderEmail } from "../lib/email-templates.js"
 import { emailDelivery } from "../lib/email-delivery.js"
@@ -64,7 +64,14 @@ import { raiseNotification } from "./notification.service.js"
 import { retrieveKnowledgePackage } from "./consulting-knowledge.service.js"
 
 import type { EvaluationResult } from "../evaluation/evaluation.types.js"
+import {
+  authorizeAiProcessing,
+  reviewAiOutput,
+} from "./ai-compliance.service.js"
+import { getCompliancePolicy } from "./compliance.service.js"
+
 import type { ConsultantReportMessageId } from "../../../shared/consultant-report-messages.js"
+import type { ComplianceMessageId } from "../../../shared/compliance-messages.js"
 import type {
   ConsultantReportSubmission,
   DocumentPublicationSummary,
@@ -85,6 +92,10 @@ export type GenerateReportFailure =
   | "ai_output_ungrounded"
   | "version_conflict"
   | "persistence_failed"
+  // The Workspace Compliance Policy, the engagement's AI consent, or its data
+  // classification refused the request before it reached the provider (roadmap
+  // Phase 10).
+  | "ai_not_permitted"
 
 export type SaveReportFailure =
   | "sources_not_ready"
@@ -104,8 +115,13 @@ export type PublishReportFailure =
   | "stale_update"
   | "pdf_artifact_missing"
 
+// `ai_not_permitted` is deliberately absent: a compliance refusal is reported
+// with the identifier the gate named — which rule refused it — rather than with
+// one fixed message for every rule.
 const FAILURE_MESSAGE: Record<
-  GenerateReportFailure | SaveReportFailure | PublishReportFailure,
+  | Exclude<GenerateReportFailure, "ai_not_permitted">
+  | SaveReportFailure
+  | PublishReportFailure,
   ConsultantReportMessageId
 > = {
   sources_not_ready: "report.error.sources_not_ready",
@@ -138,7 +154,9 @@ export type GenerateReportResult =
   | ({
       success: false
       failure: GenerateReportFailure
-      messageId: ConsultantReportMessageId
+      // A compliance refusal names the rule that stopped it, so the identifier
+      // may come from either contract.
+      messageId: ConsultantReportMessageId | ComplianceMessageId
       evaluation?: EvaluationResult
     } & ReportGroundingDetail)
 
@@ -193,21 +211,47 @@ export const generateConsultantReport = async (
     sources: sourceResult.sources,
     followUpTemplates: templates,
   })
-  const llmConfig = getDefaultLlmConfig()
   const trace = langfuse?.trace({
     name: "generate-consultant-report",
     metadata: {
       engagementId: engagement.id,
       workspaceId: scope.workspaceId,
+      requestId: getCurrentRequestId(),
       stage: STAGE,
       promptVersion: CONSULTANT_REPORT_PROMPT.version,
       promptFingerprint: CONSULTANT_REPORT_PROMPT.fingerprint,
     },
   })
 
+  // The compliance gate: the Workspace Compliance Policy, the engagement's AI
+  // consent and its data classification are asked *before* anything leaves for
+  // the provider, and personal data is removed where the policy requires it
+  // (roadmap Phase 10). The prompt the gate hands back is the only one that may
+  // be sent, and a refusal leaves every existing report version untouched.
+  const gate = await authorizeAiProcessing({
+    engagement,
+    scope,
+    stage: STAGE,
+    purpose: "report_drafting",
+    prompt,
+    promptVersion: CONSULTANT_REPORT_PROMPT.version,
+    promptFingerprint: CONSULTANT_REPORT_PROMPT.fingerprint,
+  })
+
+  if (!gate.permitted) {
+    trace?.update({
+      metadata: { success: false, complianceDenial: gate.reason },
+    })
+    await langfuse?.flushAsync()
+
+    return refusedByCompliance(gate.messageId)
+  }
+
+  const llmConfig = { provider: gate.provider, model: gate.model }
+
   let llmResponse
   try {
-    llmResponse = await callLlm(prompt)
+    llmResponse = await callLlm(gate.prompt)
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "The AI provider call failed"
@@ -223,12 +267,20 @@ export const generateConsultantReport = async (
       schemaValid: false,
       errorMessage,
       knowledgeEntryCodes: templates.codes,
+      compliance: gate.compliance,
     })
     trace?.update({ metadata: { success: false, error: errorMessage } })
     return refused("ai_step_failed")
   }
 
   const parsed = parseConsultantReport(llmResponse.content)
+  const outputReview = await reviewAiOutput({
+    engagement,
+    scope,
+    stage: STAGE,
+    decision: gate,
+    responseText: llmResponse.content,
+  })
   const resolution = parsed.success
     ? resolveGeneratedReport(
         parsed.report,
@@ -255,7 +307,7 @@ export const generateConsultantReport = async (
   })
 
   const persisted =
-    resolution?.resolved === true && resolution.report
+    outputReview.accepted && resolution?.resolved === true && resolution.report
       ? await persistVersion(engagement, scope, {
           ...resolution.report,
           sourceSnapshot,
@@ -277,12 +329,21 @@ export const generateConsultantReport = async (
     costEstimateUsd,
     jsonParseSuccess: parsed.jsonParseSuccess,
     schemaValid: parsed.schemaValid && grounded,
-    errorMessage: generationError(parsed, resolution, persisted),
+    errorMessage: generationError(parsed, outputReview, resolution, persisted),
     knowledgeEntryCodes: templates.codes,
+    compliance: outputReview.compliance,
   })
 
   if (!parsed.success) return { ...refused("ai_output_invalid"), evaluation }
   if (resolution === null) return { ...refused("ai_output_invalid"), evaluation }
+  if (!outputReview.accepted) {
+    return {
+      success: false,
+      failure: "ai_output_invalid",
+      messageId: outputReview.messageId,
+      evaluation,
+    }
+  }
   if (!resolution.resolved) {
     return { ...refused("ai_output_ungrounded"), ...groundingDetail(resolution), evaluation }
   }
@@ -733,7 +794,7 @@ const persistVersion = async (
       ? { stored: true, version: created.version }
       : { stored: false, reason: created.reason }
   } catch (error) {
-    console.error("PERSIST_REPORT_VERSION_FAILED", failureIdentity(error))
+    logger.error("PERSIST_REPORT_VERSION_FAILED", failureIdentity(error))
     return { stored: false, reason: "persistence_failed" }
   }
 }
@@ -748,7 +809,10 @@ const ensureReportPdfArtifact = async (
   try {
     const contentHash = createSha256Hash(canonicalReportContent(version.report))
     const bytes = renderReportPdf(version.report)
+    // Hashed before storage, so the hash still identifies the document the
+    // client receives once the stored bytes are ciphertext (roadmap Phase 10).
     const pdfHash = createSha256Hash(bytes.toString("base64"))
+    const policy = await getCompliancePolicy({ workspaceId: scope.workspaceId })
     const artifact = await createReportPdfArtifact(scope, {
       workspaceId: scope.workspaceId,
       engagementId,
@@ -757,11 +821,12 @@ const ensureReportPdfArtifact = async (
       contentHash,
       pdfHash,
       bytes,
+      encryptAtRest: policy.encryptDocumentsAtRest,
     })
 
     return { id: artifact.id, bytes }
   } catch (error) {
-    console.error("REPORT_PDF_ARTIFACT_FAILED", failureIdentity(error))
+    logger.error("REPORT_PDF_ARTIFACT_FAILED", failureIdentity(error))
     return null
   }
 }
@@ -813,7 +878,7 @@ const notifyClientByEmail = async (
     })
     return updated
   } catch (error) {
-    console.error("REPORT_PUBLICATION_EMAIL_FAILED", {
+    logger.error("REPORT_PUBLICATION_EMAIL_FAILED", {
       publicationId: publication.id,
       ...failureIdentity(error),
     })
@@ -858,7 +923,7 @@ const recordReportRun = async (
     const run = await createAnalysisRun(input)
     return run.id
   } catch (error) {
-    console.error("RECORD_REPORT_RUN_FAILED", failureIdentity(error))
+    logger.error("RECORD_REPORT_RUN_FAILED", failureIdentity(error))
     return null
   }
 }
@@ -888,9 +953,14 @@ const citableTemplatesOf = (knowledgePackage: {
 
 const generationError = (
   parsed: ReturnType<typeof parseConsultantReport>,
+  outputReview: { accepted: boolean },
   resolution: (FollowUpResolution & { report?: unknown }) | null,
   persisted: PersistOutcome | null,
 ): string | undefined => {
+  if (!outputReview.accepted) {
+    return "AI output contained personal data and was refused."
+  }
+
   if (!parsed.success) return parsed.error
   if (isUnresolvedFollowUp(resolution)) {
     return JSON.stringify(groundingDetail(resolution))
@@ -913,8 +983,17 @@ const groundingDetail = (
   invalidSourceReferences: resolution.invalidSourceReferences,
 })
 
+// A compliance refusal carries the identifier the gate named rather than this
+// stage's own, so the consultant is told which rule stopped the request.
+const refusedByCompliance = (messageId: ComplianceMessageId) =>
+  ({
+    success: false,
+    failure: "ai_not_permitted",
+    messageId,
+  }) as const
+
 const refused = (
-  failure: GenerateReportFailure,
+  failure: Exclude<GenerateReportFailure, "ai_not_permitted">,
 ): Extract<GenerateReportResult, { success: false }> => ({
   success: false,
   failure,

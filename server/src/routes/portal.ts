@@ -8,6 +8,7 @@ import {
 } from "../schemas/discovery.schema.js"
 import { submitClientFeedbackSchema } from "../schemas/consultant-report.schema.js"
 import { requireActingUser } from "../lib/auth-context.js"
+import { logger } from "../lib/application-logger.js"
 import { failureIdentity } from "../lib/failure-identity.js"
 import { appendAuditTrail } from "../repositories/access.repository.js"
 import {
@@ -106,7 +107,7 @@ router.patch("/engagements/:id/discovery", async (req, res) => {
     // database error arrives with the failing statement and its parameters
     // attached — which here is the client's own discovery content
     // (`failure-identity.ts`).
-    console.error("PORTAL_SAVE_DISCOVERY_FAILED", {
+    logger.error("PORTAL_SAVE_DISCOVERY_FAILED", {
       engagementId: authorized.resource.id,
       ...failureIdentity(error),
     })
@@ -183,7 +184,7 @@ router.post("/engagements/:id/discovery/submit", async (req, res) => {
       },
     })
   } catch (error) {
-    console.error("PORTAL_SUBMIT_DISCOVERY_FAILED", {
+    logger.error("PORTAL_SUBMIT_DISCOVERY_FAILED", {
       engagementId: authorized.resource.id,
       ...failureIdentity(error),
     })
@@ -230,7 +231,7 @@ router.get("/engagements/:id/documents", async (req, res) => {
       },
     })
   } catch (error) {
-    console.error("PORTAL_DOCUMENTS_FAILED", {
+    logger.error("PORTAL_DOCUMENTS_FAILED", {
       engagementId: req.params.id,
       ...failureIdentity(error),
     })
@@ -282,7 +283,7 @@ router.get("/engagements/:id/documents/:versionId/pdf", async (req, res) => {
     )
     return res.send(pdf)
   } catch (error) {
-    console.error("PORTAL_DOCUMENT_PDF_FAILED", {
+    logger.error("PORTAL_DOCUMENT_PDF_FAILED", {
       engagementId: req.params.id,
       ...failureIdentity(error),
     })
@@ -356,7 +357,7 @@ router.post("/engagements/:id/feedback", async (req, res) => {
       data: { feedback: result.feedback },
     })
   } catch (error) {
-    console.error("PORTAL_SUBMIT_FEEDBACK_FAILED", {
+    logger.error("PORTAL_SUBMIT_FEEDBACK_FAILED", {
       engagementId: req.params.id,
       ...failureIdentity(error),
     })
@@ -391,7 +392,7 @@ router.get("/engagements/:id/feedback", async (req, res) => {
       data: { feedback },
     })
   } catch (error) {
-    console.error("PORTAL_LOAD_FEEDBACK_FAILED", {
+    logger.error("PORTAL_LOAD_FEEDBACK_FAILED", {
       engagementId: req.params.id,
       ...failureIdentity(error),
     })

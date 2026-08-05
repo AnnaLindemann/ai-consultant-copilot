@@ -76,6 +76,11 @@ let storedProfiles: TechnologyProfile[] = []
 let storedProposals: TechnologyUpdateProposal[] = []
 let appendedHistory: TechnologyUpdateHistoryEntry[] = []
 let applyOutcome: "applied" | "already_decided" = "applied"
+let reReviewCalls: {
+  technologyProfileCode: string
+  changedFields: readonly string[]
+  actorUserId: string
+}[] = []
 
 // Every write the curator makes, in order — so a test can assert not only the
 // end state but that a refused path wrote nothing at all.
@@ -202,6 +207,48 @@ mock.module("../repositories/technology-curator.repository.js", {
   },
 })
 
+mock.module("./ai-model-approval.service.js", {
+  namedExports: {
+    complianceRelevantChanges: (
+      before: {
+        lifecycleStatus: string | null
+        dataProcessingRegions: readonly string[]
+        retentionPolicy: string | null
+        trainingUsePolicy: string | null
+        subprocessorSource: string | null
+        dpaInformation: string | null
+        internationalTransfers: string | null
+      } | null,
+      after: {
+        lifecycleStatus: string | null
+        dataProcessingRegions: readonly string[]
+        retentionPolicy: string | null
+        trainingUsePolicy: string | null
+        subprocessorSource: string | null
+        dpaInformation: string | null
+        internationalTransfers: string | null
+      } | null,
+    ) => {
+      const changed: string[] = []
+      if (before?.lifecycleStatus !== after?.lifecycleStatus) {
+        changed.push("lifecycleStatus")
+      }
+      if (before?.retentionPolicy !== after?.retentionPolicy) {
+        changed.push("retentionPolicy")
+      }
+      return changed
+    },
+    requireReviewAfterTechnologyChange: async (input: {
+      technologyProfileCode: string
+      changedFields: readonly string[]
+      actorUserId: string
+    }) => {
+      reReviewCalls.push(input)
+      return input.changedFields.length
+    },
+  },
+})
+
 const {
   decideTechnologyProposal,
   getProposalReview,
@@ -228,6 +275,7 @@ beforeEach(() => {
   appendedHistory = []
   applyOutcome = "applied"
   writes = []
+  reReviewCalls = []
 })
 
 test("drafting a proposal changes nothing in the knowledge base", async () => {
@@ -394,6 +442,88 @@ test("a lost race at the apply step leaves the knowledge base alone", async () =
   assert.equal(decided.success === false && decided.failure, "already_decided")
   assert.deepEqual(storedProfiles, [])
   assert.deepEqual(appendedHistory, [])
+})
+
+test("a compliance-relevant approved update sends model approvals back for review", async () => {
+  storedProfiles = [
+    {
+      ...profileContent({
+        details: {
+          ...profileContent().details,
+          limitations: ["Retention: prompts are not stored."],
+        },
+      }),
+      origin: "product_seed",
+      originSourceCodes: ["openai"],
+      revision: 0,
+    },
+  ]
+  const proposed = await proposeTechnologyUpdate(
+    ADMIN,
+    draft({
+      changeKind: "revise",
+      proposedProfile: profileContent({
+        details: {
+          ...profileContent().details,
+          limitations: ["Retention: prompts may be stored for 30 days."],
+        },
+      }),
+    }),
+  )
+  if (!proposed.success) return assert.fail("the proposal should have been drafted")
+
+  const decided = await decideTechnologyProposal(
+    ADMIN,
+    proposed.proposal.id,
+    "approve",
+    null,
+  )
+
+  assert.equal(decided.success, true)
+  assert.deepEqual(reReviewCalls, [
+    {
+      technologyProfileCode: "openai-gpt-5",
+      changedFields: ["retentionPolicy"],
+      actorUserId: ADMIN.id,
+    },
+  ])
+})
+
+test("an editorial approved update does not suspend model approvals", async () => {
+  storedProfiles = [
+    {
+      ...profileContent({ summary: "Ein großes Sprachmodell." }),
+      origin: "product_seed",
+      originSourceCodes: ["openai"],
+      revision: 0,
+    },
+  ]
+  const proposed = await proposeTechnologyUpdate(
+    ADMIN,
+    draft({
+      changeKind: "revise",
+      proposedProfile: profileContent({
+        summary: "Ein großes Sprachmodell für Textarbeit.",
+      }),
+    }),
+  )
+  if (!proposed.success) return assert.fail("the proposal should have been drafted")
+
+  const decided = await decideTechnologyProposal(
+    ADMIN,
+    proposed.proposal.id,
+    "approve",
+    null,
+  )
+
+  assert.equal(decided.success, true)
+  assert.deepEqual(reReviewCalls, [
+    {
+      technologyProfileCode: "openai-gpt-5",
+      changedFields: [],
+      actorUserId: ADMIN.id,
+    },
+  ])
 })
 
 test("the review assembles the diff and only the sources the proposal cites", async () => {

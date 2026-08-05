@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client"
 
+import { getCurrentRequestId } from "../lib/application-logger.js"
 import { prisma } from "../lib/prisma.js"
 
 import type {
@@ -448,9 +449,25 @@ export const appendAuditTrail = async (input: {
       userId: input.userId ?? null,
       engagementId: input.engagementId ?? null,
       eventType: input.eventType,
-      payload: input.payload,
+      payload: withCurrentRequestId(input.payload),
     },
   })
+
+const withCurrentRequestId = (
+  payload: Prisma.InputJsonValue,
+): Prisma.InputJsonValue => {
+  const requestId = getCurrentRequestId()
+  if (
+    requestId === undefined ||
+    payload === null ||
+    Array.isArray(payload) ||
+    typeof payload !== "object"
+  ) {
+    return payload
+  }
+
+  return { ...payload, requestId }
+}
 
 export const listAuditTrailByWorkspace = async (scope: WorkspaceScope) =>
   prisma.auditTrail.findMany({

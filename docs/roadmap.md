@@ -5,7 +5,7 @@ Status: **Stable** · Version: 1.2 · Derived from [product-vision.md](./product
 > **Revision 1.2 (approved).** Three changes, **none of which renumbers an existing phase** and none of which moves the MVP boundary (still after Phase 9):
 > 1. **Phase 2 (Client Discovery) is extended** with the engagement's **value & measurement baseline** (Business Impact; Error Frequency / Severity / Cost; Existing KPIs; Baseline Metrics; Target Success Metrics; Measurement Method; Data Sources) and with a **discovery draft / submitted workflow** plus **client-completed Discovery reviewed by the consultant**. The extension is delivered as a **re-entry into Phase 2** ("Phase 2 Extension"), sequenced **after the in-flight Phase 3 is accepted and before Phase 3A** — it does not disturb Phase 3.
 > 2. **A new Phase 3A — Multi-user & Client Collaboration Foundation** is added immediately after Phase 3, introducing the **Workspace** as the ownership and isolation boundary, the **Administrator / Manager / Client** roles, authentication, server-side authorization, engagement ownership, client self-registration, the **Client Portal**, the **Draft / Submit / Return** workflow, notifications, and an append-only **Audit Trail**. Authentication and email delivery are kept behind dedicated infrastructure boundaries so the consulting domain does not depend directly on either provider. Like Phase 5A, it is a lettered insertion, not a renumbering.
-> 3. **Phase 11 (Production Readiness) is refocused** on deployment, monitoring, operational security, backup, recovery, and performance. **Authentication and authorization move out of Phase 11 into Phase 3A.**
+> 3. **Production Readiness is refocused** on deployment, monitoring, operational security, backup, recovery, and performance. **Authentication and authorization move out of the production-readiness phase into Phase 3A.**
 > 4. **Report publication becomes explicit.** Consultant Report versions are manager-published to the Client Portal, only published versions are visible to clients, and publication sends an email notification with a portal link.
 >
 > Revision 1.2 also records the **internationalization-ready, German-only MVP** commitment as a cross-cutting UI obligation: user-facing strings are localizable from the start, internal identifiers stay English.
@@ -161,7 +161,7 @@ Technical improvements are introduced only when they directly support business v
 
 ## Phase 3A — Multi-user & Client Collaboration Foundation
 
-> **Extension inserted after Phase 3, not a renumbering.** Phase 3A follows the same convention as Phase 5A: it is placed where the capability is needed — once there is real engagement content worth protecting and worth sharing with a client — without shifting any existing phase number or the MVP boundary. It is sequenced **after the Phase 2 Extension** (Revision 1.2), because the Client Portal builds on the discovery draft/submitted workflow and provenance that extension delivers. **Authentication and authorization are delivered here, not in Phase 11.**
+> **Extension inserted after Phase 3, not a renumbering.** Phase 3A follows the same convention as Phase 5A: it is placed where the capability is needed — once there is real engagement content worth protecting and worth sharing with a client — without shifting any existing phase number or the MVP boundary. It is sequenced **after the Phase 2 Extension** (Revision 1.2), because the Client Portal builds on the discovery draft/submitted workflow and provenance that extension delivers. **Authentication and authorization are delivered here, not in production readiness.**
 
 **Goal.** Turn the workbench from a single-consultant tool into a safe, multi-user working environment in which a consulting team runs engagements side by side and a client can contribute to Discovery without ever seeing anything else.
 
@@ -185,7 +185,7 @@ Technical improvements are introduced only when they directly support business v
 - **Audit trail.** Record an **append-only Audit Trail** of access- and collaboration-relevant events: sign-in, invitation issued/accepted/revoked/expired, submission, return, acceptance, publication, publication revocation, document download, ownership transfer, role change, and denied-permission attempts — who did what, to which engagement, and when. It is distinct from the engagement's **Analysis Runs** (AI assistance) and from the **Technology Update History** (knowledge curation); the three logs are never conflated.
 - **Migration of existing work.** Existing organizations and engagements are brought into a workspace with an owning Manager as part of this phase, so the application is fully working — with access control on — at the end of it, and no engagement is left unowned or unreachable.
 - **Authentication data separation.** Auth state, password handling, sessions, verification, and invitation delivery are stored and processed outside consulting-domain tables and services.
-- **Out of scope here.** Enterprise identity federation (SSO/SAML/OIDC providers), cross-workspace sharing, per-user access to individual engagement sections beyond the roles above, and client access to any stage other than Discovery. Production deployment, monitoring, backup, and operational hardening remain Phase 11.
+- **Out of scope here.** Enterprise identity federation (SSO/SAML/OIDC providers), cross-workspace sharing, per-user access to individual engagement sections beyond the roles above, and client access to any stage other than Discovery. Production deployment, monitoring, backup, and operational hardening remain Phase 12.
 
 **Definition of Done.**
 - A user signs in and sees only what their role and workspace permit; there is no unauthenticated path to engagement data.
@@ -247,7 +247,7 @@ Technical improvements are introduced only when they directly support business v
 - The Consulting Knowledge Base exists as a reusable asset with Customer Operations content, independent of any engagement.
 - Deterministic retrieval returns relevant knowledge for a given engagement context.
 - Discovery and Assessment can draw on Consulting Knowledge Base questions, frameworks, and criteria.
-- **RAG is explicitly out of scope here and follows in Phase 10.**
+- **RAG is explicitly out of scope here and follows in Phase 11.**
 
 **Success Criteria**
 - Relevant knowledge can be found deterministically.
@@ -402,12 +402,16 @@ Technical improvements are introduced only when they directly support business v
 - Support **Data Classification** for engagement content, documents, and generated outputs, including classifications such as Public, Internal, Confidential, Strictly Confidential, Personal Data (GDPR), and AI Restricted.
 - Allow Workspace administrators to define **AI Policies**, including:
   - whether AI processing is permitted,
-  - approved AI providers,
-  - approved AI models,
+  - whether governed provider/model combinations must be approved before use,
   - whether confidential information may be processed,
   - whether human approval is required before AI-generated outputs become accepted engagement content.
-- Support **AI Consent** at the engagement level so consultants can explicitly allow, restrict, or completely prohibit AI processing for a particular engagement.
-- Automatically **detect and anonymize personally identifiable information (PII)** before AI processing where required by Workspace policy, including names, email addresses, telephone numbers, postal addresses, contract identifiers, and other configurable personal identifiers.
+- Support **AI processing permission** at the engagement level so consultants can explicitly allow, restrict, or completely prohibit AI processing for a particular engagement. This is not GDPR consent.
+- Record the personal-data processing purpose and legal basis for each engagement, and store real GDPR consent records only where the legal basis is consent. A withdrawn consent blocks future AI processing that depends on it.
+- Automatically **detect and redact/pseudonymize personally identifiable information (PII)** before AI processing where required by Workspace policy, including names, email addresses, telephone numbers, postal addresses, contract identifiers, and other configurable personal identifiers.
+- Scan AI outputs for personal data before they are classified or accepted as engagement content.
+- Require an explicit authorized human-review action where policy demands review; ordinary draft save or edit does not clear pending AI-output review.
+- Govern approved AI provider/model combinations independently from the Technology Knowledge Base, including re-review when a compliance-relevant technology update affects an approved profile.
+- Support DPIA/DSFA screening and workspace DPIA status as explicit gates before AI processing where required.
 - Ensure AI processing never bypasses Workspace policy or engagement-specific restrictions.
 - Support encryption of engagement data and uploaded documents both **at rest** and **in transit**.
 - Protect uploaded documents using secure storage and controlled access mechanisms, including expiring signed URLs where appropriate.
@@ -416,23 +420,28 @@ Technical improvements are introduced only when they directly support business v
   - document downloads,
   - exports,
   - AI policy decisions,
-  - anonymization actions,
+  - PII redaction actions,
   - denied AI requests,
+  - provider/model approval changes,
+  - consent records and withdrawals,
+  - DPIA screening and assessment changes,
   - compliance-related administrative actions.
-- Record compliance metadata for every AI-assisted Analysis Run, including provider, model, purpose, prompt version, input classification, output classification, anonymization status, and human review status.
+- Record compliance metadata for every AI-assisted Analysis Run, including provider, model, purpose, prompt version, input classification, output classification, PII redaction status, AI output scan outcome, governed model approval, and human review status.
 - Introduce configurable **Data Retention Policies**, allowing Workspace administrators to define retention periods for engagements, documents, audit records, and AI-generated artifacts.
-- Support GDPR rights including complete client-data export and permanent deletion in accordance with configured retention and legal obligations.
-- Provide administrators with a **Compliance Dashboard** summarizing confidential engagements, AI-restricted engagements, policy violations, anonymization failures, retention status, and other operational compliance indicators.
-- Design the compliance framework around current European regulations, including **GDPR**, the **EU AI Act**, and future jurisdiction-specific implementation requirements, while keeping regulatory rules configurable rather than hard-coded.
+- Support GDPR rights including complete client-data export and permanent deletion in accordance with configured retention, legal hold, and legal obligations.
+- Provide administrators with a **Compliance Dashboard** summarizing confidential engagements, AI-restricted engagements, policy violations, PII redaction failures, AI outputs with personal data, missing legal bases, withdrawn consents, DPIA screening, provider/model approvals needing review, retention status, and other operational compliance indicators.
+- Design the compliance framework around current European regulations, including **GDPR**, the **EU AI Act**, and future jurisdiction-specific implementation requirements, while keeping regulatory rules configurable rather than hard-coded. The EU AI Act position is documented as product-governance readiness in [ai-act-readiness.md](./ai-act-readiness.md), not as legal advice or certification.
 
 **Definition of Done.**
 - Every engagement operates under an explicit Workspace Compliance Policy.
 - Confidential information is classified, protected, and handled according to Workspace policy.
-- AI processing respects Workspace policy, engagement restrictions, and AI consent before any request is sent to an external provider.
-- Personal data can be automatically anonymized before AI processing where required.
+- AI processing respects Workspace policy, engagement restrictions, privacy-processing records, consent records where applicable, DPIA gates, and governed provider/model approval before any request is sent to an external provider.
+- Personal data can be automatically redacted/pseudonymized before AI processing where required, model outputs are scanned before use, and scan rejection never overwrites prior accepted content.
+- Human review of AI output is explicit and stage-scoped; trusted stage transitions remain blocked while review is pending.
 - Compliance-relevant actions are fully auditable.
 - Workspace administrators can configure AI usage, retention policies, and data protection rules without changing application code.
 - Client data can be exported or permanently removed in accordance with applicable privacy regulations.
+- Phase 10 acceptance requires compliance gate enforcement, output scanning, explicit human review, current governing documentation, and no Phase 11 start before these are accepted.
 
 **Success Criteria**
 - Consultants can confidently work with confidential customer information while maintaining regulatory compliance.
@@ -467,7 +476,7 @@ Technical improvements are introduced only when they directly support business v
 
 ## Phase 12 — Production Readiness
 
-> **Revision 1.2 — refocused.** Authentication, authorization, roles, workspace isolation, and server-side permission enforcement are **no longer part of this phase**; they are delivered in **Phase 3A**, where they are needed to make multi-user and client collaboration safe. Phase 11 is now about **operating** the product: deployment, monitoring, operational security, backup, recovery, and performance. It hardens and operates the access control built in Phase 3A; it does not introduce it.
+> **Revision 1.2 — refocused.** Authentication, authorization, roles, workspace isolation, and server-side permission enforcement are **no longer part of this phase**; they are delivered in **Phase 3A**, where they are needed to make multi-user and client collaboration safe. Phase 12 is about **operating** the product: deployment, monitoring, operational security, backup, recovery, and performance. It hardens and operates the access control built in Phase 3A; it does not introduce it.
 
 **Goal.** Prepare the workbench to be deployed, operated, and relied on beyond a developer's machine.
 
@@ -563,8 +572,9 @@ The product is considered **functionally complete as an MVP after Phase 9**. By 
 
 The phases beyond the MVP are deliberately separated from that core:
 
-- **Phase 10 (RAG Enhancement)** improves the *quality* of Consulting Knowledge Base retrieval, but adds no new business capability the consultant did not already have.
-- **Phase 11 (Production Readiness)** prepares the product for real-world **deployment and operation** — deployment, monitoring, operational security, backup, recovery, and performance — rather than extending the methodology. Note that authentication and authorization are *not* deferred to this phase; they are delivered in Phase 3A, and Phase 11 operates and hardens them.
+- **Phase 10 (Security, Privacy & AI Compliance)** protects client information, governs AI processing, and provides regulatory readiness.
+- **Phase 11 (RAG Enhancement)** improves the *quality* of Consulting Knowledge Base retrieval, but adds no new business capability the consultant did not already have.
+- **Phase 12 (Production Readiness)** prepares the product for real-world **deployment and operation** — deployment, monitoring, operational security, backup, recovery, and performance — rather than extending the methodology. Note that authentication and authorization are *not* deferred to this phase; they are delivered in Phase 3A, and Phase 12 operates and hardens them.
 
 Drawing the MVP boundary here allows the consulting methodology to be **validated with real engagements before investing in advanced retrieval and production infrastructure**. If the methodology proves its value, RAG and production hardening are the natural next investments; if it needs adjustment, that is learned before those investments are made.
 

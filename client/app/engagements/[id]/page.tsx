@@ -7,6 +7,7 @@ import OpportunityPanel from "../../../components/OpportunityPanel"
 import RecommendationPanel from "../../../components/RecommendationPanel"
 import RoadmapPanel from "../../../components/RoadmapPanel"
 import ConsultantReportPanel from "../../../components/ConsultantReportPanel"
+import EngagementCompliancePanel from "../../../components/EngagementCompliancePanel"
 import FeedbackPanel from "../../../components/FeedbackPanel"
 import ManagerShell from "../../../components/ManagerShell"
 import {
@@ -24,6 +25,7 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { formatDateTime, t, translateServerMessage } from "../../../i18n"
 import type { MessageKey } from "../../../i18n/de"
+import { reviewableAiStage } from "../../../lib/ai-output-review"
 import { signInPath } from "../../../lib/auth-redirect"
 import { uiColors, uiRadius, uiSpace } from "../../../lib/design-tokens"
 import { stageLabel, type EngagementStage } from "../../../lib/engagement-stage"
@@ -38,6 +40,10 @@ import type { RecommendationStageState } from "../../../../shared/recommendation
 import type { RoadmapStageState } from "../../../../shared/implementation-roadmap.schema"
 import type { ReportStageState } from "../../../../shared/consultant-report.schema"
 import type { FeedbackStageState } from "../../../../shared/feedback.schema"
+import type {
+  EngagementCompliance,
+  HumanReviewStatus,
+} from "../../../../shared/compliance.schema"
 
 type EngagementDetails = {
   id: string
@@ -59,6 +65,9 @@ type EngagementDetails = {
   roadmap: RoadmapStageState
   report: ReportStageState
   feedback: FeedbackStageState
+  // How this engagement's content is classified, whether AI may assist with it,
+  // and whether a legal hold prevents its erasure (roadmap Phase 10).
+  compliance: EngagementCompliance
   createdAt: string
   updatedAt: string
   organization: {
@@ -86,6 +95,7 @@ type AnalysisRun = {
   costEstimateUsd: string | null
   jsonParseSuccess: boolean
   schemaValid: boolean
+  humanReviewStatus: HumanReviewStatus | null
   createdAt: string
 }
 
@@ -148,6 +158,10 @@ export default async function EngagementDetailsPage({
 
   const engagement = result.data
   const analysisRuns = await loadAnalysisRuns(id)
+  // Which stage's AI output is still waiting for a human, decided from the runs
+  // the server returned. `analysis` is included: it has no engagement stage of
+  // its own, so without this it would have no way to be reviewed at all.
+  const aiOutputReview = reviewableAiStage(engagement.stage, analysisRuns)
 
   return (
     <ManagerShell
@@ -272,6 +286,13 @@ export default async function EngagementDetailsPage({
           key={`feedback:${engagement.feedback.feedback.length}:${engagement.feedback.openReentries.length}:${engagement.report.activeVersion?.id ?? "none"}`}
           engagementId={engagement.id}
           initialStageState={engagement.feedback}
+        />
+        <EngagementCompliancePanel
+          key={`compliance:${engagement.compliance.dataClassification}:${engagement.compliance.aiProcessingPermission}:${engagement.compliance.legalHold ? "1" : "0"}`}
+          engagementId={engagement.id}
+          compliance={engagement.compliance}
+          activeReviewStage={aiOutputReview.stage}
+          activeStagePendingReview={aiOutputReview.pending}
         />
         <EngagementAnalysisPanel
           engagementId={engagement.id}
