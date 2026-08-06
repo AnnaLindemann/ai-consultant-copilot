@@ -402,7 +402,7 @@ The knowledge side is made of **two separate subsystems, not separate databases*
 Prompts are versioned, fingerprinted assets — infrastructure that feeds the AI orchestration pipeline. The current `analysis-prompt` module is the template.
 
 - **A prompt module per AI stage.** Each stage has its own prompt module exporting `{ version, template, fingerprint }`. The current pattern (`analysis-prompt.v1.ts` → `analysis-prompt.ts` re-export of the active version) is the convention for all stages.
-- **Explicit versioning.** A human-readable `version` (e.g., `assessment-v1`) is recorded on every Analysis Run so outputs are attributable to a known prompt and prompts can evolve deliberately.
+- **Explicit versioning.** A human-readable `version` (e.g., `assessment-v2`) is recorded on every Analysis Run so outputs are attributable to a known prompt and prompts can evolve deliberately.
 - **Content fingerprinting.** A SHA-256 fingerprint of the exact template content (already implemented via `createSha256Hash`) is recorded per run, tying a run to precisely what was sent even between version bumps.
 - **Prompt assembly is separate from prompt content.** Building the final prompt (template + engagement input + retrieved knowledge) is a `build*Prompt` step in the orchestration layer, keeping the versioned template stable and the per-run inputs dynamic. This is also where retrieved knowledge is injected to enforce grounding.
 - **Schema-coupled prompts.** Each prompt's expected output is paired with a Zod schema (as `consultant-report.schema.ts` does today) so the model's contract and the parser stay in lockstep. Shared output types live in `shared/` so client and server agree on shape.

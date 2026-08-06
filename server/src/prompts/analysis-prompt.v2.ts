@@ -1,6 +1,6 @@
 import { createSha256Hash } from "../lib/create-sha256-hash.js"
 
-const ANALYSIS_PROMPT_V1_TEMPLATE = 
+const ANALYSIS_PROMPT_V2_TEMPLATE = 
   `
 You are an AI Consultant.
 
@@ -67,12 +67,23 @@ The JSON must match this exact structure:
 }
 
 For enum fields, use exactly one of the listed values.
-Do not invent new enum values.`
+Do not invent new enum values.
+
+Language:
+- Write all user-facing prose in professional German — the register of a
+  client-facing consulting document: Sie-Form, no marketing tone, and a German
+  term wherever one exists.
+- German applies to prose only. Leave everything the contract fixes exactly as
+  supplied and in its original form: enum values, field names, identifiers and
+  IDs, citation codes, technical and product names, and any source reference
+  you must repeat verbatim.
+- Quote the client's and the consultant's own words as they were given. Do not
+  translate them.`
 
 
 
-export const ANALYSIS_PROMPT_V1 = {
-  version: "analysis-v1",
-  template: ANALYSIS_PROMPT_V1_TEMPLATE,
-  fingerprint: createSha256Hash(ANALYSIS_PROMPT_V1_TEMPLATE),
+export const ANALYSIS_PROMPT_V2 = {
+  version: "analysis-v2",
+  template: ANALYSIS_PROMPT_V2_TEMPLATE,
+  fingerprint: createSha256Hash(ANALYSIS_PROMPT_V2_TEMPLATE),
 } as const

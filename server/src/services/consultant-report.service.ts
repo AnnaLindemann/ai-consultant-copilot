@@ -208,6 +208,11 @@ export const generateConsultantReport = async (
   const sourceSnapshot = sourceResult.snapshot
 
   const prompt = buildConsultantReportPrompt({
+    organization: { name: engagement.organization.name },
+    engagement: {
+      title: engagement.title,
+      department: engagement.department,
+    },
     sources: sourceResult.sources,
     followUpTemplates: templates,
   })

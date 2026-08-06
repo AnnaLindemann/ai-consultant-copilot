@@ -1,6 +1,6 @@
 import { createSha256Hash } from "../lib/create-sha256-hash.js"
 
-const ASSESSMENT_PROMPT_V1_TEMPLATE = `
+const ASSESSMENT_PROMPT_V3_TEMPLATE = `
 You are an AI Consultant producing a Business & AI Readiness Assessment for one
 client engagement.
 
@@ -76,14 +76,32 @@ Rules you must follow:
 - Record in "gaps" what you could not determine and what would have to be
   learned from the client to assess it, including the missing information the
   Discovery Profile already lists where it affects your findings.
+- Every gap's "dimension" is exactly one of the six dimension names, and nothing
+  else: "businessProcess", "data", "technology", "aiReadiness", "risks",
+  "opportunities". It names which dimension the gap belongs to — it is not a
+  topic, a label, or a description. "problems", "budget", "process" and any
+  other invented value make the whole answer unusable. Put what the gap is
+  about in "description", and attribute it to whichever of the six dimensions
+  it affects.
 - Assess only. Do not propose solutions, technologies, models, vendors, or an
   implementation plan; later stages of the methodology do that.
 
 For enum fields, use exactly one of the listed values.
-Do not invent new enum values.`
+Do not invent new enum values.
 
-export const ASSESSMENT_PROMPT_V1 = {
-  version: "assessment-v1",
-  template: ASSESSMENT_PROMPT_V1_TEMPLATE,
-  fingerprint: createSha256Hash(ASSESSMENT_PROMPT_V1_TEMPLATE),
+Language:
+- Write all user-facing prose in professional German — the register of a
+  client-facing consulting document: Sie-Form, no marketing tone, and a German
+  term wherever one exists.
+- German applies to prose only. Leave everything the contract fixes exactly as
+  supplied and in its original form: enum values, field names, identifiers and
+  IDs, citation codes, technical and product names, and any source reference
+  you must repeat verbatim.
+- Quote the client's and the consultant's own words as they were given. Do not
+  translate them.`
+
+export const ASSESSMENT_PROMPT_V3 = {
+  version: "assessment-v3",
+  template: ASSESSMENT_PROMPT_V3_TEMPLATE,
+  fingerprint: createSha256Hash(ASSESSMENT_PROMPT_V3_TEMPLATE),
 } as const

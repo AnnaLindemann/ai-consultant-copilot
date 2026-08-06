@@ -1,3 +1,3 @@
-import { RECOMMENDATIONS_PROMPT_V1 } from "./recommendations-prompt.v1.js"
+import { RECOMMENDATIONS_PROMPT_V2 } from "./recommendations-prompt.v2.js"
 
-export const RECOMMENDATIONS_PROMPT = RECOMMENDATIONS_PROMPT_V1
+export const RECOMMENDATIONS_PROMPT = RECOMMENDATIONS_PROMPT_V2

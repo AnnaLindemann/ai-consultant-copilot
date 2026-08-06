@@ -302,7 +302,7 @@ test("a generated Assessment records its Analysis Run with the stage's trust sig
   assert.equal(run.stage, "assessment")
   assert.equal(run.provider, "groq")
   assert.equal(run.model, configuredLlm.model)
-  assert.equal(run.promptVersion, "assessment-v1")
+  assert.equal(run.promptVersion, "assessment-v3")
   assert.equal(typeof run.promptFingerprint, "string")
   assert.equal(run.promptFingerprint.length > 0, true)
   assert.equal(run.latencyMs, 1200)

@@ -309,8 +309,23 @@ ${JSON.stringify(
       promptFingerprint: CONSULTANT_REPORT_PROMPT.fingerprint,
       // The report stage's own builder resolves follow-up templates from a
       // persisted source bundle. The benchmark supplies the same accepted
-      // material directly, which is what that bundle serializes to.
+      // material directly, which is what that bundle serializes to — including
+      // the engagement context, which the report's `engagementContext` names
+      // and no other supplied source carries.
       prompt: `${CONSULTANT_REPORT_PROMPT.template}
+
+Engagement context:
+${JSON.stringify(
+  {
+    organization: { name: BENCHMARK_ORGANIZATION.name },
+    engagement: {
+      title: BENCHMARK_ENGAGEMENT.title,
+      department: BENCHMARK_ENGAGEMENT.department,
+    },
+  },
+  null,
+  2,
+)}
 
 Accepted source material:
 ${JSON.stringify(

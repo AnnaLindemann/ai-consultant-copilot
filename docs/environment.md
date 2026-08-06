@@ -57,7 +57,7 @@ with almost nothing configured, and that is deliberate.
 | `LLM_TIMEOUT_MS` | `120000` | Bounded 1 000–600 000. |
 | `LLM_MAX_RETRIES` | `0` | Bounded 0–5. Retries only connection failures, 408, 429 and 5xx — but each one is a second charge. |
 | `LLM_TEMPERATURE` | provider default | Not sent unless set. |
-| `LLM_MAX_COMPLETION_TOKENS` | provider default | Not sent unless set. |
+| `LLM_MAX_COMPLETION_TOKENS` | provider default | Not sent unless set. **Set it to `8000` in production.** Groq's own default for `openai/gpt-oss-120b` is 3072, and a reasoning model's thinking is billed against that same budget — the Assessment stage needs a median 4 786 completion tokens and truncates without this, which is recorded as a failed run. Bounded 1–200 000. |
 | `LLM_RESPONSE_FORMAT` | not sent | `json_object` to ask for structured output. **Verify the model supports it** with the benchmark first — an unsupported parameter fails every call. |
 | `LLM_REASONING_FORMAT` | not sent | `hidden`, `parsed` or `raw`. Same caveat. |
 | `LANGFUSE_ENABLED` | off | When `true`, both Langfuse keys become required. |

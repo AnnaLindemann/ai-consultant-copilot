@@ -54,10 +54,24 @@ Return this shape:
 Important:
 - temporaryPhaseKey values must be unique within the JSON.
 - dependencyPhaseKeys must reference temporaryPhaseKey values from earlier phases only.
-- Do not output permanent phase ids. The server validates the temporary dependency graph, mints trusted permanent IDs, translates dependencies, and persists only permanent IDs.`
+- Every phase must list at least one recommendationId in "linkedRecommendationIds". An empty list is never valid.
+- A preparatory, discovery, data-analysis, or setup phase links the Recommendation it enables or prepares for. Such a phase does not stand on its own: if it exists only to make a later Recommendation possible, link that Recommendation.
+- Do not output permanent phase ids. The server validates the temporary dependency graph, mints trusted permanent IDs, translates dependencies, and persists only permanent IDs.
 
-export const IMPLEMENTATION_ROADMAP_PROMPT_V1 = {
-  version: "implementation-roadmap.v1",
+Language:
+- Write all user-facing prose in professional German — the register of a
+  client-facing consulting document: Sie-Form, no marketing tone, and a German
+  term wherever one exists.
+- German applies to prose only. Leave everything the contract fixes exactly as
+  supplied and in its original form: enum values, field names, identifiers and
+  IDs, citation codes, technical and product names, and any source reference
+  you must repeat verbatim. temporaryPhaseKey and dependencyPhaseKeys are
+  identifiers, not prose.
+- Quote the client's and the consultant's own words as they were given. Do not
+  translate them.`
+
+export const IMPLEMENTATION_ROADMAP_PROMPT_V3 = {
+  version: "implementation-roadmap.v3",
   template,
   fingerprint: createSha256Hash(template),
 } as const

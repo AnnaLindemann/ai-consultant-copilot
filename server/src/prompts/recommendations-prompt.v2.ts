@@ -1,6 +1,6 @@
 import { createSha256Hash } from "../lib/create-sha256-hash.js"
 
-const RECOMMENDATIONS_PROMPT_V1_TEMPLATE = `
+const RECOMMENDATIONS_PROMPT_V2_TEMPLATE = `
 You are an AI Consultant proposing how to address the prioritized opportunities
 of one client engagement.
 
@@ -106,10 +106,21 @@ Rules you must follow:
   the curated knowledge genuinely supports alternatives.
 
 For enum fields, use exactly one of the listed values.
-Do not invent new enum values.`
+Do not invent new enum values.
 
-export const RECOMMENDATIONS_PROMPT_V1 = {
-  version: "recommendations-v1",
-  template: RECOMMENDATIONS_PROMPT_V1_TEMPLATE,
-  fingerprint: createSha256Hash(RECOMMENDATIONS_PROMPT_V1_TEMPLATE),
+Language:
+- Write all user-facing prose in professional German — the register of a
+  client-facing consulting document: Sie-Form, no marketing tone, and a German
+  term wherever one exists.
+- German applies to prose only. Leave everything the contract fixes exactly as
+  supplied and in its original form: enum values, field names, identifiers and
+  IDs, citation codes, technical and product names, and any source reference
+  you must repeat verbatim.
+- Quote the client's and the consultant's own words as they were given. Do not
+  translate them.`
+
+export const RECOMMENDATIONS_PROMPT_V2 = {
+  version: "recommendations-v2",
+  template: RECOMMENDATIONS_PROMPT_V2_TEMPLATE,
+  fingerprint: createSha256Hash(RECOMMENDATIONS_PROMPT_V2_TEMPLATE),
 } as const

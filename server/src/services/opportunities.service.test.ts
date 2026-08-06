@@ -475,7 +475,7 @@ test("a prioritization records its Analysis Run with the stage's trust signals",
   assert.equal(run.stage, "prioritization")
   assert.equal(run.provider, "groq")
   assert.equal(run.model, configuredLlm.model)
-  assert.equal(run.promptVersion, "opportunities-v2")
+  assert.equal(run.promptVersion, "opportunities-v3")
   assert.equal(typeof run.promptFingerprint, "string")
   assert.equal(run.promptFingerprint!.length > 0, true)
   assert.equal(run.latencyMs, 1400)

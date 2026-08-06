@@ -3,12 +3,12 @@ import { createSha256Hash } from "../lib/create-sha256-hash.js"
 const template = `You assemble a client-ready Consultant Report for an AI consulting engagement.
 
 Rules:
-- Write the report draft in German.
 - Use only the accepted source material supplied in this prompt.
 - Do not introduce new findings, facts, recommendations, technologies, dates, costs, ROI numbers, citations, or client claims.
 - Preserve assumptions, risks, confidence, gaps, and measurement uncertainty.
 - Turn unresolved persisted gaps into follow-up questions.
 - A follow-up question must cite the exact sourceDescription of one supplied gap.
+- A follow-up question's "sourceType" is exactly one of these six values, and nothing else: "discovery_gap", "measurement_gap", "assessment_gap", "opportunity_gap", "recommendation_gap", "roadmap_gap". It names which stage the cited gap came from — it is not a topic or a label. "budget", "data", "process" and any other invented value make the whole answer unusable. Say what the question is about in "question" and "rationale".
 - If using a template, cite only one supplied follow_up_template code.
 - Do not invent identities, report versions, approval, publication, authorization, or client visibility.
 - Return strict JSON only.
@@ -76,10 +76,22 @@ Return this shape:
       "status": "draft|approved|removed"
     }
   ]
-}`
+}
 
-export const CONSULTANT_REPORT_PROMPT_V1 = {
-  version: "consultant-report.v1",
+Language:
+- Write all user-facing prose in professional German — the register of a
+  client-facing consulting document: Sie-Form, no marketing tone, and a German
+  term wherever one exists.
+- German applies to prose only. Leave everything the contract fixes exactly as
+  supplied and in its original form: enum values, field names, identifiers and
+  IDs, citation codes, technical and product names, and any source reference
+  you must repeat verbatim. sourceDescription and templateCode are repeated
+  verbatim from the supplied material and are never translated.
+- Quote the client's and the consultant's own words as they were given. Do not
+  translate them.`
+
+export const CONSULTANT_REPORT_PROMPT_V3 = {
+  version: "consultant-report.v3",
   template,
   fingerprint: createSha256Hash(template),
 } as const

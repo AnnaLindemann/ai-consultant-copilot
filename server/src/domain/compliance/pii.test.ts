@@ -60,6 +60,35 @@ test("a labelled contract reference is recognized and a bare token is not", () =
   assert.equal(bare.text, "Das System SAP-ERP7 ist der Engpass.")
 })
 
+test("a German compound beginning with a contract label is not an identifier", () => {
+  // The label's "nummer"/"-Nr." part is what makes a reference a reference. With
+  // it optional, the stem alone matched and the rest of the compound was taken
+  // for the identifier — so ordinary consulting vocabulary was redacted out of
+  // the prompt under any policy that removes personal data.
+  const compounds =
+    "Vertragspartner und Vertragsbedingungen bestimmen das Auftragsvolumen; die Vertragsdefinition ist offen."
+
+  const scanned = redactPersonalIdentifiers(compounds, noRules)
+
+  assert.deepEqual(scanned.redactions, [])
+  assert.equal(scanned.text, compounds)
+  assert.deepEqual(findPersonalIdentifiers(compounds, noRules), [])
+
+  // The labelled forms on those same stems are still recognized.
+  for (const labelled of [
+    "Vertragsnummer: V-2031",
+    "Vertrags-Nr. 88120",
+    "Auftragsnummer A-4711",
+    "Contract Number C-9004",
+  ]) {
+    assert.deepEqual(
+      findPersonalIdentifiers(labelled, noRules),
+      ["contract_identifier"],
+      labelled,
+    )
+  }
+})
+
 test("ordinary engagement content passes through untouched", () => {
   const content =
     "Der Kundenservice bearbeitet 400 Tickets pro Woche und verliert dabei 12 Stunden."

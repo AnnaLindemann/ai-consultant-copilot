@@ -94,9 +94,20 @@ const BUILT_IN_PATTERNS: readonly {
     // A contract, customer or order identifier as it is normally written: a
     // labelled reference. The label is required — a bare alphanumeric token is
     // indistinguishable from a product name or a system identifier.
+    //
+    // The "nummer"/"-Nr." part of the label is required too, on every branch.
+    // While it was optional the label could be satisfied by the *stem* alone,
+    // and because the separator `[:\s#]*` also matches nothing, the rest of an
+    // ordinary German compound then played the part of the identifier:
+    // "Vertragspartner", "Vertragsbedingungen" and "Auftragsvolumen" were all
+    // read as contract references. That is over-redaction of exactly the kind
+    // the note above these patterns warns about — under a policy that removes
+    // personal data, everyday consulting vocabulary left for the model as
+    // `[contract_identifier_1]`. The `Kunden` branch already required the
+    // suffix and was never affected; the other three now match it.
     kind: "contract_identifier",
     pattern:
-      /\b(?:Vertrag(?:s)?(?:nummer|-Nr\.?)?|Kunden(?:nummer|-Nr\.?)|Auftrag(?:s)?(?:nummer|-Nr\.?)?|Contract(?:\s+No\.?|\s+Number)?|Customer\s+(?:No\.?|Number))[:\s#]*[A-Z0-9][A-Z0-9\/-]{2,}\b/gi,
+      /\b(?:Vertrag(?:s)?(?:nummer|-Nr\.?)|Kunden(?:nummer|-Nr\.?)|Auftrag(?:s)?(?:nummer|-Nr\.?)|Contract(?:\s+No\.?|\s+Number)|Customer\s+(?:No\.?|Number))[:\s#]*[A-Z0-9][A-Z0-9\/-]{2,}\b/gi,
   },
 ]
 

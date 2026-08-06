@@ -629,7 +629,7 @@ test("a matching run records its Analysis Run with the stage's trust signals", a
   assert.equal(run.stage, "solution_matching")
   assert.equal(run.provider, "groq")
   assert.equal(run.model, configuredLlm.model)
-  assert.equal(run.promptVersion, "recommendations-v1")
+  assert.equal(run.promptVersion, "recommendations-v2")
   assert.equal(typeof run.promptFingerprint, "string")
   assert.equal(run.promptFingerprint!.length > 0, true)
   assert.equal(run.latencyMs, 1600)
