@@ -200,44 +200,103 @@ start logs `database.connected` and then `server.started` — in that order, and
 
 ## 5. The frontend on Vercel
 
+Connect the **same repository** as the backend — one repository, two projects.
+Vercel builds the frontend, Render builds the backend, and each ignores the
+other's directory.
+
 | Setting | Value |
 |---|---|
-| Root Directory | `client` |
-| Framework | Next.js (detected) |
-| Install / Build Command | defaults |
-| **Include files outside root directory** | **on** — the client imports `../shared` |
+| Repository | the same one Render deploys |
+| Root Directory | **`client`** — stays here; see below |
+| **Include files outside root directory** | **on** — non-negotiable, see below |
+| Framework | Next.js (detected from `client/package.json`) |
+| Install Command | **`npm ci --include=dev --prefix ..`** — overrides the default |
+| Build Command | default (`next build`) |
+| Output Directory | default (`.next`, i.e. `client/.next`) |
+| Node.js Version | 22.x or later |
 | Deployment Protection | **on for Preview** — see below |
 
-> **Known defect: this build currently fails, for the same reason the Render
-> build did.** It has been reproduced, not predicted: a clean client-only
-> install (`npm ci` in `client/`, nothing installed at the repository root)
-> compiles, then fails type checking with errors like `Argument of type
-> `feedback.status.${z.infer<any>}` is not assignable to…`.
->
-> The `z.infer<any>` is the symptom. A bare `zod` import inside
-> `shared/*.schema.ts` resolves from `shared/` upward to the repository root —
-> never into `client/node_modules` — so with the root directory set to `client`,
-> nothing installs where `shared/` can see it and every schema degrades to
-> `any`. Turbopack bundles anyway; `tsc` does not.
->
-> The backend fix was to make the repository root the unit that gets built
-> (§4). The frontend needs the equivalent, and it is **not yet done** — this is
-> the only part of Phase 12 deployment left open. The two candidate fixes are to
-> add `client` to the root npm workspace and point Vercel's root directory at
-> the repository, or to keep the root directory at `client` and give it both an
-> explicit `zod` dependency and a `paths` entry resolving `zod` to
-> `./node_modules/zod`. The first matches what §4 does and leaves one zod in the
-> tree; the second is smaller but keeps two.
+The install command is also committed as
+[`client/vercel.json`](../client/vercel.json), because it is the one setting the
+build cannot survive without and a dashboard field is too easy to lose. If the
+dashboard and that file ever disagree, `vercel.json` wins.
 
-**Environment variable**, for Production, Preview *and* Development:
+### Why the install runs one directory up
 
+`shared/*.schema.ts` imports zod by bare specifier, and `shared/` has no
+`package.json` of its own. Node and TypeScript resolve that by walking **up**
+from `shared/` — `shared/node_modules`, then the repository root, then above it.
+They never look sideways into `client/node_modules`. So an install performed
+inside `client/` puts zod in the one place `shared/` cannot see.
+
+That was the defect: all thirteen schema modules failed with `TS2307: Cannot find
+module 'zod'`, every `z.infer<…>` collapsed to `z.infer<any>` — i.e. `any` — and
+that cascaded into ~215 further errors in client code, surfacing as `Argument of
+type `feedback.status.${z.infer<any>}` is not assignable to…`. Turbopack bundles
+regardless; `tsc` does not, so the build died in the type-check step.
+
+The fix is the same one §4 applied to the backend: **`client` is now a member of
+the root npm workspace**, there is exactly one `package-lock.json` (at the
+repository root) and exactly one zod, hoisted to `node_modules/zod`. The
+`--prefix ..` is what makes Vercel install from that root rather than from
+`client/`. `--include=dev` is required for the same reason as the backend:
+`NODE_ENV=production` makes npm default `omit` to `dev`, and `typescript` and the
+`@types` packages are build-time tools — without them there is no compiler to
+type-check with.
+
+`turbopack.root` in `client/next.config.ts` points at the repository root for the
+same reason. Turbopack will not resolve files outside its root, and after
+hoisting, both `next` itself and `../shared` live above `client/`.
+
+**Do not run `npm install` inside `client/`.** It recreates
+`client/package-lock.json`, which silently restores the broken layout — Next also
+infers its workspace root by looking for a lockfile, so a stray one moves
+`turbopack.root` back down.
+
+### Why Root Directory stays `client`
+
+The backend's answer was to move Render's root directory to the repository root,
+and the symmetrical move is tempting. It is wrong here. Vercel detects the
+framework from the `package.json` in the Root Directory and its Next.js builder
+expects the app to *be* there; this app ships middleware (`ƒ Proxy`) and dynamic
+routes, which that builder wires up. Pointing the Root Directory at the
+repository root and the Output Directory at `client/.next` gives up that wiring
+for no benefit.
+
+So the split is: **Root Directory `client` (where the app is), install at the
+repository root (where the dependencies must be).** "Include files outside root
+directory" is what makes the second possible — without it the build never
+receives `../shared`, `../package.json` or `../package-lock.json`, and the
+install command has nothing to install from.
+
+### Verifying before you deploy
+
+```bash
+npm run verify:client-production-build
 ```
-NEXT_PUBLIC_API_BASE_URL=https://api.example.com
-```
 
-It is inlined at build time, so changing it needs a rebuild rather than a
-redeploy. A production build without it now fails with an explicit message
-rather than silently shipping a frontend that calls localhost.
+This copies only committed files into an empty directory, installs cold with
+`NODE_ENV=production`, and runs the exact commands above. It exists because this
+defect was invisible on every developer machine: a checkout that has ever built
+the backend has a populated `node_modules` at the repository root, and `shared/`
+quietly resolves zod out of it.
+
+### Environment variables
+
+One variable, required, set for Production, Preview *and* Development:
+
+| Variable | Value | Required |
+|---|---|---|
+| `NEXT_PUBLIC_API_BASE_URL` | `https://api.example.com` — an origin, `https://`, no trailing path | yes, for every environment that gets built |
+
+That is the complete list: the frontend reads no other environment variable. It
+is inlined into the bundle at build time, so changing it needs a **rebuild**, not
+a redeploy. A production build without it fails with an explicit message rather
+than silently shipping a frontend that calls `http://localhost:8787` from each
+visitor's own browser.
+
+Nothing secret belongs here. `NEXT_PUBLIC_*` values are public by construction —
+they ship in the JavaScript every visitor downloads.
 
 **Preview deployments cannot reach the production API**, by design: `CLIENT_ORIGIN`
 lists exact origins and a preview gets a fresh hostname per branch. That is the

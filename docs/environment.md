@@ -96,8 +96,14 @@ Three things follow from that inlining, and all three have caught people out:
 To run a production build locally, give it a value:
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=https://api.example.test npm run build --prefix client
+NEXT_PUBLIC_API_BASE_URL=https://api.example.test npm run build:client
 ```
+
+Run that from the repository root. `client/` is a member of the root npm
+workspace, and `shared/` — which the client type-checks as part of its own build
+— resolves zod from the root `node_modules`, so a build that installed only
+inside `client/` cannot type-check. See
+[`deployment.md`](deployment.md#why-the-install-runs-one-directory-up).
 
 **No server secret belongs in the client project.** Only `NEXT_PUBLIC_*` is
 read anywhere in `client/`, and anything with that prefix is public.

@@ -34,7 +34,21 @@ const config = (phase: string): NextConfig => {
 
   return {
     turbopack: {
-      root: path.resolve(__dirname),
+      // The repository root, not `client/`. Turbopack "uses the root directory
+      // to resolve modules. Files outside of the project root are not
+      // resolved" — and since `client` became a member of the root npm
+      // workspace, both things this app needs live above it: the hoisted
+      // `node_modules` (where `next` itself now is) and `../shared`. Pinning
+      // the root at `client/` makes the build fail outright with "We couldn't
+      // find the Next.js package (next/package.json) from the project
+      // directory".
+      //
+      // Next would infer this correctly on its own — it looks for a lockfile,
+      // and the only one is now at the repository root — but the inference is
+      // stated explicitly because it is load-bearing: the day someone adds a
+      // second lockfile under `client/`, the root silently moves back and the
+      // build breaks again.
+      root: path.resolve(__dirname, ".."),
     },
   }
 }

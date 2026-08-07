@@ -68,18 +68,26 @@ docker compose up -d      # starts postgres on the port from .env (default 5432)
 ### 3. Install dependencies
 
 ```bash
-npm install                 # root + server (one npm workspace)
-npm install --prefix client
+npm install                 # root + server + client (one npm workspace)
 ```
 
-The repository root and `server/` form a single npm workspace, so one install at
-the root covers both and there is one lockfile — `package-lock.json` at the
-root — for the backend. `shared/` has no `package.json`, so its only external
-dependency (zod) is declared at the root, which is the directory Node and
-TypeScript actually search when resolving a bare import from `shared/*.ts`.
+The repository root, `server/` and `client/` form a single npm workspace, so one
+install at the root covers all three and there is exactly one lockfile —
+`package-lock.json` at the root. Do not run `npm install` inside `server/` or
+`client/`; a second lockfile there is the bug, not a convenience.
 
-`client/` is deliberately outside the workspace: it deploys to Vercel from its
-own lockfile, so it keeps one.
+The reason is `shared/`. It has no `package.json`, so its only external
+dependency (zod) is declared at the root, which is the directory Node and
+TypeScript actually search when resolving a bare import from `shared/*.ts` —
+resolution walks *up* from `shared/`, and never sideways into
+`client/node_modules`. Both `server/` and `client/` compile `shared/` as part of
+their own type-check, so both need zod installed at the root, and both need it
+to be the *same* zod: one install, one copy, one type identity.
+
+See [`docs/deployment.md`](docs/deployment.md) for how each platform reproduces
+this, and `npm run verify:production-build` /
+`npm run verify:client-production-build` for the checks that prove a cold tree
+still builds.
 
 ### 4. Apply database migrations
 
