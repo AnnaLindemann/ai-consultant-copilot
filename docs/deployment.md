@@ -89,14 +89,79 @@ from empty.
 | Setting | Value |
 |---|---|
 | Type | Web Service |
-| Root Directory | `server` |
+| Root Directory | **blank — the repository root.** Not `server`; see below |
 | Runtime | Node |
 | Node version | 24 (set `NODE_VERSION=24`) |
-| Build Command | `npm ci && npx prisma generate && npm run build` |
-| Pre-Deploy Command | `npx prisma migrate deploy` |
-| Start Command | `npm start` |
+| Build Command | `npm ci --include=dev && npm run build:server` |
+| Pre-Deploy Command | `npm run migrate:deploy` |
+| Start Command | `node server/dist/server/src/server.js` |
 | Health Check Path | `/health/ready` |
+| Build Filters | ignored path `client/**` — see below |
 | Instances | **1** — see §7 |
+
+### Why the root directory is the repository, not `server`
+
+The backend is not the `server/` directory. It is `server/` **plus** `shared/`:
+`server/tsconfig.json` sets `rootDir: ".."`, so `tsc` compiles both and emits
+`dist/server/` and `dist/shared/` side by side. The unit that gets built is the
+repository, and the root directory has to say so.
+
+Setting it to `server` breaks the build in a way that is worth recognising,
+because the error messages point everywhere except the cause:
+
+- **`shared/` cannot resolve `zod`.** A bare import in `shared/*.schema.ts` is
+  resolved from `shared/`, walking up to the repository root — never into
+  `server/node_modules`. With the root directory set to `server`, nothing ever
+  installs at the repository root, so every schema fails with `TS2307 Cannot
+  find module 'zod'`.
+- **Hundreds of `TS7006` / `TS18046` errors follow.** They are not real. Each
+  one is a parameter whose type came from a schema that failed to load. Fix the
+  resolution and they all disappear at once; annotating them would bury the
+  actual fault under several hundred casts.
+
+Render also states that files outside the root directory are not available to
+the service, at build time or at runtime. The repository root is the only
+setting under which `shared/` is unambiguously part of the service.
+
+**Build Filters keep autodeploy sane.** A root directory of `server` used to
+mean "only redeploy the API when the API changes". Now that the root directory
+is the repository, add an ignored path of `client/**` to get that back —
+filter paths are relative to the repository root regardless of root directory.
+
+### Why the build command says `--include=dev`
+
+`NODE_ENV=production` is in the environment (it has to be — §*Environment
+variables* below), and npm reads it: with `NODE_ENV=production`, `npm ci`
+defaults to omitting `devDependencies`. That silently removes the compiler's
+own toolchain, and the failure is deeply misleading:
+
+- `@types/express` and `@types/cors` are gone, so every route file reports
+  `TS7016 Could not find a declaration file for module 'express'`;
+- but `typescript` *survives*, because it happens to be a transitive dependency
+  of a runtime package. So `tsc` runs and produces several hundred type errors
+  instead of an honest "the compiler is not installed".
+
+`--include=dev` is therefore load-bearing, not a convenience. It changes nothing
+about what is deployed: the running service only ever executes `dist/`, and the
+build-time packages are absent from it either way.
+
+**Do not "fix" this by moving `@types/*` into `dependencies`.** That ships type
+packages into the production install to work around a build flag, and it leaves
+the next build-only tool to fail the same way.
+
+### Verifying before you deploy
+
+`npm run verify:production-build` reproduces all of the above locally: it copies
+the committed tree into a temporary directory with no `node_modules` and no
+`dist`, sets `NODE_ENV=production`, and runs the exact install and build
+commands from the table. Run it before any deploy that touches dependencies,
+the build, or this file. A developer machine cannot catch these faults
+otherwise — it always has a populated `node_modules` from an earlier install.
+
+The start command runs `node` directly rather than `npm start`, so Render's
+`SIGTERM` reaches the process and the graceful-shutdown path actually runs.
+`npm run smoke:production --prefix server` is what proves that, against a
+database.
 
 Use `/health/ready` rather than `/health`: readiness runs a real query, so the
 platform stops routing traffic to an instance whose database is unreachable.
@@ -142,6 +207,27 @@ start logs `database.connected` and then `server.started` — in that order, and
 | Install / Build Command | defaults |
 | **Include files outside root directory** | **on** — the client imports `../shared` |
 | Deployment Protection | **on for Preview** — see below |
+
+> **Known defect: this build currently fails, for the same reason the Render
+> build did.** It has been reproduced, not predicted: a clean client-only
+> install (`npm ci` in `client/`, nothing installed at the repository root)
+> compiles, then fails type checking with errors like `Argument of type
+> `feedback.status.${z.infer<any>}` is not assignable to…`.
+>
+> The `z.infer<any>` is the symptom. A bare `zod` import inside
+> `shared/*.schema.ts` resolves from `shared/` upward to the repository root —
+> never into `client/node_modules` — so with the root directory set to `client`,
+> nothing installs where `shared/` can see it and every schema degrades to
+> `any`. Turbopack bundles anyway; `tsc` does not.
+>
+> The backend fix was to make the repository root the unit that gets built
+> (§4). The frontend needs the equivalent, and it is **not yet done** — this is
+> the only part of Phase 12 deployment left open. The two candidate fixes are to
+> add `client` to the root npm workspace and point Vercel's root directory at
+> the repository, or to keep the root directory at `client` and give it both an
+> explicit `zod` dependency and a `paths` entry resolving `zod` to
+> `./node_modules/zod`. The first matches what §4 does and leaves one zod in the
+> tree; the second is smaller but keeps two.
 
 **Environment variable**, for Production, Preview *and* Development:
 

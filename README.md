@@ -68,10 +68,18 @@ docker compose up -d      # starts postgres on the port from .env (default 5432)
 ### 3. Install dependencies
 
 ```bash
-npm install                 # root (shared deps)
-npm install --prefix server
+npm install                 # root + server (one npm workspace)
 npm install --prefix client
 ```
+
+The repository root and `server/` form a single npm workspace, so one install at
+the root covers both and there is one lockfile — `package-lock.json` at the
+root — for the backend. `shared/` has no `package.json`, so its only external
+dependency (zod) is declared at the root, which is the directory Node and
+TypeScript actually search when resolving a bare import from `shared/*.ts`.
+
+`client/` is deliberately outside the workspace: it deploys to Vercel from its
+own lockfile, so it keeps one.
 
 ### 4. Apply database migrations
 

@@ -32,7 +32,7 @@ with almost nothing configured, and that is deliberate.
 
 | Variable | Format | Notes |
 |---|---|---|
-| `NODE_ENV` | `production` | Not optional. Almost every rule below keys on it, and the development fallbacks — a known signing key, a mail adapter that sends nothing — are only refused when it is set. |
+| `NODE_ENV` | `production` | Not optional. Almost every rule below keys on it, and the development fallbacks — a known signing key, a mail adapter that sends nothing — are only refused when it is set. **It also changes how npm installs:** with `NODE_ENV=production`, `npm ci` omits `devDependencies`, which removes the compiler and the `@types` packages the build needs. That is why the build command is `npm ci --include=dev` — see [`deployment.md`](deployment.md#why-the-build-command-says---includedev). |
 | `DATABASE_URL` | `postgresql://user:pass@host:5432/db?sslmode=require` | **Secret.** Use the hosting platform's *internal* connection string where one exists. Without `sslmode` the deployment starts and warns (`env.DATABASE_URL.sslmode_not_set`). |
 | `BETTER_AUTH_SECRET` | ≥32 random characters | **Secret.** `openssl rand -base64 32`. Signs sessions. Changing it invalidates every session at once. |
 | `AUTH_BOOTSTRAP_SECRET` | ≥16 random characters | **Secret.** The one-time key for creating the first Administrator. Generate it separately — never reuse another secret. |

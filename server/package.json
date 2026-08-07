@@ -14,6 +14,8 @@
     "start": "node dist/server/src/server.js",
     "smoke:production": "node scripts/production-smoke.mjs",
     "typecheck": "tsc --noEmit",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:drift-check": "prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code",
     "llm:test": "tsx src/scripts/test-llm.ts",
     "benchmark:llm": "tsx src/benchmark/run-llm-benchmark.ts",

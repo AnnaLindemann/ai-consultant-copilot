@@ -2,7 +2,15 @@
   "name": "ai-consultant-copilot",
   "private": true,
   "type": "module",
-  "description": "Root-level dependencies shared by the server and client via the shared/ folder.",
+  "description": "Workspace root for the backend build. `shared/` is a folder of TypeScript sources with no package.json of its own, so its single external dependency — zod — is declared here, which is where Node and TypeScript actually look when resolving a bare specifier from shared/*.ts. `client/` is deliberately not a workspace member: it deploys separately from its own lockfile.",
+  "workspaces": [
+    "server"
+  ],
+  "scripts": {
+    "build:server": "npm run prisma:generate -w server && npm run build -w server",
+    "migrate:deploy": "npm run prisma:migrate:deploy -w server",
+    "verify:production-build": "node scripts/verify-production-build.mjs"
+  },
   "dependencies": {
     "zod": "^4.4.2"
   }
